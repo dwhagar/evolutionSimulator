@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.29`: Core additions for the creature inspector: an event when an animal eats, the selected animal's brain weights and active neurons, its living children, and a catalogue naming every gene and trait with its unit and meaning. [#157](https://github.com/dwhagar/evolutionSimulator/pull/157)
 - `UX.11`: The viewer app shell: a PySide6 window (menus, status bar, dock slots, saved layout) behind the optional `gui` extra, with a screen-per-module panel system, a backend interface for the simulation, an entry point and offscreen tests; runs on the fake simulation or a real world. [#153](https://github.com/dwhagar/evolutionSimulator/pull/153)
 - `UX.8`: A statistics recorder in the core: once per simulated day it records population, flows of births and deaths by cause, trait and gene statistics and gene histograms into bounded tiers (days, weeks, months, years), saves and restores with the world, and does not change the run. [#152](https://github.com/dwhagar/evolutionSimulator/pull/152)
 - `TRAIT.10`: Learning, sleep, the day cycle, tick length and speed and the plant limits now live in the same `TraitRules` tree as every other tuning value (behaviour unchanged; saved worlds are migrated to format 4). [#143](https://github.com/dwhagar/evolutionSimulator/pull/143), [#147](https://github.com/dwhagar/evolutionSimulator/pull/147), [#150](https://github.com/dwhagar/evolutionSimulator/pull/150)
