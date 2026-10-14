@@ -1,8 +1,8 @@
 """The world: space, time, the step loop and the senses that connect organisms to it.
 
 Modules: ``vector`` (positions), ``bounds`` (WORLD.4), ``timescale`` (WORLD.3), ``spatial`` (finding
-neighbours), ``daycycle`` and ``sleep`` (WORLD.5), ``organisms``, ``senses`` (swappable) and
-``world`` (WORLD.2).
+neighbours), ``daycycle`` and ``sleep`` (WORLD.5), ``organisms``, ``mating`` (who mates with
+whom, REPRO.4), ``senses`` (swappable) and ``world`` (WORLD.2).
 """
 
 from evolution_simulator.world.bounds import Bounds

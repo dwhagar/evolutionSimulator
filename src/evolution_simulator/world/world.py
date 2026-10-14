@@ -7,8 +7,9 @@ a tick counter. ``step`` advances one tick, always in the same order:
    decides, with the wander fallback on (all decisions are made before anyone acts).
 2. In id order each animal ages and burns energy, turns, moves (walls stop it) and, if its brain
    says "eat" and a plant is in reach, grazes.
-3. Animals that want to mate, are ready, and are close enough pair off in id order; each pair
-   makes one child.
+3. Animals that want to mate, are ready, and are close enough pair off in id order, each taking the
+   willing animal in reach with the closest genome (REPRO.4, ``mating.py``); each pair makes one
+   child.
 4. Plants grow in id order; a plant that is ready drops seeds around it.
 5. The dead are removed and the clock advances.
 
@@ -33,6 +34,7 @@ from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import AnimalTraits, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.daycycle import DayCycle
+from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import BasicSenses, Senses, wrap_angle
 from evolution_simulator.world.sleep import SleepListener, SleepRules
@@ -379,14 +381,12 @@ class World:
         for a in willing:
             if a.id in paired:
                 continue
-            best: Animal | None = None
-            best_distance = math.inf
-            for b in self.animals_near(a.position, cfg.mating_reach):
-                if b is a or b.id in paired or b.id not in willing_ids:
-                    continue
-                distance = a.position.distance_to(b.position)
-                if distance < best_distance:
-                    best, best_distance = b, distance
+            reachable = [
+                b
+                for b in self.animals_near(a.position, cfg.mating_reach)
+                if b.id not in paired and b.id in willing_ids
+            ]
+            best = choose_mate(a, reachable)
             if best is None:
                 continue
             if len(self._animals) + len(newborn) >= cfg.max_animals:
