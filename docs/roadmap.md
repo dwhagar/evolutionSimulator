@@ -33,6 +33,10 @@ Not yet given a version; the owner sets milestones.
 - Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`; the sense genes (field of vision, acuity) are built (`SENSE.16`, [#103](https://github.com/dwhagar/evolutionSimulator/pull/103)).
 - The brain acting and learning: design notes for a shape that evolves and for nightly learning are done (`BRAIN.13`, `BRAIN.15`, [#60](https://github.com/dwhagar/evolutionSimulator/pull/60)); the builds are done (`BRAIN.23`, `BRAIN.24`), and the first generation now carries a seeded brain (`BRAIN.9`, [#106](https://github.com/dwhagar/evolutionSimulator/pull/106)). The world now acts on every brain decision (`BRAIN.10`, [#118](https://github.com/dwhagar/evolutionSimulator/pull/118)). Next: a world calibrated so that founders breed, `WORLD.15`.
 
+## Next: the interface
+
+Asked for by the owner on 2026-10-14 (task area `UX`): a graphical viewer with a world view, speed and time controls, a creature inspector, population and gene charts, run setup and save and load. It starts with a research and design note (`UX.1`) and four owner questions ([#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to [#126](https://github.com/dwhagar/evolutionSimulator/issues/126)); the working default is a native desktop program (PySide6) with the simulation kept as a headless core.
+
 ## Later
 
 A first runnable simulation: organisms in the world with a step loop that feeds, ages, senses, thinks and
