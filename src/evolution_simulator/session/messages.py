@@ -3,7 +3,7 @@
 Everything here is a plain value (frozen dataclasses of numbers, strings, bytes and the frames and
 details of ``snapshot`` and ``world.views``) so it pickles over a ``multiprocessing`` pipe today and
 could go over a socket tomorrow. Viewer to simulation: a ``Command`` of ``commands.py`` or one of
-``Ack``, ``SetFrameRate``, ``RequestPlants`` and ``Shutdown`` below. Simulation to viewer: a
+``Ack``, ``SetFrameRate``, ``RequestPlants``, ``RequestHistory``, ``SaveNow`` and ``Shutdown`` below. Simulation to viewer: a
 ``Frame``, an ``AnimalDetail`` or one of the messages below.
 """
 
@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from evolution_simulator.history import HistorySamples, RecorderRules, Sample
 from evolution_simulator.session.commands import Command
 from evolution_simulator.session.session import SessionEvent
 from evolution_simulator.session.snapshot import Frame
@@ -42,11 +43,21 @@ class RequestPlants:
 
 
 @dataclass(frozen=True, slots=True)
+class RequestHistory:
+    """Send the whole recorded history again (a window that has just opened, or lost track)."""
+
+
+@dataclass(frozen=True, slots=True)
+class SaveNow:
+    """Write a checkpoint of the attached run now (UX.31). Refused when no run is attached."""
+
+
+@dataclass(frozen=True, slots=True)
 class Shutdown:
-    """Stop cleanly."""
+    """Stop cleanly (the attached run, if any, gets a last checkpoint)."""
 
 
-Request = Command | Ack | SetFrameRate | RequestPlants | Shutdown
+Request = Command | Ack | SetFrameRate | RequestPlants | RequestHistory | SaveNow | Shutdown
 
 # --- simulation to viewer -----------------------------------------------------------------------
 
@@ -67,6 +78,36 @@ class EventBatch:
 
     events: tuple[SessionEvent, ...]
     dropped: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryBatch:
+    """The statistics recorder's news (UX.31). Either ``full`` is set (the whole history as it
+    stands; it replaces what the viewer has, and comes first, after a ``RequestHistory``, and
+    whenever the host fell too far behind to send every sample) or ``samples`` holds the new
+    single-day samples since the last batch, oldest first, to be merged in as the recorder merged
+    them (``HistoryMirror``). ``rules`` are the recorder's tier rules, which the merge needs."""
+
+    rules: RecorderRules
+    samples: tuple[Sample, ...] = ()
+    full: HistorySamples | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class RunNotice:
+    """The run the simulation is saved into (UX.31): sent when the host starts with one and after
+    each checkpoint it writes. ``path`` is the run's folder."""
+
+    run_id: str
+    name: str
+    path: str
+    checkpoints: int
+    """Checkpoints the run folder holds now."""
+    last_checkpoint: str
+    saved: int
+    """Checkpoints this host has written since it started."""
+    resumed_from: str | None = None
+    """The checkpoint the simulation was restored from, when it was resumed."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,5 +142,7 @@ class Stopped:
     """The host shut down cleanly after a ``Shutdown``."""
 
 
-Notice = Ready | EventBatch | CommandRejected | HostInfo | Crashed | Stopped
+Notice = (
+    Ready | EventBatch | HistoryBatch | RunNotice | CommandRejected | HostInfo | Crashed | Stopped
+)
 Outgoing = Frame | AnimalDetail | Notice

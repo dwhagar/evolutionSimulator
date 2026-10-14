@@ -25,23 +25,26 @@ from dataclasses import dataclass, replace
 from multiprocessing.connection import Connection
 from typing import Protocol
 
-from evolution_simulator.session.host import Host, HostRules, run_host
+from evolution_simulator.history import HistoryMirror, HistorySamples
+from evolution_simulator.session.host import Host, HostRules, make_host, run_host
 from evolution_simulator.session.messages import (
     Ack,
     CommandRejected,
     Crashed,
     EventBatch,
+    HistoryBatch,
     HostInfo,
     Outgoing,
     Ready,
     Request,
+    RunNotice,
     Shutdown,
     Stopped,
 )
 from evolution_simulator.session.protocol import Simulation
-from evolution_simulator.session.session import Session, SessionEvent
+from evolution_simulator.session.session import SessionEvent
 from evolution_simulator.session.snapshot import Block, Frame
-from evolution_simulator.session.specs import FakeSpec
+from evolution_simulator.session.specs import FakeSpec, Prepared
 from evolution_simulator.world.views import AnimalDetail
 
 
@@ -58,6 +61,11 @@ class Inbox:
     """World events left out so far, in all."""
     rejected: tuple[CommandRejected, ...] = ()
     info: HostInfo | None = None
+    history: HistorySamples | None = None
+    """The statistics so far, whenever a new sample (or the whole history) arrived in this batch;
+    otherwise ``None``. This is what ``Batch.history`` of the viewer's backend carries."""
+    run: RunNotice | None = None
+    """The newest word about the run the simulation is saved into, if it is in one (UX.31)."""
     ready: bool = False
     """The simulation came up in this batch."""
     stopped: bool = False
@@ -96,6 +104,7 @@ class _Collector:
         self.received = 0
         self.plants: Block | None = None
         self.events_dropped = 0
+        self.mirror = HistoryMirror()
 
     def collect(self, messages: list[Outgoing]) -> Inbox:
         frame: Frame | None = None
@@ -103,10 +112,14 @@ class _Collector:
         events: list[SessionEvent] = []
         rejected: list[CommandRejected] = []
         info: HostInfo | None = None
+        run: RunNotice | None = None
+        history_news = False
         ready = stopped = False
         crash: str | None = None
         for message in messages:
-            if isinstance(message, (Frame, Ready, AnimalDetail, EventBatch)):
+            if isinstance(
+                message, (Frame, Ready, AnimalDetail, EventBatch, HistoryBatch, RunNotice)
+            ):
                 self.received += 1
             if isinstance(message, Ready):
                 ready = True
@@ -120,6 +133,10 @@ class _Collector:
             elif isinstance(message, EventBatch):
                 events.extend(message.events)
                 self.events_dropped = message.dropped
+            elif isinstance(message, HistoryBatch):
+                history_news = self._take_in(message) or history_news
+            elif isinstance(message, RunNotice):
+                run = message
             elif isinstance(message, CommandRejected):
                 rejected.append(message)
             elif isinstance(message, HostInfo):
@@ -130,10 +147,22 @@ class _Collector:
                 crash = message.report
         if frame is not None and frame.plants is None and self.plants is not None:
             frame = replace(frame, plants=self.plants)
+        history = self.mirror.history() if history_news else None
         return Inbox(
-            frame, detail, tuple(events), self.events_dropped, tuple(rejected), info, ready,
-            stopped, crash,
+            frame, detail, tuple(events), self.events_dropped, tuple(rejected), info, history,
+            run, ready, stopped, crash,
         )  # fmt: skip
+
+    def _take_in(self, batch: HistoryBatch) -> bool:
+        """Fold a history batch into the mirror. A batch of samples that arrives before any full
+        history cannot be used (the host always sends the full one first, so this is a guard)."""
+        if batch.full is not None:
+            self.mirror.reset(batch.rules, batch.full)
+            return True
+        if not self.mirror.ready or not batch.samples:
+            return False
+        self.mirror.push(batch.samples)
+        return True
 
 
 class InProcessClient:
@@ -142,15 +171,16 @@ class InProcessClient:
 
     def __init__(
         self,
-        simulation: Simulation | Callable[[], Simulation],
+        simulation: Simulation | Prepared | Callable[[], Simulation | Prepared],
         rules: HostRules | None = None,
         clock: Callable[[], float] | None = None,
     ) -> None:
-        rules = rules if rules is not None else HostRules()
-        sim = simulation if hasattr(simulation, "step") else simulation()  # type: ignore[operator]
-        kwargs = {} if clock is None else {"clock": clock}
-        session = Session(sim, rules=rules.session, **kwargs)  # type: ignore[arg-type]
-        self.host = Host(session, rules, **kwargs)  # type: ignore[arg-type]
+        made = (
+            simulation
+            if isinstance(simulation, Prepared) or hasattr(simulation, "step")
+            else simulation()  # type: ignore[operator]
+        )
+        self.host: Host = make_host(made, rules, clock)  # type: ignore[arg-type]
         self._collector = _Collector()
         self._pending: list[Outgoing] = [self.host.first_message()]
         self._crash: str | None = None
@@ -179,7 +209,9 @@ class InProcessClient:
         return inbox
 
     def close(self) -> None:
-        self._closed = True
+        if not self._closed:
+            self._closed = True
+            self.host.shutdown()  # a run gets its last checkpoint
 
 
 def fake_client(rules: HostRules | None = None, **fake: object) -> InProcessClient:
@@ -189,11 +221,12 @@ def fake_client(rules: HostRules | None = None, **fake: object) -> InProcessClie
 
 class ProcessClient:
     """The simulation in its own process, reached over a pipe. ``recipe`` is a picklable callable
-    that builds the simulation in the new process (``WorldSpec``, ``FakeSpec``)."""
+    that builds the simulation in the new process (``WorldSpec``, ``FakeSpec``, or ``NewRunSpec`` /
+    ``ResumeSpec`` for a world saved into a run)."""
 
     def __init__(
         self,
-        recipe: Callable[[], Simulation],
+        recipe: Callable[[], Simulation | Prepared],
         rules: HostRules | None = None,
         *,
         join_timeout: float = 5.0,
