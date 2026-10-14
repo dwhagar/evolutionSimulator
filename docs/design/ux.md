@@ -352,6 +352,35 @@ default and the real world with `--world` (in this process, until UX.7 and UX.17
 - **Failures.** An exception while building or running becomes `Crashed(traceback)` and exit code 1; a
   process killed from outside is noticed when the pipe ends ("ended without a word", with the exit code).
 
+### As built: time and speed controls (`UX.13`)
+
+`viewer/panels/controls.py` replaces the placeholder in the top dock (same `PANEL` id and area).
+
+- **Buttons.** Play or pause and Step are the window's own actions (`play_pause`, `step`), so the menu,
+  the buttons and the keys are one thing. "Step a day" sends `Step(n)` with `n` the ticks in a simulated
+  day, worked out from the tick length the frames imply (24 at the hourly default). One button per speed
+  preset and one for as fast as possible; they trigger the window's `speed_<preset>` actions and show
+  the checked one, none when the speed is a custom one. A custom speed is a number and a unit (seconds
+  to years) with "Set speed". Following [#130](https://github.com/dwhagar/evolutionSimulator/issues/130)'s
+  stated default, every preset is kept (none hidden), the view glides between ticks (UX.12) and the
+  speed is shown asked against got.
+- **Readout.** Run state (running, paused, or stepping with the ticks left), elapsed simulated time, the
+  day number and day or night with the daylight percentage, the speed asked and the speed got (`-`
+  while paused; "(behind)" when the computer cannot keep up).
+- **Keys** (`KEY_MAP`, the one table of the viewer's keys): Space play or pause, Right step one tick,
+  Shift+Right step a day, `+` (or `=`) faster, `-` slower, `M` as fast as possible. The new actions are
+  put on the main window and in the Run menu (the Speed submenu for the speed ones), so the keys work
+  with the Controls dock closed or floating. `F` (follow, UX.12) and `Esc` (deselect, UX.14) are left to
+  those panels; a panel that adds a key adds it to `KEY_MAP`'s table in its own change.
+- **"Don't draw when fast".** A checkable action `no_draw_fast_forward` in `context.actions` (also in the
+  Speed submenu). The world view calls `controls.world_drawing_paused(context.actions, status)` and
+  skips painting when it is true: the switch is on, the run is going, and the speed asked is a decade a
+  second or more (or as fast as possible). The panel shows a note while that is so. It saves only the
+  drawing; freeing the session from packing frames needs UX.7's `want` command.
+- **Tests.** `tests/test_viewer_controls.py`: the pure helpers (`neighbour_speed`, `ticks_per_day`, the
+  text), the buttons against the window's actions, the readouts against frames, the custom speed, the
+  no-draw logic, and the keys through `QTest.keyClick`.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these
@@ -422,7 +451,8 @@ no meaning rests on colour alone (shape or marks also differ).
 Play, pause, single step and "step a day"; the speed presets from `TimeScale`, a custom value, and
 "as fast as possible"; the requested versus achieved speed; the simulated clock ("year 2, day 41, 03:00"),
 day or night, the tick, the counts, the seed, and the run name. Keyboard: space to play or pause, the
-arrow keys to step, `+`/`-` for speed, `F` to follow the selected creature.
+arrow keys to step, `+`/`-` for speed, `F` to follow the selected creature. (As built: the keys are
+listed under "As built: time and speed controls (`UX.13`)".)
 
 ### Creature inspector (`UX.14`, brain tab `UX.15`)
 
