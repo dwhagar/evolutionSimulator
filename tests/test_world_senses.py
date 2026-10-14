@@ -382,8 +382,8 @@ def calling_world(**config):
     return world, caller, listener
 
 
-def test_calls_are_off_unless_the_world_turns_them_on():
-    world = World()
+def test_calls_can_be_turned_off():
+    world = World(WorldConfig(calls_enabled=False))
     add_caller(world)
     listener = world.add_animal(animal_dna(**EARS), Vec.of(515, 500), heading=0.0)
     world.run(3)
