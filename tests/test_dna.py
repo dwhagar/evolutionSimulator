@@ -365,7 +365,7 @@ def test_reproduce_without_partner_clones_with_mutation():
 def test_reproduce_with_partner_crosses_then_mutates():
     a, b = DNA.random(ANIMAL_LAYOUT, rng(1)), DNA.random(ANIMAL_LAYOUT, rng(2))
     child = a.reproduce(b, rng(3), mutation_rate=0.0)
-    assert child == a.crossover(b, rng(3))
+    assert child == a.crossover_linked(b, rng(3))
     assert a.reproduce(b, rng(3), 0.2) == a.reproduce(b, rng(3), 0.2)
     assert a.reproduce(b, rng(3)).layout is ANIMAL_LAYOUT
 

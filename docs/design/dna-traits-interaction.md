@@ -159,8 +159,10 @@ These wait on the owner's answers or on other tasks and are tracked in [TODO.md]
   expected changes is built per segment (`DNA.12`, used for the brain); per-position weights and expected
   changes per whole genome (`DNA.8`) are blocked on the encoding decision
   ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)).
-- Crossover is still per digit by default; whole-gene crossover exists but is not the default (`DNA.7`,
-  [#14](https://github.com/dwhagar/evolutionSimulator/issues/14)).
+- Crossover is built (`DNA.7`, [#14](https://github.com/dwhagar/evolutionSimulator/issues/14)):
+  `reproduce` defaults to `crossover_linked`, a few cut points that mostly fall between genes, with
+  `gene_fidelity` (default 0.9) setting how often one falls inside a gene. The mutation counterpart, how
+  closely a mutated digit stays to the old value, is `DNA.8`.
 - Tuning constants inside the formulas are still inline numbers (`TRAIT.3`). The trait table already holds
   the ranges; the formula constants (`0.08`, `0.18`, `0.75`) are what remain.
 - Haploid only. A diploid genome would hold two `DNA` objects and combine their `value` reads before
