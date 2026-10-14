@@ -24,11 +24,11 @@ scripts/version.py         prints the current MAJOR.minor.build version
 
 ## Versioning
 
-Versions are `MAJOR.minor.build`, and every commit bumps the build. See [docs/versioning.md](docs/versioning.md).
+Versions are `MAJOR.minor.build`, and every merge into main bumps the build. See [docs/versioning.md](docs/versioning.md).
 
 ## Continuous integration
 
-CI runs once a day at 07:00 UTC on a schedule only. It does not run on pushes or pull requests.
+CI runs once a week, Mondays at 07:00 UTC, on a schedule only. It does not run on pushes or pull requests.
 
 ## License
 

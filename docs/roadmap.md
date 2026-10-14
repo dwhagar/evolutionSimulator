@@ -1,7 +1,7 @@
 # Roadmap
 
 The plan for the simulator. Major and minor versions track milestones set here; the build number
-is bumped automatically on every commit (see [versioning](versioning.md)).
+is bumped automatically on every merge into main (see [versioning](versioning.md)).
 
 ## 0.0 — Pre-release (current)
 
