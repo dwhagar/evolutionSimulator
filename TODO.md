@@ -1,7 +1,7 @@
 # TODO
 
 The task list for the project. Kept by the TODO thread; other threads send bugs and non-quick findings
-there to be turned into items and issues.
+there to be turned into items and issues. Owner decisions are logged in [docs/decisions.md](docs/decisions.md).
 
 ## Task IDs
 
@@ -16,65 +16,79 @@ relate to, and this file and [CHANGELOG.md](CHANGELOG.md) link IDs to their issu
 | `DNA` | Genome model, mutation, crossover |
 | `REPRO` | Reproduction modes and life history |
 | `TRAIT` | Traits (phenotype) and their costs |
-| `WORLD` | World model and the simulation loop |
-| `BRAIN` | Neural-network brain and behaviour |
+| `WORLD` | World model, time and the simulation loop |
+| `BRAIN` | Neural-network brain, learning and behaviour |
+| `SENSE` | Senses and how they feed the brain |
 
-A new area is added here first. Status is one of: open, blocked (on a decision or another item), done.
-
-## Milestone 0.1: data models for DNA and traits
-
-Goal (set by the owner, 2026-10-14): the data models for traits and DNA are set up, with a document on
-how the two interact. See [docs/roadmap.md](docs/roadmap.md).
-
-| ID | Item | Status | Needs |
-| --- | --- | --- | --- |
-| DNA.1 | DNA objects ported from the prototype ([#18](https://github.com/dwhagar/evolutionSimulator/pull/18)) | done | |
-| TRAIT.1 | Traits objects ported from the prototype ([#18](https://github.com/dwhagar/evolutionSimulator/pull/18)) | done | |
-| DNA.5 | Decide crossover ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)) | waiting on owner | |
-| DNA.6 | Decide mutation size and encoding ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)) | waiting on owner | |
-| TRAIT.2 | Decide whether longevity carries a cost ([#16](https://github.com/dwhagar/evolutionSimulator/issues/16)) | waiting on owner | |
-| REPRO.2 | Decide what `fertility` does, or remove it; `TraitSet.unread_genes()` reports it as unread ([#17](https://github.com/dwhagar/evolutionSimulator/issues/17)) | waiting on owner | |
-| WORLD.1 | Decide the world model, so trait ranges stop being guesses ([#10](https://github.com/dwhagar/evolutionSimulator/issues/10)) | waiting on owner | |
-| DNA.7 | Make gene-boundary crossover the default (`reproduce()` still defaults to per-digit, which blends weights inside a neuron; until this lands animals should pass `crossover=DNA.crossover_by_unit`) | not built: [#20](https://github.com/dwhagar/evolutionSimulator/pull/20) closed unmerged, code at `refs/pull/20/head` to reapply on the new layout API | DNA.5 |
-| DNA.8 | Per-position mutation weight (matters more for brain weights, where the first digit of a 2-digit weight carries 12 of 15 steps), mutation rate as expected changes per genome, and a mutation operator that reads `TraitDef.mutation_step` (stored, unused) | not built: [#20](https://github.com/dwhagar/evolutionSimulator/pull/20) closed unmerged, code at `refs/pull/20/head` to reapply on the new layout API | DNA.6 |
-| TRAIT.3 | Move all tuning constants in `traits.py` into one config object, including the placeholder brain costs `BRAIN_NEURON_COST`, `BRAIN_CONNECTION_COST` and `BRAIN_ACTIVE_THRESHOLD` (a random brain costs about 4% of basal metabolism; calibrate against a world) | blocked | TRAIT.2, REPRO.2, WORLD.1 |
-| TRAIT.5 | Fix the prototype's initial-state quirks and add a mating-cost guard | not built: [#20](https://github.com/dwhagar/evolutionSimulator/pull/20) closed unmerged, code at `refs/pull/20/head` to reapply on the new layout API | REPRO.2, WORLD.1 |
-
-Items DNA.7, DNA.8 and TRAIT.3 to TRAIT.5 come from section 9.5 of
-[docs/research/basic-traits.md](docs/research/basic-traits.md). Foundations 1 built the research threads' defaults for DNA.7, DNA.8, TRAIT.5 and the removal of the unused `fertility` gene (REPRO.2) in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20), then closed it unmerged when TRAIT.4 ([#31](https://github.com/dwhagar/evolutionSimulator/pull/31)) changed the DNA API. The code stays at `refs/pull/20/head`; reapply it once the owner answers [#14](https://github.com/dwhagar/evolutionSimulator/issues/14), [#15](https://github.com/dwhagar/evolutionSimulator/issues/15) and [#17](https://github.com/dwhagar/evolutionSimulator/issues/17).
+A new area is added here first. Status is one of: ready (can be built now), research (needs a design note
+first), blocked (on another item or an answer), done.
 
 ## Waiting on the owner
 
-Decisions the owner needs to make. Each has a recommended default in its issue. The ones that
-shape 0.1 are in the table above; these are the rest.
+One issue holds the open questions: [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) (six short questions, each with a default the build threads use
+until you answer). Issue [#27](https://github.com/dwhagar/evolutionSimulator/issues/27) (first-generation brains) is part of it and stays open.
 
-| ID | Decision | Issue | Blocks |
-| --- | --- | --- | --- |
-| DNA.2 | Genome level of detail | [#2](https://github.com/dwhagar/evolutionSimulator/issues/2) | DNA.4 |
-| DNA.3 | Haploid or diploid | [#3](https://github.com/dwhagar/evolutionSimulator/issues/3) | |
-| DNA.4 | Fixed or variable-length genomes | [#5](https://github.com/dwhagar/evolutionSimulator/issues/5) | |
-| REPRO.1 | Reproduction modes (asexual, sexual, both) | [#4](https://github.com/dwhagar/evolutionSimulator/issues/4) | DNA.9 |
+## Milestone 0.1: data models for DNA and traits (kept open)
 
-## After 0.1
+Goal (set by the owner, 2026-10-14): the data models for traits and DNA are set up, with a document on
+how the two interact. The owner chose to keep 0.1 open until the refinement below is built. See
+[docs/roadmap.md](docs/roadmap.md).
 
 | ID | Item | Status | Needs |
 | --- | --- | --- | --- |
-| BRAIN.9 | Seed the first generation by fitting weights to the current fixed rule (95%+ agreement on random inputs, tested); `BlockSpec.encode` and `DNA.replaced` are ready for it, `DNA.random` gives random brains | blocked | BRAIN.7 |
-| BRAIN.10 | Act on the brain's decisions: set the attack, mate and signal flags and the movement and feeding from `think()`, and retire the fixed rule as a second source of truth | blocked | WORLD.1, WORLD.2 |
-| BRAIN.11 | Decision interval: run the brain every n ticks instead of every tick | open | |
-| BRAIN.12 | Weight encoding with an exact zero (2-digit weights have no zero, nearest are ±0.133), so a brain can switch a connection off completely | open | BRAIN.5 |
-| BRAIN.3 | Decide: neural network or a fixed decision rule ([#23](https://github.com/dwhagar/evolutionSimulator/issues/23)) | waiting on owner | |
-| BRAIN.4 | Decide: does a creature have memory ([#24](https://github.com/dwhagar/evolutionSimulator/issues/24)) | waiting on owner | |
-| BRAIN.5 | Decide: energy cost of thinking ([#25](https://github.com/dwhagar/evolutionSimulator/issues/25)) | waiting on owner | |
-| BRAIN.6 | Decide: learning during a creature's life ([#26](https://github.com/dwhagar/evolutionSimulator/issues/26)) | waiting on owner | |
-| BRAIN.7 | Decide: starting brains (random, hand-made, or inherited) ([#27](https://github.com/dwhagar/evolutionSimulator/issues/27)) | waiting on owner | |
-| BRAIN.8 | Decide: fixed or evolvable brain size ([#28](https://github.com/dwhagar/evolutionSimulator/issues/28)) | waiting on owner | |
-| DNA.9 | Decide sex at birth versus inherited | blocked | REPRO.1 |
-| WORLD.2 | First world and step loop: place organisms, run ticks, feed, reproduce | blocked | WORLD.1 |
+| DNA.7 | Crossover: gene-boundary cut points by default (about one cut per genome), with a separate crossover setting for how closely it follows whole genes (default: close but slightly off). Reapply from `refs/pull/20/head` on the new layout API | ready | |
+| DNA.8 | Mutation: expected changes per genome, per-position weights that mutate low digits more often (option B), a separate mutation setting for how random it is (default random, with occasional big jumps, especially in plants), and a mutation operator that reads `TraitDef.mutation_step` | ready | |
+| DNA.13 | Diploid genomes: two copies of every gene, with a simple dominance model (default codominant, averaged); haploid kept as an option | ready | |
+| REPRO.3 | Plants reproduce asexually (clone plus mutation), mutate slower and live longer | ready | DNA.8 |
+| REPRO.4 | Animal mate choice: prefer the closest genome (`distance`), allow cross-breeding as the least preferred | ready | |
+| REPRO.5 | Replace `fertility` with three genes: caregiving (energy per offspring), a limit on how often reproduction can happen, and a drive to reproduce; all three affect behaviour. Design note first | research | Research 2 |
+| TRAIT.6 | Longevity (`somatic_maint`) trades against reproduction (main), plus an upkeep cost that grows faster than the benefit | ready | |
+| TRAIT.5 | Fix the prototype's initial-state quirks and add a mating-cost guard (reapply from `refs/pull/20/head`) | ready | |
+| TRAIT.3 | Move all tuning constants in `traits.py` into one config object, including the brain costs `BRAIN_NEURON_COST`, `BRAIN_CONNECTION_COST` and `BRAIN_ACTIVE_THRESHOLD` (a random brain costs about 4% of basal metabolism) | blocked | REPRO.5, TRAIT.6, WORLD.2 |
+| DNA.9 | Decide sex at birth versus inherited (sex types to confirm, [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 2) | blocked | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) |
 
-Behaviour as genes or a brain was closed for now in [#9](https://github.com/dwhagar/evolutionSimulator/issues/9); BRAIN.1 reopened the question in depth.
+Items DNA.7, DNA.8, TRAIT.3 and TRAIT.5 come from section 9.5 of
+[docs/research/basic-traits.md](docs/research/basic-traits.md). Foundations 1 prototyped DNA.7, DNA.8,
+TRAIT.5 and the `fertility` removal in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20), then closed it unmerged when TRAIT.4 ([#31](https://github.com/dwhagar/evolutionSimulator/pull/31)) changed the
+DNA API; the code stays at `refs/pull/20/head`.
 
-The energy cost per neuron (BRAIN.5) feeds the constants config, TRAIT.3. Still not built from the brain research: memory (BRAIN.4), learning during life (BRAIN.6) and evolvable brain size (BRAIN.8), which wait on the owner's answers.
+## Brain
+
+| ID | Item | Status | Needs |
+| --- | --- | --- | --- |
+| BRAIN.13 | Brain shape evolves: genes control the network and how it operates; the structure is fixed at birth. Design note first, since the genome length stays fixed (a maximum brain plus genes that switch neurons and connections on or off; [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 6) | research | Research 1 |
+| BRAIN.14 | Behaviour comes from genetic factors as well as the network: the behaviour genes (aggression, fear, and the reproduction genes from REPRO.5) feed the brain | ready | |
+| BRAIN.15 | Learning during life: creatures sleep at night to regain energy and their weights update (this is also their memory). Design note first: the learning rule, what counts as reward, and whether changes are inherited ([#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 5) | research | Research 1 |
+| BRAIN.16 | Random wander fallback: a creature that cannot decide moves in a random direction or turns, so its senses start giving it information | ready | |
+| BRAIN.9 | Seed the first generation by fitting weights to the current fixed rule (95%+ agreement on random inputs, tested); `BlockSpec.encode` and `DNA.replaced` are ready for it | blocked | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 4 |
+| BRAIN.10 | Act on the brain's decisions: set the attack, mate and signal flags and the movement and feeding from `think()`, and retire the fixed rule as a second source of truth | blocked | WORLD.2, SENSE.1 |
+| BRAIN.11 | Decision interval: run the brain every n ticks instead of every tick | ready | |
+| BRAIN.12 | Weight encoding with an exact zero (2-digit weights have no zero, nearest are ±0.133), so a brain can switch a connection off completely | ready | BRAIN.13 |
+
+## World
+
+| ID | Item | Status | Needs |
+| --- | --- | --- | --- |
+| WORLD.2 | First world and step loop: continuous 2D space (positions kept as vectors so 3D can follow), place organisms, run ticks, feed, reproduce | ready | |
+| WORLD.3 | Time scale: a tick is 1 second by default; selectable speeds where one second of real time equals 1 minute, 1 hour, 1 day, 7 days, 1 month, 1 year, 10 years, 100 years or 1000 years | ready | WORLD.2 |
+| WORLD.4 | World bounds set by the user, default 1000 by 1000 (edges to confirm, [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 3) | ready | WORLD.2 |
+| WORLD.5 | Day-night cycle: creatures sleep at night to regain energy; ties to BRAIN.15 | blocked | WORLD.3, BRAIN.15 |
+
+## Senses
+
+| ID | Item | Status | Needs |
+| --- | --- | --- | --- |
+| SENSE.1 | Research: which senses creatures should have and how each feeds information into the brain (design note in `docs/design`, owner questions as issues) | research | Research 3 |
+
+The brain currently takes 17 inputs ([docs/design/brain.md](docs/design/brain.md)); SENSE.1 may change them, and
+the brain adapter keeps that interface separate.
+
+## Open design questions that do not block anything
+
+| ID | Question | Issue |
+| --- | --- | --- |
+| DNA.2 | Genome level of detail: decided (base-4 genes of 1 or more digits); "traits should interact" to confirm | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) |
+| REPRO.1 | Reproduction modes: decided (plants asexual, animals sexual); sex types to confirm | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) |
 
 ## Done
 
@@ -83,18 +97,31 @@ The energy cost per neuron (BRAIN.5) feeds the constants config, TRAIT.3. Still 
 | DOCS.1 | Docs tree, roadmap, TODO and changelog | [#1](https://github.com/dwhagar/evolutionSimulator/pull/1) |
 | DOCS.2 | Research: DNA and reproduction | [#13](https://github.com/dwhagar/evolutionSimulator/pull/13) |
 | DOCS.3 | Research: basic life-form traits | [#12](https://github.com/dwhagar/evolutionSimulator/pull/12) |
-| BRAIN.1 | Brain research: a small neural network for animals ([docs/design/brain.md](docs/design/brain.md)); owner decisions filed as BRAIN.3 to BRAIN.8 | [#29](https://github.com/dwhagar/evolutionSimulator/pull/29) |
-| DOCS.5 | Document how DNA and traits interact ([docs/design/dna-traits-interaction.md](docs/design/dna-traits-interaction.md)) | [#32](https://github.com/dwhagar/evolutionSimulator/pull/32) |
-| TRAIT.4 | Traits as data: `GenomeLayout`/`GeneSpec` in `dna.py`, `layouts.py`, `TraitDef`/`TraitSet` in `trait_defs.py`; DNA is one generic class that reads genes by ID | [#31](https://github.com/dwhagar/evolutionSimulator/pull/31) |
-| BRAIN.2 | The `Brain` object (pure 17-8-6 network, 198 weights), `brain_adapter.py` (percepts in, decision out), `AnimalTraits.think()`, and brain upkeep in basal metabolism ([docs/design/brain.md](docs/design/brain.md)) | [#34](https://github.com/dwhagar/evolutionSimulator/pull/34) |
-| DNA.11 | `BlockSpec` gene block for arrays of weights; `ANIMAL_LAYOUT` is now 461 digits at layout version 2 | [#34](https://github.com/dwhagar/evolutionSimulator/pull/34) |
-| DNA.12 | Per-segment expected-change mutation (body 0.65, brain 1.0 per child) and `crossover_by_unit` (whole neurons) | [#34](https://github.com/dwhagar/evolutionSimulator/pull/34) |
-| DNA.10 | Layouts carry a name and version; saved genomes check the version | [#31](https://github.com/dwhagar/evolutionSimulator/pull/31) |
 | DOCS.4 | Set the first milestone: 0.1, data models for DNA and traits | [#21](https://github.com/dwhagar/evolutionSimulator/pull/21) |
+| DOCS.5 | Document how DNA and traits interact ([docs/design/dna-traits-interaction.md](docs/design/dna-traits-interaction.md)) | [#32](https://github.com/dwhagar/evolutionSimulator/pull/32) |
+| DOCS.6 | Decisions log ([docs/decisions.md](docs/decisions.md)) | this change |
+| BRAIN.1 | Brain research: a small neural network for animals ([docs/design/brain.md](docs/design/brain.md)) | [#29](https://github.com/dwhagar/evolutionSimulator/pull/29) |
+| BRAIN.2 | The `Brain` object (pure 17-8-6 network, 198 weights), `brain_adapter.py`, `AnimalTraits.think()`, brain upkeep in basal metabolism | [#34](https://github.com/dwhagar/evolutionSimulator/pull/34) |
+| BRAIN.3 | Decided: neural network plus genetic factors | [#23](https://github.com/dwhagar/evolutionSimulator/issues/23) |
+| BRAIN.4 | Decided: no memory neurons at the start; memory comes from nightly learning (BRAIN.15) | [#24](https://github.com/dwhagar/evolutionSimulator/issues/24) |
+| BRAIN.5 | Decided: thinking costs energy | [#25](https://github.com/dwhagar/evolutionSimulator/issues/25) |
+| BRAIN.6 | Decided: the brain learns during life, updated at night | [#26](https://github.com/dwhagar/evolutionSimulator/issues/26) |
+| BRAIN.8 | Decided: brain shape evolves (BRAIN.13) | [#28](https://github.com/dwhagar/evolutionSimulator/issues/28) |
+| DNA.1 | DNA objects ported from the prototype | [#18](https://github.com/dwhagar/evolutionSimulator/pull/18) |
+| DNA.3 | Decided: diploid (DNA.13) | [#3](https://github.com/dwhagar/evolutionSimulator/issues/3) |
+| DNA.4 | Decided: fixed-length genome | [#5](https://github.com/dwhagar/evolutionSimulator/issues/5) |
+| DNA.5 | Decided: whole-gene crossover with cut points (DNA.7) | [#14](https://github.com/dwhagar/evolutionSimulator/issues/14) |
+| DNA.6 | Decided: mutate low digits more often, keep some randomness (DNA.8) | [#15](https://github.com/dwhagar/evolutionSimulator/issues/15) |
+| DNA.10 | Layouts carry a name and version; saved genomes check the version | [#31](https://github.com/dwhagar/evolutionSimulator/pull/31) |
+| DNA.11 | `BlockSpec` gene block for arrays of weights; `ANIMAL_LAYOUT` is 461 digits at layout version 2 | [#34](https://github.com/dwhagar/evolutionSimulator/pull/34) |
+| DNA.12 | Per-segment expected-change mutation and `crossover_by_unit` (whole neurons) | [#34](https://github.com/dwhagar/evolutionSimulator/pull/34) |
+| REPRO.2 | Decided: three reproduction genes (REPRO.5) | [#17](https://github.com/dwhagar/evolutionSimulator/issues/17) |
+| TRAIT.1 | Traits objects ported from the prototype | [#18](https://github.com/dwhagar/evolutionSimulator/pull/18) |
+| TRAIT.2 | Decided: longevity trades against reproduction (TRAIT.6) | [#16](https://github.com/dwhagar/evolutionSimulator/issues/16) |
+| TRAIT.4 | Traits as data: `GenomeLayout`/`GeneSpec` in `dna.py`, `layouts.py`, `TraitDef`/`TraitSet` in `trait_defs.py` | [#31](https://github.com/dwhagar/evolutionSimulator/pull/31) |
+| WORLD.1 | Decided: continuous 2D, user-set bounds, default 1000 by 1000 (WORLD.2 to WORLD.4) | [#10](https://github.com/dwhagar/evolutionSimulator/issues/10) |
 | INFRA.1 | Automatic `MAJOR.minor.build` versioning ([docs/versioning.md](docs/versioning.md)) | [#1](https://github.com/dwhagar/evolutionSimulator/pull/1) |
 | INFRA.2 | Weekly scheduled CI (Mondays 07:00 UTC) | [#1](https://github.com/dwhagar/evolutionSimulator/pull/1) |
-| DNA.1 | DNA objects ported from the prototype | [#18](https://github.com/dwhagar/evolutionSimulator/pull/18) |
-| TRAIT.1 | Traits objects ported from the prototype | [#18](https://github.com/dwhagar/evolutionSimulator/pull/18) |
 
 Traits decisions already settled and closed: fixed trait set ([#6](https://github.com/dwhagar/evolutionSimulator/issues/6)), allometric coupling ([#7](https://github.com/dwhagar/evolutionSimulator/issues/7)),
 predators and diet ([#8](https://github.com/dwhagar/evolutionSimulator/issues/8)), behaviour as genes or brain ([#9](https://github.com/dwhagar/evolutionSimulator/issues/9)), aging ([#11](https://github.com/dwhagar/evolutionSimulator/issues/11)). All are tagged `TRAIT.1`.
