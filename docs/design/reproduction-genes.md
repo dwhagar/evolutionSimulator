@@ -25,7 +25,7 @@ a toy model, with the model stated.
   expensive birth and a longer gap between births (the disposable-soma trade-off), plus an upkeep cost
   that grows faster than the benefit.
 - Every time is a **share of the animal's own lifespan**, so none of it depends on how long a tick is.
-  That matters because of a problem with the fastest time scales, raised as question 2 below.
+  That matters because of a problem with the fastest time scales, raised as question 8 below.
 - The layout changes (version 3), so saved animal genomes stop loading. The brain gains 2 inputs.
 
 ## What exists today
@@ -186,7 +186,7 @@ optimum for both genes, not a runaway to a corner.
 - **A problem for the owner.** Lifespans come out at 22 minutes to 3.3 hours of simulated time, and
   "1000 years per real second" is 3.2 x 10^10 ticks per real second at one second per tick. The brain
   decides in about 20 microseconds ([brain.md](brain.md)), so Python manages roughly 50,000 decisions a
-  second for one animal. The fastest settings therefore cannot be run tick by tick. See question 2.
+  second for one animal. The fastest settings therefore cannot be run tick by tick. See question 8.
 
 ## Plants (REPRO.3)
 
@@ -199,7 +199,7 @@ Plants are asexual, mutate slower and live longer, and have no brain, so:
 | `repro_drive` | None: a plant has no behaviour to motivate. The seeding trigger stays "at 85% of capacity" |
 
 - Plants have no ageing today, so there is no lifespan to take a share of. `TRAIT.6` for plants needs a
-  plant lifespan first (question 4). Until then `seeding_interval` is a share of a configured plant
+  plant lifespan first (question 10). Until then `seeding_interval` is a share of a configured plant
   lifespan constant, set several times the animal one to match "live longer".
 - Slower mutation is a `DNA.8` setting, not a trait: the plant layout gets a lower segment rate than the
   animal body.
@@ -247,19 +247,19 @@ take both.
 
 ## Questions for the owner
 
-Raised as comments on [#36](https://github.com/dwhagar/evolutionSimulator/issues/36); each has a default
-this note assumes until answered.
+Raised as a comment on [#36](https://github.com/dwhagar/evolutionSimulator/issues/36), numbered 7 to 11
+after its six; each has a default this note assumes until answered.
 
-1. **Two tiers.** I read "two tiers" as tier 1 = the two capacity genes (caregiving, interval) and
+7. **Two tiers.** I read "two tiers" as tier 1 = the two capacity genes (caregiving, interval) and
    tier 2 = the drive. Right? Default: yes.
-2. **Time scales.** A tick of one second and lifespans of hours cannot run at "1000 years per real
+8. **Time scales.** A tick of one second and lifespans of hours cannot run at "1000 years per real
    second". Options: (A) keep one-second ticks and offer only the speeds that can run; (B) let the tick
    grow at fast speeds, with ageing, metabolism and reproduction summed over it and the brain deciding
    at a fixed interval; (C) make lifespans much longer in simulated time and the tick longer to match.
    Default: all durations are shares of lifespan (done here), decide when `WORLD.3` is built.
-3. **Who pays for a child.** Shared by the two parents' genes (this note), or the one with sex type 2
+9. **Who pays for a child.** Shared by the two parents' genes (this note), or the one with sex type 2
    or 3 as in the prototype? Default: shared.
-4. **Plant lifespan.** Plants have no ageing, so "live longer" and `TRAIT.6` for plants need a lifespan
+10. **Plant lifespan.** Plants have no ageing, so "live longer" and `TRAIT.6` for plants need a lifespan
    model. Add one (a simple maximum age, or wear like animals)? Default: a configured constant, no
    repair gene.
-5. **Litters.** One offspring per birth, or several when the parent can afford it? Default: one.
+11. **Litters.** One offspring per birth, or several when the parent can afford it? Default: one.
