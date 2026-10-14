@@ -392,3 +392,77 @@ def test_base_traits_hooks_are_noops_and_damage_kills():
     assert traits.is_alive
     assert traits.apply_damage(100.0) == 0.0
     assert not traits.is_alive
+
+
+# --- construction state and pinned numbers (TRAIT.5) -------------------------
+
+# A fixed genome, so these numbers only change when a formula or the layout does. The body digits are
+# the prototype's test genome; the brain is all zeros and `fertility` (unread) is zeros too.
+_BODY = "3302332321121021200230232133200030321201111300230220212303212"
+_FERTILITY = ANIMAL_LAYOUT.gene("fertility")
+PINNED_ANIMAL = animal_dna(
+    _BODY[: _FERTILITY.start] + "0" * _FERTILITY.length + _BODY[_FERTILITY.start :] + "0" * 396
+)
+PINNED_PLANT = plant_dna("330233232112102120023023")
+
+
+def test_animal_is_ready_to_act_at_birth():
+    traits = AnimalTraits(PINNED_ANIMAL)
+    assert traits.flag_wants_mate  # well fed, no cooldown, no threat
+    assert not traits.flag_wants_food
+    assert traits.vitality == 1.0
+
+
+def test_hungry_newborn_wants_food_without_waiting_for_a_tick():
+    traits = AnimalTraits(PINNED_ANIMAL)
+    traits.current_energy = 0.1 * traits.max_energy
+    traits._update_needs_and_drives()
+    assert traits.flag_wants_food and not traits.flag_wants_mate
+
+
+def test_plant_vitality_matches_health_at_birth():
+    traits = PlantTraits(PINNED_PLANT)
+    assert traits.vitality == pytest.approx(0.5)  # a seedling starts at half its health
+
+
+def test_mating_cost_cannot_push_energy_below_zero():
+    traits = AnimalTraits(PINNED_ANIMAL)
+    traits.current_energy = 1.0
+    traits.consume_mating_cost()
+    assert traits.current_energy == 0.0
+    assert traits.mating_cooldown > 0
+
+
+def test_pinned_animal_phenotype():
+    t = AnimalTraits(PINNED_ANIMAL)
+    assert t.mass == pytest.approx(2.764705882)
+    assert t.max_energy == pytest.approx(217.647058824)
+    assert t.max_damage_capacity == pytest.approx(158.823529412)
+    assert t.base_max_speed == pytest.approx(5.232)
+    assert t.base_turn_rate == pytest.approx(0.228787879)
+    assert t.effective_sight_range == pytest.approx(22.776355247)
+    assert t.fov_degrees == pytest.approx(294.745098039)
+    assert t.hearing_range == pytest.approx(58.647058824)
+    assert t.smell_range == pytest.approx(60.156862745)
+    assert t.body_radius == pytest.approx(0.699381521)
+    assert t.tactile_range == pytest.approx(1.616805516)
+    assert t.basal_metabolism == pytest.approx(
+        0.588616253
+    )  # includes the zero-weight brain's upkeep
+    assert t.call_radius == pytest.approx(13.411764706)
+    assert t.call_energy_cost == pytest.approx(2.841176471)
+    assert t.sex_type == 2
+    assert t.base_aggression == pytest.approx(0.156862745)
+    assert t.base_fear_weight == pytest.approx(0.607843137)
+
+
+def test_pinned_plant_phenotype():
+    t = PlantTraits(PINNED_PLANT)
+    assert t.max_biomass == pytest.approx(190.823529412)
+    assert t.canopy_radius == pytest.approx(11.490196078)
+    assert t.root_radius == pytest.approx(12.552941176)
+    assert t.dispersal_radius == pytest.approx(27.176470588)
+    assert t.seed_count == 4
+    assert t.chemical_defense_tax == pytest.approx(0.022557794)
+    assert t.base_growth_rate == pytest.approx(0.987450980)
+    assert t.basal_metabolism == pytest.approx(0.217915686)
