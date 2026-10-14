@@ -1,0 +1,203 @@
+"""The sense-channel table (SENSE.8) and what is generated from it."""
+
+import dataclasses
+import math
+import pickle
+
+import pytest
+
+from evolution_simulator import brain_adapter
+from evolution_simulator.brain import DEFAULT_SHAPE
+from evolution_simulator.brain_adapter import INPUT_NAMES, Percepts, Temperament, build_inputs
+from evolution_simulator.sense_channels import (
+    INPUT_CHANNELS,
+    SENSE_KINDS,
+    TARGETS,
+    InputChannel,
+    body_channels,
+    channels_for_target,
+    inputs_builder,
+    percepts_class,
+    senses_reporting,
+    validate_channels,
+    world_channels,
+)
+
+BODY = {"energy_ratio": 0.5, "health_ratio": 0.5, "vitality": 0.5, "ready_to_mate": True}
+
+
+# --- the table ---------------------------------------------------------------
+
+
+def test_the_table_is_the_seventeen_inputs_in_their_documented_order():
+    assert INPUT_NAMES == tuple(c.name for c in INPUT_CHANNELS)
+    assert len(INPUT_CHANNELS) == DEFAULT_SHAPE.inputs == 17
+    assert INPUT_NAMES[:4] == ("energy_ratio", "health_ratio", "vitality", "ready_to_mate")
+    assert INPUT_NAMES[4:12] == (
+        "plant_direction",
+        "plant_closeness",
+        "prey_direction",
+        "prey_closeness",
+        "threat_direction",
+        "threat_closeness",
+        "mate_direction",
+        "mate_closeness",
+    )
+    assert INPUT_NAMES[12:] == (
+        "touching",
+        "alarm_strength",
+        "mating_call_strength",
+        "call_direction",
+        "crowding",
+    )
+
+
+def test_ranges_match_the_design_note():
+    by_name = {c.name: c for c in INPUT_CHANNELS}
+    for name in INPUT_NAMES:
+        c = by_name[name]
+        if c.role == "bearing":
+            assert (c.low, c.high) == (-1.0, 1.0)
+        else:
+            assert (c.low, c.high) == (0.0, 1.0)
+
+
+def test_body_rows_come_first_and_have_no_senses():
+    body = body_channels()
+    assert [c.name for c in body] == list(INPUT_NAMES[:4])
+    assert all(c.senses == () for c in body)
+    assert [c.name for c in world_channels()] == list(INPUT_NAMES[4:])
+
+
+def test_every_target_has_a_bearing_and_a_closeness():
+    for target in TARGETS:
+        roles = sorted(c.role for c in channels_for_target(target))
+        assert roles == ["bearing", "closeness"]
+    assert {c.target for c in INPUT_CHANNELS if c.target} == set(TARGETS)
+
+
+def test_which_senses_report_what_follows_the_design_note():
+    assert senses_reporting("plant_closeness") == ("vision", "smell")
+    assert senses_reporting("threat_direction") == ("vision", "hearing", "smell")
+    assert senses_reporting("touching") == ("touch",)
+    assert senses_reporting("alarm_strength") == ("hearing",)
+    assert senses_reporting("energy_ratio") == ()
+    # plants make no sound and only vision and smell can find them
+    assert "hearing" not in senses_reporting("plant_direction")
+    assert all(set(c.senses) <= set(SENSE_KINDS) for c in INPUT_CHANNELS)
+    with pytest.raises(KeyError):
+        senses_reporting("nope")
+
+
+def test_temperament_scaled_channels_name_real_temperament_fields():
+    scaled = {c.name: c.scaled_by for c in INPUT_CHANNELS if c.scaled_by}
+    assert scaled == {"prey_closeness": "aggression", "threat_closeness": "fear"}
+    fields = {f.name for f in dataclasses.fields(Temperament)}
+    assert set(scaled.values()) <= fields
+
+
+def test_channel_validation():
+    ok = {"name": "x", "low": 0.0, "high": 1.0, "source": "world"}
+    assert InputChannel(**ok)
+    for bad in (
+        dict(ok, name="not an identifier"),
+        dict(ok, low=1.0, high=1.0),
+        dict(ok, source="nowhere"),
+        dict(ok, role="vibe"),
+        dict(ok, role="flag", low=-1.0),
+        dict(ok, senses=("telepathy",)),
+        dict(ok, source="body", senses=("vision",)),
+        dict(ok, role="closeness"),  # needs a target
+        dict(ok, role="level", target="plant"),  # only bearing and closeness have one
+        dict(ok, role="closeness", target="dragon"),
+    ):
+        with pytest.raises(ValueError):
+            InputChannel(**bad)
+
+
+def test_table_validation():
+    with pytest.raises(ValueError):
+        validate_channels(INPUT_CHANNELS + (INPUT_CHANNELS[0],))  # duplicate name
+    lonely = InputChannel("a_closeness", 0.0, 1.0, "world", "closeness", ("vision",), "plant")
+    with pytest.raises(ValueError):
+        validate_channels((lonely,))  # a closeness without its bearing
+    assert validate_channels(INPUT_CHANNELS) == INPUT_CHANNELS
+
+
+def test_clamping_rules_per_channel():
+    energy = INPUT_CHANNELS[0]
+    assert energy.clamp(2.0) == 1.0 and energy.clamp(-1.0) == 0.0
+    with pytest.raises(ValueError):
+        energy.clamp(math.nan)
+    flag = INPUT_CHANNELS[3]
+    assert (flag.clamp(True), flag.clamp(False), flag.clamp(0.2)) == (1.0, 0.0, 1.0)
+
+
+# --- Percepts is generated from the world rows --------------------------------
+
+
+def test_percepts_fields_are_the_world_rows_in_order():
+    names = [f.name for f in dataclasses.fields(Percepts)]
+    assert names == [c.name for c in world_channels()]
+    blank = Percepts()
+    for c in world_channels():
+        assert getattr(blank, c.name) == (False if c.is_flag else 0.0)
+
+
+def test_percepts_is_frozen_keyword_friendly_and_rejects_unknown_fields():
+    p = Percepts(plant_closeness=0.5, touching=True)
+    assert p.plant_closeness == 0.5 and p.touching is True
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        p.plant_closeness = 0.1
+    with pytest.raises(TypeError):
+        Percepts(energy_ratio=0.5)  # a body channel is not the world's to report
+    with pytest.raises(TypeError):
+        Percepts(bogus=1)
+    assert p == Percepts(plant_closeness=0.5, touching=True)
+
+
+def test_percepts_senses_nothing_and_pickles():
+    assert Percepts().senses_nothing
+    assert not Percepts(crowding=0.2).senses_nothing
+    assert Percepts.__module__ == "evolution_simulator.brain_adapter"
+    p = Percepts(prey_direction=-0.3)
+    assert pickle.loads(pickle.dumps(p)) == p
+    assert brain_adapter.Percepts is Percepts
+
+
+# --- build_inputs is generated too -----------------------------------------
+
+
+def test_inputs_come_out_in_table_order_with_body_values_in_their_rows():
+    inputs = build_inputs(Percepts(call_direction=-0.5), **BODY)
+    named = dict(zip(INPUT_NAMES, inputs))
+    assert named["energy_ratio"] == 0.5 and named["ready_to_mate"] == 1.0
+    assert named["call_direction"] == -0.5
+    assert len(inputs) == 17
+
+
+def test_body_values_must_be_given_by_name_and_all_of_them():
+    with pytest.raises(TypeError):
+        build_inputs(Percepts(), energy_ratio=0.5)  # missing the rest
+    with pytest.raises(TypeError):
+        build_inputs(Percepts(), pain=0.1, **BODY)  # not a channel yet
+
+
+def test_a_new_input_is_one_row():
+    """Adding pain (body) and daylight (world) to a copy of the table changes nothing else."""
+    extra = (
+        InputChannel("pain", 0.0, 1.0, "body", description="Health lost this tick."),
+        InputChannel("daylight", 0.0, 1.0, "world", "level", ("vision",)),
+    )
+    table = INPUT_CHANNELS[:4] + (extra[0],) + INPUT_CHANNELS[4:] + (extra[1],)
+    FuturePercepts = percepts_class(table, "FuturePercepts")
+    assert "daylight" in {f.name for f in dataclasses.fields(FuturePercepts)}
+    assert "pain" not in {f.name for f in dataclasses.fields(FuturePercepts)}  # body, not percept
+    build = inputs_builder(table, lambda name, t: 1.0)
+    inputs = build(FuturePercepts(daylight=0.75, plant_closeness=0.2), pain=0.4, **BODY)
+    assert len(inputs) == 19
+    assert inputs[4] == 0.4  # pain sits after the four old body rows
+    assert inputs[-1] == 0.75
+    assert inputs[5] == 0.0  # plant_direction, shifted by one
+    assert inputs[6] == 0.2  # plant_closeness, shifted by one
+    assert len(INPUT_CHANNELS) == 17  # the real table is untouched
