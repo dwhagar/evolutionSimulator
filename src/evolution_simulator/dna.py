@@ -26,6 +26,18 @@ BASE_COUNT: int = len(BASES)
 DEFAULT_MUTATION_RATE: float = 0.01
 """Chance that any one digit changes per reproduction (per digit, not per organism)."""
 
+DEFAULT_POSITION_BIAS: float = 0.5
+"""How much less often each more significant digit of a value mutates than the one below it.
+1.0 treats every digit alike (the original behaviour); 0.5 makes the last digit of a four-digit gene
+twice as likely to change as the one before it, so most mutations are small and a few are big jumps."""
+
+MIN_POSITION_BIAS: float = 0.1
+"""Lowest bias ``position_bias_for_step`` returns, so the top digit always keeps a chance to jump."""
+
+DEFAULT_LOCALITY: float = 0.0
+"""Chance that a changed digit moves to a neighbouring digit (+-1) instead of a random other digit.
+0.0 is fully random (the original behaviour); 1.0 always takes a neighbour."""
+
 DEFAULT_SEGMENT: str = "body"
 """Segment a gene belongs to unless it names another."""
 
@@ -157,6 +169,15 @@ class Gene:
         return self.end - self.start
 
     @property
+    def value_spans(self) -> tuple[tuple[int, int], ...]:
+        """Digit ranges (start, end) that each decode to one number: the gene itself, or for a
+        block each of its values. Within a span the first digit is the most significant."""
+        if self.block is None:
+            return ((self.start, self.end),)
+        width = self.block.digits_per_value
+        return tuple((at, at + width) for at in range(self.start, self.end, width))
+
+    @property
     def units(self) -> tuple[tuple[int, int], ...]:
         """Digit ranges (start, end) that recombination keeps whole: the gene itself, or for a
         block each of its groups."""
@@ -190,6 +211,10 @@ class GenomeLayout:
     """Digit ranges recombination keeps whole: every gene, or every group inside a block."""
     default_mutations: Mapping[str, float] = field(init=False, repr=False, compare=False)
     """Expected changed digits per child for each segment, used when a caller sets no rate."""
+    position_bias: float = field(init=False, repr=False, compare=False)
+    """Default for ``DNA.mutated``: how much rarer each more significant digit is to change."""
+    locality: float = field(init=False, repr=False, compare=False)
+    """Default for ``DNA.mutated``: chance a changed digit moves to a neighbouring digit."""
 
     def __init__(
         self,
@@ -197,10 +222,15 @@ class GenomeLayout:
         version: int,
         specs: Iterable[GeneSpec | BlockSpec],
         segment_mutations: Mapping[str, float] | None = None,
+        position_bias: float = DEFAULT_POSITION_BIAS,
+        locality: float = DEFAULT_LOCALITY,
     ) -> None:
         """``segment_mutations`` sets the expected changed digits per child for the segments it
-        names (a segment left out gets ``DEFAULT_MUTATION_RATE`` per digit). It is a default for
-        callers, not part of the layout's identity."""
+        names (a segment left out gets ``DEFAULT_MUTATION_RATE`` per digit). ``position_bias`` and
+        ``locality`` are the layout's default mutation shape (see ``DNA.mutated``). All three are
+        defaults for callers, not part of the layout's identity."""
+        _check_bias(position_bias)
+        _check_locality(locality)
         specs = tuple(specs)
         if not specs:
             raise ValueError("A layout needs at least one gene.")
@@ -238,6 +268,8 @@ class GenomeLayout:
         object.__setattr__(self, "length", position)
         object.__setattr__(self, "segments", segments)
         object.__setattr__(self, "units", tuple(unit for gene in placed for unit in gene.units))
+        object.__setattr__(self, "position_bias", position_bias)
+        object.__setattr__(self, "locality", locality)
         object.__setattr__(
             self,
             "default_mutations",
@@ -259,6 +291,59 @@ class GenomeLayout:
     @property
     def gene_ids(self) -> tuple[str, ...]:
         return tuple(gene.id for gene in self.genes)
+
+
+def _check_bias(bias: float) -> None:
+    if not 0.0 < bias <= 1.0:
+        raise ValueError(f"Position bias must be above 0 and at most 1, got {bias}.")
+
+
+def _check_locality(locality: float) -> None:
+    if not 0.0 <= locality <= 1.0:
+        raise ValueError(f"Locality must be between 0 and 1, got {locality}.")
+
+
+def _digit_weights(width: int, bias: float) -> tuple[float, ...]:
+    """Relative chance of each digit of a ``width``-digit value changing, most significant first.
+    Each digit is ``bias`` times as likely as the one below it, scaled to a mean of 1 so a value's
+    total mutation chance does not depend on the bias."""
+    raw = [bias ** (width - 1 - i) for i in range(width)]
+    mean = sum(raw) / width
+    return tuple(weight / mean for weight in raw)
+
+
+def position_bias_for_step(width: int, step: float) -> float:
+    """The position bias at which a mutation in a ``width``-digit value moves it by ``step`` of its
+    range on average (a changed digit becomes a random other digit; a trait's ``mutation_step``).
+
+    Returns 1.0 when even evenly spread mutations are smaller than ``step`` and
+    ``MIN_POSITION_BIAS`` when even the strongest bias is larger.
+    """
+    if width < 1:
+        raise ValueError(f"A value needs at least one digit, got {width}.")
+    if not 0.0 < step <= 1.0:
+        raise ValueError(f"Mutation step must be above 0 and at most 1, got {step}.")
+    if width == 1:
+        return 1.0  # nothing to weight
+    # Replacing a digit by a random other one moves it 5/3 places on average (0.. 3 apart).
+    size = [5 / 3 * BASE_COUNT**rank / (BASE_COUNT**width - 1) for rank in range(width)]
+
+    def typical(bias: float) -> float:
+        weights = [bias**rank for rank in range(width)]
+        return sum(w * s for w, s in zip(weights, size)) / sum(weights)
+
+    if typical(1.0) <= step:
+        return 1.0
+    if typical(MIN_POSITION_BIAS) >= step:
+        return MIN_POSITION_BIAS
+    low, high = MIN_POSITION_BIAS, 1.0
+    for _ in range(40):
+        middle = (low + high) / 2
+        if typical(middle) < step:
+            low = middle
+        else:
+            high = middle
+    return (low + high) / 2
 
 
 Crossover = Callable[["DNA", "DNA", random.Random], "DNA"]
@@ -436,20 +521,38 @@ class DNA:
         rng: random.Random,
         mutation_rate: float | None = None,
         mutations_per_segment: Mapping[str, float] | None = None,
+        position_bias: float | None = None,
+        locality: float | None = None,
+        gene_biases: Mapping[str, float] | None = None,
     ) -> Self:
-        """Point mutation. A changed digit moves to one of the other three digits with equal chance.
+        """Point mutation. Returns a new genome; this one is unchanged.
 
-        With ``mutation_rate`` every digit changes with that probability, whatever segment it is in
-        (the original behaviour). With ``mutations_per_segment`` each named segment gets that
-        expected number of changed digits per child, spread evenly over its digits, and segments
-        left out keep the layout's ``default_mutations``. This stops a long segment (the brain's
-        hundreds of digits) from swamping the mutation count. With neither, the layout's
-        ``default_mutations`` apply to every segment (0.01 per digit unless the layout says
-        otherwise). The two settings cannot be combined. Returns a new genome; this one is
-        unchanged.
+        *How many digits change.* With ``mutation_rate`` every digit changes with that probability,
+        whatever segment it is in. With ``mutations_per_segment`` each named segment gets that
+        expected number of changed digits per child, and segments left out keep the layout's
+        ``default_mutations``. This stops a long segment (the brain's hundreds of digits) from
+        swamping the mutation count. With neither, the layout's ``default_mutations`` apply (0.01
+        per digit unless the layout says otherwise). The two settings cannot be combined.
+
+        *Which digits change.* The first digit of a gene carries most of its range, so a change
+        there is a big jump and a change in the last digit is a tiny nudge. ``position_bias`` is how
+        much rarer each more significant digit is to change than the one below it: 1.0 treats all
+        digits alike, 0.5 (the default, the layout's ``position_bias``) makes most mutations small
+        and keeps a few big jumps, and smaller values favour the low digits more. It reshapes the
+        chances inside each value without changing how many digits change in total.
+        ``gene_biases`` sets it per gene ID (for example from ``TraitSet.position_biases()``); a
+        gene left out uses ``position_bias``.
+
+        *What a changed digit becomes.* With chance ``locality`` (default the layout's ``locality``,
+        0.0) it moves to a neighbouring digit (+-1, so the value stays close in sequence); otherwise
+        it becomes one of the other three digits with equal chance.
         """
         if mutation_rate is not None and mutations_per_segment is not None:
             raise ValueError("Set a mutation rate per digit or mutations per segment, not both.")
+        bias = self._layout.position_bias if position_bias is None else position_bias
+        near = self._layout.locality if locality is None else locality
+        _check_bias(bias)
+        _check_locality(near)
         probabilities = [0.0] * self.length
         if mutation_rate is not None:
             if not 0.0 <= mutation_rate <= 1.0:
@@ -472,11 +575,39 @@ class DNA:
                 probabilities[start:end] = [min(1.0, expected[name] / (end - start))] * (
                     end - start
                 )
+        self._apply_position_bias(probabilities, bias, gene_biases)
         digits = list(self._sequence)
         for i, digit in enumerate(digits):
             if rng.random() < probabilities[i]:
-                digits[i] = (digit + rng.choice((1, 2, 3))) % BASE_COUNT
+                if near > 0.0 and rng.random() < near:
+                    digits[i] = rng.choice(
+                        [d for d in (digit - 1, digit + 1) if 0 <= d < BASE_COUNT]
+                    )
+                else:
+                    digits[i] = (digit + rng.choice((1, 2, 3))) % BASE_COUNT
         return type(self)(self._layout, digits)
+
+    def _apply_position_bias(
+        self, probabilities: list[float], bias: float, gene_biases: Mapping[str, float] | None
+    ) -> None:
+        """Redistribute each value's mutation chance over its digits (see ``mutated``)."""
+        per_gene = dict(gene_biases or {})
+        for gene_id, value in per_gene.items():
+            if gene_id not in self._layout:
+                raise ValueError(f"Layout {self._layout.name!r} has no gene {gene_id!r}.")
+            _check_bias(value)
+        for gene in self._layout.genes:
+            gene_bias = per_gene.get(gene.id, bias)
+            if gene_bias == 1.0:
+                continue
+            for start, end in gene.value_spans:
+                if end - start < 2:
+                    continue
+                for offset, weight in enumerate(_digit_weights(end - start, gene_bias)):
+                    if probabilities[start + offset] < 1.0:  # a certain change stays certain
+                        probabilities[start + offset] = min(
+                            1.0, probabilities[start + offset] * weight
+                        )
 
     def crossover(self, partner: DNA, rng: random.Random) -> Self:
         """Uniform per-digit crossover: each digit comes from either parent with equal chance."""
@@ -577,9 +708,14 @@ class DNA:
         rng: random.Random,
         mutation_rate: float | None = None,
         mutations_per_segment: Mapping[str, float] | None = None,
+        position_bias: float | None = None,
+        locality: float | None = None,
+        gene_biases: Mapping[str, float] | None = None,
     ) -> Self:
         """Asexual reproduction: a copy of this genome subject only to point mutation."""
-        return self.mutated(rng, mutation_rate, mutations_per_segment)
+        return self.mutated(
+            rng, mutation_rate, mutations_per_segment, position_bias, locality, gene_biases
+        )
 
     def reproduce(
         self,
@@ -588,6 +724,9 @@ class DNA:
         mutation_rate: float | None = None,
         crossover: Crossover | None = None,
         mutations_per_segment: Mapping[str, float] | None = None,
+        position_bias: float | None = None,
+        locality: float | None = None,
+        gene_biases: Mapping[str, float] | None = None,
     ) -> Self:
         """Single reproduction entry point.
 
@@ -597,10 +736,14 @@ class DNA:
         ``DNA.crossover``) and then mutates. Mutation settings are as for ``mutated``.
         """
         if partner is None:
-            return self.clone_with_mutation(rng, mutation_rate, mutations_per_segment)
+            return self.clone_with_mutation(
+                rng, mutation_rate, mutations_per_segment, position_bias, locality, gene_biases
+            )
         strategy = crossover if crossover is not None else type(self).crossover_linked
         child = strategy(self, partner, rng)
-        return child.mutated(rng, mutation_rate, mutations_per_segment)
+        return child.mutated(
+            rng, mutation_rate, mutations_per_segment, position_bias, locality, gene_biases
+        )
 
     def replaced(self, gene_id: str, digits: Iterable[int] | str) -> Self:
         """A copy with the digits of one gene replaced (for example with ``BlockSpec.encode``)."""

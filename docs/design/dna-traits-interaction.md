@@ -72,7 +72,7 @@ A `TraitDef` is one row:
 | `genes` | gene IDs it reads; with several, the mean of their values (polygeny) |
 | `lo`, `hi`, `scale` | the range, and whether 0 to 1 maps onto it linearly or geometrically (`Scale.LOG`, `lo` must be above 0) |
 | `kind` | `CONTINUOUS` (a float), `INTEGER` (`lo + int(g * (hi - lo))`), or `CATEGORY` (the raw digit of a single-digit gene) |
-| `mutation_step` | typical mutation size as a fraction of the range; stored for the mutation operator, which does not use it yet |
+| `mutation_step` | typical mutation size as a fraction of the range; `TraitSet.position_biases()` turns it into the per-gene `gene_biases` that `DNA.mutated` reads |
 
 A `TraitSet` is the table for one species. It checks at construction that every gene ID exists in the
 layout and every name is unique, and `TraitSet.express(dna)` returns a dictionary of every trait's value. It
@@ -155,14 +155,15 @@ formulas work.
 
 These wait on the owner's answers or on other tasks and are tracked in [TODO.md](../../TODO.md).
 
-- `mutation_step` is data; body mutation is still per digit, so no operator reads the step. Mutation as
-  expected changes is built per segment (`DNA.12`, used for the brain); per-position weights and expected
-  changes per whole genome (`DNA.8`) are blocked on the encoding decision
-  ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)).
+- Mutation is built (`DNA.8`, [#15](https://github.com/dwhagar/evolutionSimulator/issues/15)): expected
+  changes per segment, low digits favoured by `position_bias` (default 0.5), and a separate `locality`
+  (default 0.0, random). `TraitSet.position_biases()` derives a per-gene bias from the traits'
+  `mutation_step`; callers pass it as `gene_biases=` to `reproduce` / `mutated`. Nothing in the simulation
+  passes it yet, so organisms use the layout defaults until the world loop wires it in.
 - Crossover is built (`DNA.7`, [#14](https://github.com/dwhagar/evolutionSimulator/issues/14)):
   `reproduce` defaults to `crossover_linked`, a few cut points that mostly fall between genes, with
-  `gene_fidelity` (default 0.9) setting how often one falls inside a gene. The mutation counterpart, how
-  closely a mutated digit stays to the old value, is `DNA.8`.
+  `gene_fidelity` (default 0.9) setting how often one falls inside a gene. Its mutation counterpart is
+  `locality`.
 - Tuning constants inside the formulas are still inline numbers (`TRAIT.3`). The trait table already holds
   the ranges; the formula constants (`0.08`, `0.18`, `0.75`) are what remain.
 - Haploid only. A diploid genome would hold two `DNA` objects and combine their `value` reads before
