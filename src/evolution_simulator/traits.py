@@ -30,6 +30,7 @@ from evolution_simulator.deaths import DeathCause
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.learning import Learner, LearningRules, State
+from evolution_simulator.lineage import family_key
 from evolution_simulator.sense_genes import (
     direction_noise,
     sense_cost,
@@ -241,6 +242,8 @@ class AnimalTraits(BaseTraits):
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
         self.trace_brain: bool = False
+        self.family_key: tuple[float, float] = family_key(dna)
+        """Two numbers that stay close for relatives (``lineage.family_key``), worked out once."""
         """Keep ``brain_trace`` up to date; the world turns it on for the selected animal only."""
         self.brain_trace: BrainTrace | None = None
         """The inputs, hidden values and outputs of the last brain run, while ``trace_brain``."""

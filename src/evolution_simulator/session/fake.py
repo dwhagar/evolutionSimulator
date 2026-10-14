@@ -310,4 +310,6 @@ class FakeSimulation:
             wave > 0.5,
             animal.id % 7 == 0,
             animal.sex,
+            math.sin(animal.id * 0.37),
+            math.cos(animal.id * 0.53),
         )
