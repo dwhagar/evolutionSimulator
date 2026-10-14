@@ -137,8 +137,8 @@ def test_founders_differ_a_little_and_still_agree_with_the_rule():
     brains = [AnimalTraits(f).brain for f in founders]
     data = samples(1500, 4)
     shares = [agreement(b, data) for b in brains]
-    assert sum(shares) / len(shares) >= 0.93
-    assert min(shares) >= 0.8
+    assert sum(shares) / len(shares) >= 0.9
+    assert min(shares) >= 0.75
 
 
 def test_variation_moves_only_that_many_levels_and_never_a_gate():

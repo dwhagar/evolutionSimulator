@@ -216,7 +216,7 @@ SEED_GAIN = 2.0
 def seeded_dna(
     rng: random.Random,
     base: DNA | None = None,
-    variation: float = 4.0,
+    variation: float = 3.0,
 ) -> DNA:
     """An animal genome with the seeded brain.
 
