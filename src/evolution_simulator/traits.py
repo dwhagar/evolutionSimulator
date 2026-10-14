@@ -11,8 +11,11 @@ Anything random takes an injected ``random.Random`` so runs are repeatable.
 from __future__ import annotations
 
 import random
+from collections.abc import Mapping
 
-from evolution_simulator.dna import AnimalDNA, BaseDNA, PlantDNA
+from evolution_simulator.dna import DNA
+from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
+from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 
 # =============================================================================
 # Base Traits: Shared Organism Physiology, Vitality & Mortality
@@ -26,8 +29,10 @@ class BaseTraits:
     and life-cycle mortality checks.
     """
 
-    def __init__(self, dna: BaseDNA) -> None:
-        self.dna: BaseDNA = dna
+    def __init__(self, dna: DNA, phenotype: Mapping[str, float | int]) -> None:
+        self.dna: DNA = dna
+        # Primary trait values from the trait table (see trait_defs.py), fixed at birth.
+        self.phenotype: Mapping[str, float | int] = phenotype
 
         # Core physiological metrics (to be scaled by subclasses)
         self.mass: float = 1.0
@@ -84,58 +89,56 @@ class AnimalTraits(BaseTraits):
     metabolic trade-offs, senescence degradation, and environmental drive flags.
     """
 
-    def __init__(self, dna: AnimalDNA) -> None:
-        if not isinstance(dna, AnimalDNA):
-            raise TypeError("AnimalTraits requires an instance of AnimalDNA.")
-        super().__init__(dna)
-        self.dna: AnimalDNA = dna
+    def __init__(self, dna: DNA) -> None:
+        if dna.layout != ANIMAL_LAYOUT:
+            raise TypeError("AnimalTraits requires DNA with the animal layout.")
+        t = ANIMAL_TRAITS.express(dna)
+        super().__init__(dna, t)
 
         # ---------------------------------------------------------------------
         # 1. Epistatic Coupling & Allometric Scaling
         # ---------------------------------------------------------------------
-        self.mass = 1.0 + (3.0 * dna.size)
-        self.max_damage_capacity = 100.0 * (1.0 + dna.size)
-        self.max_energy = 100.0 * (1.0 + (2.0 * dna.size))
+        self.mass = float(t["mass"])
+        self.max_damage_capacity = 100.0 * (1.0 + t["size"])
+        self.max_energy = 100.0 * (1.0 + (2.0 * t["size"]))
 
-        self.base_max_speed: float = (2.0 + (6.0 * dna.speed)) / (1.0 + (0.8 * dna.size))
-        self.base_turn_rate: float = (0.05 + (0.25 * dna.agility)) / (1.0 + (0.5 * dna.size))
+        self.base_max_speed: float = (2.0 + (6.0 * t["speed"])) / (1.0 + (0.8 * t["size"]))
+        self.base_turn_rate: float = (0.05 + (0.25 * t["agility"])) / (1.0 + (0.5 * t["size"]))
 
         # Sensory geometry
-        self.effective_sight_range: float = (10.0 + (50.0 * dna.sight_range)) * (
-            1.0 - (0.45 * dna.sight_fov)
-        )
-        self.fov_degrees: float = 40.0 + (320.0 * dna.sight_fov)
-        self.hearing_range: float = 15.0 + (70.0 * dna.hearing)
-        self.smell_sensitivity: float = dna.smell
-        self.smell_range: float = 20.0 + (80.0 * dna.smell)
+        self.effective_sight_range: float = t["sight_reach"] * (1.0 - (0.45 * t["sight_fov"]))
+        self.fov_degrees: float = t["fov_degrees"]
+        self.hearing_range: float = t["hearing_range"]
+        self.smell_sensitivity: float = t["smell"]
+        self.smell_range: float = t["smell_range"]
 
         self.body_radius: float = 0.5 * (self.mass**0.33)
-        self.tactile_range: float = self.body_radius * (1.1 + (1.5 * dna.touch))
+        self.tactile_range: float = self.body_radius * t["tactile_factor"]
 
         # Neural & Digestive Upkeep ("The Brain and Gut Tax")
         sensory_overhead = 0.08 * (
-            (dna.sight_range**2)
-            + (dna.hearing**2)
-            + (dna.smell**2)
-            + (dna.touch**2)
-            + (dna.taste**2)
+            (t["sight_range"] ** 2)
+            + (t["hearing"] ** 2)
+            + (t["smell"] ** 2)
+            + (t["touch"] ** 2)
+            + (t["taste"] ** 2)
         )
-        self.gut_maintenance: float = 0.06 * ((dna.herbivore_eff**2) + (dna.carnivore_eff**2))
+        self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
         self.basal_metabolism = (
             (0.18 * (self.mass**0.75))
-            + (0.12 * dna.somatic_maint)
+            + (0.12 * t["somatic_maint"])
             + sensory_overhead
             + self.gut_maintenance
         )
 
         # Acoustic signaling
-        self.call_radius: float = 60.0 * dna.encoder_fidelity
-        self.call_energy_cost: float = 1.5 + (6.0 * dna.encoder_fidelity)
+        self.call_radius: float = t["call_radius"]
+        self.call_energy_cost: float = t["call_energy_cost"]
 
         # Sex strategy behavioral offsets (Option 2)
-        self.sex_type: int = dna.sex_strategy
-        self.base_fear_weight: float = dna.fear
-        self.base_aggression: float = dna.aggression
+        self.sex_type: int = int(t["sex_strategy"])
+        self.base_fear_weight: float = t["fear"]
+        self.base_aggression: float = t["aggression"]
 
         if self.sex_type == 0:  # Tournament Male
             self.base_aggression = min(1.0, self.base_aggression * 1.35)
@@ -159,8 +162,8 @@ class AnimalTraits(BaseTraits):
         # Modulated outputs
         self.current_aggression: float = self.base_aggression
         self.current_max_speed: float = self.base_max_speed
-        self.effective_herb_eff: float = dna.herbivore_eff
-        self.effective_carn_eff: float = dna.carnivore_eff
+        self.effective_herb_eff: float = t["herbivore_eff"]
+        self.effective_carn_eff: float = t["carnivore_eff"]
         self.current_sight_range: float = self.effective_sight_range
         self.current_hearing_range: float = self.hearing_range
 
@@ -183,8 +186,8 @@ class AnimalTraits(BaseTraits):
         physical_factor = v * (0.35 + (0.65 * health_ratio))
 
         self.current_max_speed = self.base_max_speed * (0.3 + (0.7 * physical_factor))
-        self.effective_herb_eff = self.dna.herbivore_eff * v
-        self.effective_carn_eff = self.dna.carnivore_eff * v
+        self.effective_herb_eff = self.phenotype["herbivore_eff"] * v
+        self.effective_carn_eff = self.phenotype["carnivore_eff"] * v
         self.current_sight_range = self.effective_sight_range * (0.4 + (0.6 * v))
         self.current_hearing_range = self.hearing_range * (0.4 + (0.6 * v))
 
@@ -196,7 +199,7 @@ class AnimalTraits(BaseTraits):
         self.age_ticks += 1
 
         # Somatic repair dampens wear rate
-        wear_per_tick = 0.075 / (1.0 + (3.5 * self.dna.somatic_maint))
+        wear_per_tick = 0.075 / (1.0 + (3.5 * self.phenotype["somatic_maint"]))
         self.accumulated_damage += wear_per_tick
 
         self.vitality = max(0.0, 1.0 - (self.accumulated_damage / self.max_damage_capacity))
@@ -250,7 +253,7 @@ class AnimalTraits(BaseTraits):
         self.current_aggression = min(1.0, max(0.0, modulated_aggression))
 
         # Tactile Reflex
-        self.flag_tactile_evade = self.env_tactile_collision and (self.dna.touch > 0.1)
+        self.flag_tactile_evade = self.env_tactile_collision and (self.phenotype["touch"] > 0.1)
 
         # Fear vs Aggression Fight-or-Flight
         if self.env_threat_detected:
@@ -291,7 +294,10 @@ class AnimalTraits(BaseTraits):
         self.flag_ready_to_signal = False
         self.signal_to_emit = None
 
-        if self.dna.encoder_fidelity > 0.05 and self.current_energy > self.call_energy_cost:
+        if (
+            self.phenotype["encoder_fidelity"] > 0.05
+            and self.current_energy > self.call_energy_cost
+        ):
             if self.flag_in_fear:
                 self.flag_ready_to_signal = True
                 self.signal_to_emit = 2  # Alarm / Flee
@@ -312,7 +318,7 @@ class AnimalTraits(BaseTraits):
 
     def inspect_food(self, toxicity: float, rng: random.Random) -> bool:
         """Uses taste to detect toxins before consumption."""
-        detection_probability = min(1.0, toxicity * (0.2 + (0.8 * self.dna.taste)))
+        detection_probability = min(1.0, toxicity * (0.2 + (0.8 * self.phenotype["taste"])))
         return rng.random() < detection_probability
 
     def feed(self, biomass: float, is_meat: bool, toxicity: float = 0.0) -> float:
@@ -321,15 +327,15 @@ class AnimalTraits(BaseTraits):
             return 0.0
 
         if toxicity > 0.0:
-            poison_damage = toxicity * (1.0 - (0.5 * self.dna.taste)) * 25.0
+            poison_damage = toxicity * (1.0 - (0.5 * self.phenotype["taste"])) * 25.0
             self.apply_damage(poison_damage)
             if not self.is_alive:
                 return 0.0
 
         if is_meat:
-            efficiency = self.effective_carn_eff * (1.0 - (0.4 * self.dna.herbivore_eff))
+            efficiency = self.effective_carn_eff * (1.0 - (0.4 * self.phenotype["herbivore_eff"]))
         else:
-            efficiency = self.effective_herb_eff * (1.0 - (0.4 * self.dna.carnivore_eff))
+            efficiency = self.effective_herb_eff * (1.0 - (0.4 * self.phenotype["carnivore_eff"]))
 
         energy_gain = biomass * efficiency
         self.current_energy = min(self.max_energy, self.current_energy + energy_gain)
@@ -374,34 +380,34 @@ class PlantTraits(BaseTraits):
     canopy light shading, chemical defense expenditure, and seed burst triggers.
     """
 
-    def __init__(self, dna: PlantDNA) -> None:
-        if not isinstance(dna, PlantDNA):
-            raise TypeError("PlantTraits requires an instance of PlantDNA.")
-        super().__init__(dna)
-        self.dna: PlantDNA = dna
+    def __init__(self, dna: DNA) -> None:
+        if dna.layout != PLANT_LAYOUT:
+            raise TypeError("PlantTraits requires DNA with the plant layout.")
+        t = PLANT_TRAITS.express(dna)
+        super().__init__(dna, t)
 
         # ---------------------------------------------------------------------
         # 1. Structural Scaling & Phenotypes
         # ---------------------------------------------------------------------
-        self.max_biomass: float = 20.0 + (180.0 * dna.max_biomass)
+        self.max_biomass: float = float(t["max_biomass"])
         self.max_energy = self.max_biomass
         self.max_damage_capacity = self.max_biomass * 0.8
         self.mass = self.max_biomass * 0.5
 
         # Canopy radius and root competition footprint
-        self.canopy_radius: float = 2.0 + (10.0 * dna.max_biomass)
-        self.root_radius: float = 3.0 + (12.0 * dna.root_reach)
+        self.canopy_radius: float = t["canopy_radius"]
+        self.root_radius: float = t["root_radius"]
 
         # Reproduction: Dispersal distance and seed quantity
-        self.dispersal_radius: float = 10.0 + (60.0 * dna.dispersal_radius)
-        self.seed_count: int = 1 + int(7.0 * dna.seed_clutch)
+        self.dispersal_radius: float = t["dispersal_radius"]
+        self.seed_count: int = int(t["seed_count"])
 
         # Toxicity intensity (0.0 to 1.0) and ongoing chemical defense cost
-        self.toxicity: float = dna.toxicity
+        self.toxicity: float = t["toxicity"]
         self.chemical_defense_tax: float = 0.05 * (self.toxicity**1.5)
 
         # Baseline photosynthetic intake per tick
-        self.base_growth_rate: float = 0.2 + (0.8 * dna.growth_rate)
+        self.base_growth_rate: float = t["base_growth_rate"]
         self.basal_metabolism = (0.02 * (self.mass**0.5)) + self.chemical_defense_tax
 
         # ---------------------------------------------------------------------
