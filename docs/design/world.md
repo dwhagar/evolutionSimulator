@@ -29,7 +29,7 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 | `timescale.py` | `TimeScale`, the speed presets, `Pacer` (real time to whole ticks), `format_duration` | WORLD.3 |
 | `spatial.py` | `SpatialIndex`, a grid for "what is near this point" | WORLD.2 |
 | `daycycle.py` | `DayCycle`: daylight, night and day number as a function of simulated time | WORLD.5 |
-| `sleep.py` | `SleepRules` and the `SleepListener` hook | WORLD.5 |
+| `sleep.py` | the `SleepListener` hook (`SleepRules` is `TraitRules.sleep` in `config.py`) | WORLD.5, TRAIT.10 |
 | `organisms.py` | `Animal` and `Plant`: traits plus a place (and heading for animals) | WORLD.2 |
 | `senses.py` | the `Senses` interface and `WorldSenses`: neighbour search and classifier feeding the sensing step | SENSE.12 |
 | `mating.py` | `may_mate`, `mate_rank`, `choose_mate`: who may mate and who is preferred | REPRO.4 |

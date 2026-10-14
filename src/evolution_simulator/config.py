@@ -11,16 +11,16 @@ arrives. ``DEFAULT_RULES`` is what everything uses unless it is given another.
   rules can sit side by side and a test can change one number: ``replace(rules.life, wear_base=0.05)``
   and ``replace(DEFAULT_RULES, life=...)`` give a new tree without touching the default.
 * ``WorldConfig.traits`` holds the rules for a run. The settings of the world that used to sit
-  beside it are moving into the tree (``TRAIT.10``): ``learning`` is there now, and ``sleep``,
+  beside it are moving into the tree (``TRAIT.10``): ``learning`` and ``sleep`` are there now, and
   ``day_cycle``, ``time_scale`` and the plants' soil and shade limits follow. ``WorldConfig`` reads
   them from the tree, so a run has one source of tuning constants.
 * What is **not** here: the ranges of the traits (how far a gene stretches a trait, such as
   ``SIGHT_REACH`` or ``COOLDOWN_DAYS_RANGE``), which are the trait table's data (``trait_defs.py``);
   the fixed structure of a formula (half of a care fraction per parent, a half-life's one half); and
-  the settings that still have their own rules object (``SleepRules``, ``DayCycle``, ``TimeScale``).
+  the settings that still have their own rules object (``DayCycle``, ``TimeScale``).
   ``SensingRules`` (the sensing step's light, sleep, smell and noise numbers) lives here as
-  ``TraitRules.sensing`` and ``LearningRules`` as ``TraitRules.learning``; ``WorldConfig.sensing`` and
-  ``WorldConfig.learning`` read them from there.
+  ``TraitRules.sensing`` and ``LearningRules`` as ``TraitRules.learning``, ``SleepRules`` as ``TraitRules.sleep``; ``WorldConfig.sensing``, ``.learning``
+  and ``.sleep`` read them from there.
 
 Each field's meaning is next to it. Time is in **reference ticks** (an hour of simulated time) and
 rates are per reference tick; the world multiplies them by its ``dt`` (``TimeRules``).
@@ -385,6 +385,31 @@ class LearningRules:
 
 
 @dataclass(frozen=True)
+class SleepRules:
+    """Sleep (``WORLD.5``): who stays awake, what a sleeper burns and regains, what wakes it.
+
+    ``TraitRules.sleep`` holds them for a run (``TRAIT.10``).
+    """
+
+    starving_below: float = 0.15
+    """An animal with less than this fraction of its energy store stays awake to find food."""
+    metabolism_factor: float = 0.4
+    """Fraction of its basal metabolism an animal burns while asleep."""
+    energy_regain: float = 0.002
+    """Fraction of its energy store an animal regains each reference tick (hour) of sleep, at
+    average ``recovery``, on top of burning less."""
+    alarm_wakes_above: float = 0.2
+    """An alarm call heard at least this strongly (1 at the caller, 0 at the edge of its radius)
+    wakes a sleeper, and it stays awake until the next day (SENSE.7)."""
+
+    def __post_init__(self) -> None:
+        for name in ("starving_below", "metabolism_factor", "energy_regain", "alarm_wakes_above"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and 0.0 <= value <= 1.0):
+                raise ValueError(f"{name} must be between 0 and 1, got {value}.")
+
+
+@dataclass(frozen=True)
 class TraitRules:
     """All the organism constants of a run."""
 
@@ -398,6 +423,8 @@ class TraitRules:
     plant: PlantTraitRules = field(default_factory=PlantTraitRules)
     organs: OrganRules = field(default_factory=OrganRules)
     sensing: SensingRules = field(default_factory=SensingRules)
+    sleep: SleepRules = field(default_factory=SleepRules)
+    """Who sleeps at night and what sleep does (``WORLD.5``, ``TRAIT.10``)."""
     learning: LearningRules | None = field(default_factory=LearningRules)
     """Learning during life (``BRAIN.24``, ``TRAIT.10``); ``None`` turns it off."""
 

@@ -63,7 +63,7 @@ from evolution_simulator.world.world import World, WorldConfig
 
 FORMAT = "evolution-simulator-world"
 """The document type, so a file of something else is refused with a clear message."""
-FORMAT_VERSION = 2
+FORMAT_VERSION = 3
 """The layout of the document. Bump it when the layout changes and add a migration if old saves can
 still be read."""
 
@@ -76,8 +76,17 @@ def _learning_into_the_trait_rules(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _sleep_into_the_trait_rules(data: dict[str, Any]) -> dict[str, Any]:
+    """Version 2 to 3 (``TRAIT.10``): ``config.sleep`` became ``config.traits.sleep``."""
+    config = data["world"]["config"]
+    if "sleep" in config:
+        config.setdefault("traits", {})["sleep"] = config.pop("sleep")
+    return data
+
+
 _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     1: _learning_into_the_trait_rules,
+    2: _sleep_into_the_trait_rules,
 }
 """``{n: f}``: ``f`` takes a document of version ``n`` and returns it as version ``n + 1``."""
 

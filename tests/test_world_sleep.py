@@ -211,3 +211,21 @@ def test_animals_see_less_at_night():
         seen.append(senses.perceive(world, animal).plant_closeness)
     assert seen[0] > 0.0
     assert seen[1] == 0.0
+
+
+def test_the_sleep_rules_are_part_of_the_trait_rules():
+    from dataclasses import replace
+
+    config = WorldConfig()
+    assert config.sleep is config.traits.sleep and config.sleep == SleepRules()
+    changed = config.with_rules(sleep=replace(config.sleep, starving_below=0.5))
+    assert changed.sleep.starving_below == 0.5 and config.sleep.starving_below == 0.15
+    world = World(
+        WorldConfig(seed=1, day_cycle=SHORT_DAY, calls_enabled=False).with_rules(
+            sleep=replace(config.sleep, starving_below=0.99)
+        )
+    )
+    hungry = world.add_animal(animal_dna(), HERE)
+    hungry.traits.current_energy = 0.9 * hungry.traits.max_energy  # below 99%: counts as starving
+    world.run(60)  # into the night
+    assert not hungry.asleep
