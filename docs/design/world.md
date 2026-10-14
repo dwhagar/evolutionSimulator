@@ -254,7 +254,7 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   eats the plant the animal overlaps, or, if it overlaps none, bites the nearest animal it touches
   that it counts as prey (`classify`: a meat eater at most 0.8 times its mass; code in
   `world/combat.py`, constants in `AttackRules` on `WorldConfig`). A bite does
-  `damage` (30) × carnivore efficiency × √(attacker mass / prey mass), wakes a sleeper, and the
+  `damage` (30) × carnivore efficiency × √(attacker mass / prey mass) × `dt` (damage is per reference tick, like grazing), wakes a sleeper, and the
   animal that lands the killing bite eats `meat_share` (half) of the victim's maximum energy
   through `feed(..., is_meat=True)`, so its carnivore efficiency decides how much it gains.
   Seek-mating and the two call outputs are acted on as described above. `AnimalTraits` keeps no
