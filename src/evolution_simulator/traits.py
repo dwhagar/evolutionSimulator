@@ -152,17 +152,24 @@ class AnimalTraits(BaseTraits):
         dna: Genome,
         decision_interval: int | None = None,
         rules: TraitRules = DEFAULT_RULES,
+        dt: float = 1.0,
     ) -> None:
         if dna.layout != ANIMAL_LAYOUT:
             raise TypeError("AnimalTraits requires DNA with the animal layout.")
         t = ANIMAL_TRAITS.express(dna)
+        if dt <= 0.0:
+            raise ValueError(f"dt must be above zero, got {dt}.")
         if decision_interval is None:
-            decision_interval = int(t["decision_interval"])
+            # The gene is a time in reference ticks (hours); a shorter world tick means more ticks.
+            decision_interval = max(1, round(t["decision_interval"] / dt))
         if decision_interval < 1:
             raise ValueError(f"Decision interval must be at least 1 tick, got {decision_interval}.")
         super().__init__(dna, t)
         self.rules: TraitRules = rules
         """Every tuning constant this animal lives by (``config.py``)."""
+        self.dt: float = dt
+        """Reference ticks (hours) per world tick, which the decision interval and the learning
+        window are counted in (``WORLD.16``)."""
         body = rules.body
 
         # ---------------------------------------------------------------------
@@ -237,7 +244,7 @@ class AnimalTraits(BaseTraits):
         self.brain_upkeep: float = (
             rules.brain.neuron_cost * self.brain.neuron_count
             + rules.brain.connection_cost * self.brain.active_connections()
-        ) / self.decision_interval
+        ) / (self.decision_interval * dt)
         life, repro, recovery = rules.life, rules.reproduction, rules.recovery
         self.repair_upkeep: float = life.repair_cost * (
             t["somatic_maint"] ** life.repair_cost_exponent
@@ -593,7 +600,9 @@ class AnimalTraits(BaseTraits):
         if rules is None or rng is None or self.learning_rate <= 0.0 or self.curiosity <= 0.0:
             return None
         if self.learner is None:
-            self.learner = Learner(self.brain.shape.hidden, self.brain.shape.outputs, rules)
+            self.learner = Learner(
+                self.brain.shape.hidden, self.brain.shape.outputs, rules, self.dt
+            )
         return self.learner
 
     def _learning_state(self, threat: float) -> State:

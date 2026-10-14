@@ -276,9 +276,11 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   modulo 2, with 2 and 3 changing the drive) is the default for question 1 on
   [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
 - **Time.** See the reference tick above. Everything is scaled by `dt` (`WORLD.7`); the defaults are an hour a
-  tick and a 24-hour day. Two things still count in ticks, not time: the brain's `decision_interval` (1 to 4
-  ticks, so 1 to 4 hours at the default) and the learning rules' `reward_window` (10 ticks). A world with a
-  one-second tick keeps those numbers of ticks, so its animals decide every few seconds.
+  tick and a 24-hour day. The brain's decision interval (the `reaction_time` gene, 1 to 4
+  reference ticks, hours) and the learning rules' `reward_window` (10 reference ticks) are times too
+  (`WORLD.16`): the world gives each animal its `dt` and the animal turns them into ticks (at
+  least one), so a world with a one-second tick decides every 1 to 4 hours, not every few
+  seconds, and brain upkeep per hour does not change with the tick.
 - **The hourly default exposes the plant ecology.** Founder plants in an hourly world mostly die before they
   seed (growth is below upkeep at seedling health, a lone plant's own biomass fills the soil limit of
   0.015 per unit of ground before it reaches 85% of its size, and seedlings burn upkeep all night): that is
@@ -301,8 +303,8 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   and 300), because three senses are now searched and reported instead of one, over a wider reach.
   `WORLD.13` brought it to about 44 ms (5 ms at 60 and 300) with three changes (the first alters only what the learning log
   records, the others nothing an animal perceives):
-  - **Sense only when the brain will look.** The brain runs every `decision_interval` ticks (1 to
-    4) and repeats its last decision in between, so the world asks `AnimalTraits.cached_decision`
+  - **Sense only when the brain will look.** The brain runs every `decision_interval` ticks (1 to 4 hours,
+    that many ticks at the hourly default) and repeats its last decision in between, so the world asks `AnimalTraits.cached_decision`
     first and calls the senses only when it returns nothing. An animal that is logging its day
     (`BRAIN.24`) logs the threat it saw when the brain last looked instead of re-sensing every tick.
   - **Search by surfaces.** The grid stores each item's radius (`SpatialIndex.within_reach`,
