@@ -13,6 +13,16 @@ pip install -e ".[dev]"
 pytest
 ```
 
+## Running without a window
+
+```bash
+python -m evolution_simulator run --until 100y --out runs/       # new run, saved as it goes
+python -m evolution_simulator run --resume latest --until 200y --out runs/
+python -m evolution_simulator list --out runs/
+```
+
+Each run is a folder with its settings, history and checkpoints; see [docs/design/ux.md](docs/design/ux.md).
+
 ## Project layout
 
 ```

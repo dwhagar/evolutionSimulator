@@ -325,6 +325,33 @@ default and the real world with `--world` (in this process, until UX.7 and UX.17
   builds the panel with `MainWindow(controller, specs=[...])` over a `LocalBackend(Session(FakeSimulation(...),
   clock=...))` and calls `controller.poll()` to deliver frames without a timer.
 
+### As built: the headless run (`UX.22`)
+
+`python -m evolution_simulator run --until 100y --out runs/` runs a world with no window through the run
+store (`runs/headless.py`, command line in `__main__.py`; core only, no Qt):
+
+```
+python -m evolution_simulator run --until 100y [--config c.json] [--seed N] [--animals N] [--plants N]
+                                  [--name NAME] [--out DIR] [--checkpoint-days D] [--keep-newest N]
+                                  [--min-wall-seconds S] [--keep-going] [--quiet]
+python -m evolution_simulator run --resume <run id | latest> --until 200y --out runs/
+python -m evolution_simulator list --out runs/
+```
+
+- **`--until`** is the simulated time to reach from the start of the world: `30s`, `10min`, `12h`, `30d`,
+  `2w`, `6mo`, `100y` (365.25 days) or `5000t` (ticks of this world). On `--resume` it is still counted
+  from the start, so the same `--until` finishes an interrupted run.
+- **`--config`** is JSON in the form `persistence.config_to_dict` writes (missing fields take their
+  defaults, unknown ones are refused); a run's own `run.json` works too, which repeats a run's settings.
+  `--seed` overrides the file's seed. Without a file the default config is used.
+- **What it writes.** A new run folder (`UX.10`) with the recorder's history and autosaved checkpoints;
+  a last checkpoint is always written, also on Ctrl-C (exit code 130) or when every animal has died (the
+  run stops there unless `--keep-going`). Progress lines show the simulated age, populations and ticks per
+  second; the last line names the folder and the `--resume` to use. Errors print `error: ...` and exit 2.
+- **Resuming** restores the newest checkpoint that reads, with its recorder, and goes on exactly as an
+  uninterrupted run (tested with `state_digest` and the history). The viewer opens the same folder from
+  Run history.
+
 ### As built: the process host and `SimClient` (`UX.7`)
 
 - **`Host`** (`session/host.py`) is a `Session` plus the rules of talking to a viewer, with no transport:
