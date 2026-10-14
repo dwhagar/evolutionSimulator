@@ -14,13 +14,13 @@ from evolution_simulator.world import TimeScale, Vec, World, WorldConfig
 # --- the default rules reproduce the numbers the formulas had inline -----------
 
 
-def test_the_defaults_give_the_same_animal_as_before_the_move():
+def test_the_default_rules_give_a_known_reference_animal():
     animal = AnimalTraits(ANIMAL_BASE)
     assert animal.rules is DEFAULT_RULES
     assert animal.max_energy == pytest.approx(166.666667)
     assert animal.max_damage_capacity == pytest.approx(133.333333)
     assert animal.base_max_speed == pytest.approx(3.157894737)
-    assert animal.basal_metabolism == pytest.approx(0.4223206645)
+    assert animal.basal_metabolism == pytest.approx(0.4405428867)
     assert animal.wear_per_tick == pytest.approx(0.0200492308)
     assert animal.brain_upkeep == pytest.approx(0.00305)
     assert animal.repair_upkeep == pytest.approx(0.0222222222)

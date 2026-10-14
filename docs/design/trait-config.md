@@ -85,7 +85,10 @@ What a body is, costs to keep and does as it wears down (animals).
 | `basal_scale` | `0.18` |  |
 | `basal_exponent` | `0.75` | Upkeep of the body itself is `scale * mass ** exponent` (Kleiber's law). |
 | `gut_cost` | `0.06` | Upkeep of the gut: `gut_cost * (herbivore_eff ** 2 + carnivore_eff ** 2)`. |
-| `kinetic_burn` | `0.35` | Energy per tick moving at full speed per unit of mass, times the speed ratio squared. |
+| `kinetic_burn` | `0.35` | Energy per reference tick per unit of mass for an animal moving at `speed_reference`; the burn goes with the square of the speed actually moved, so a fast animal pays more per hour and more than twice as much per unit of distance moved at twice the speed (`TRAIT.9`). |
+| `speed_reference` | `3.5` | Distance per reference tick of an average animal (speed gene 0.5, size 0.5) at full speed. |
+| `agility_cost` | `0.06` | Upkeep of quick reflexes: `agility_cost * agility ** 2` per reference tick (`TRAIT.9`). |
+| `temperament_cost` | `0.04` | Upkeep of a strong temperament: `temperament_cost * (aggression ** 2 + fear ** 2)`. A placeholder until fighting and fleeing cost something of their own (`BRAIN.10`) (`TRAIT.9`). |
 | `speed_floor` | `0.3` | Top speed at no vitality is this share of the base speed (the rest scales with vitality). |
 | `sense_floor` | `0.4` | Sight and hearing at no vitality are this share of their ranges. |
 | `health_floor` | `0.35` | Physical condition at no health is this share of vitality (the rest scales with health). |
@@ -129,6 +132,7 @@ What thinking costs and how often it happens.
 | `connection_cost` | `0.0001` | Per active connection, a weight whose absolute value is above `dead_zone`. |
 | `dead_zone` | `0.5` | A weight at or below this is off, for cost and in `Brain.decide` (`BRAIN.21`): at 0.5 a quarter of random weights are off. |
 | `interrupt_pain` | `0.05` | Pain at or above this cuts the decision interval short (`BRAIN.22`). |
+| `learning_cost` | `0.004` | Upkeep of plasticity: `learning_cost * learning_rate` per reference tick, paid by every animal whatever the world's learning switch says (`TRAIT.9`). |
 | `pain_full_fraction` | `0.2` | Losing this fraction of maximum health since the last decision reads as full pain. |
 
 ### `life` (`LifeRules`)

@@ -604,6 +604,7 @@ def test_parenting_spans_ten_to_eighty_percent():
 def test_a_default_animal_lives_about_a_simulated_year():
     traits = AnimalTraits(animal_with())
     traits.phenotype = {**traits.phenotype, "somatic_maint": 0.5, "repro_drive": 0.5}
+    traits.effective_drive = 0.5  # the drive that wears, with no sex-digit modifier
     traits.max_damage_capacity = 150.0  # size 0.5
     assert traits.lifespan_ticks == pytest.approx(8765, abs=1)  # an hour a tick: a year
 
@@ -630,7 +631,8 @@ def test_a_longer_tick_scales_wear_energy_cooldown_and_the_cost_of_moving():
     moving = AnimalTraits(one.dna)
     moving.current_energy = moving.max_energy
     moving.update_metabolism_and_aging(1.0, 4.0)
-    kinetic = 0.35 * moving.mass * 4.0  # moving for four hours at full speed
+    speed = moving.current_max_speed  # full speed for four hours
+    kinetic = 0.35 * moving.mass * (speed / 3.5) ** 2 * 4.0
     assert moving.max_energy - moving.current_energy == pytest.approx(
         moving.basal_metabolism * 4.0 + kinetic
     )
@@ -1001,18 +1003,21 @@ def test_pinned_reproduction_numbers():
     assert t.phenotype["recovery"] == pytest.approx(0.476190476)
     assert t.sex == 0 and t.drive_modifier == 0.25
     assert t.effective_drive == pytest.approx(0.793650794)
-    assert t.wear_per_tick == pytest.approx(0.024970757)
-    assert t.lifespan_ticks == pytest.approx(6360.381051326)
-    assert t.mating_cooldown == pytest.approx(381.622863080)  # 6% of the lifespan
+    assert t.wear_per_tick == pytest.approx(0.026692878)  # the effective drive, 0.794, not the gene
+    assert t.lifespan_ticks == pytest.approx(5950.033886724)
+    assert t.mating_cooldown == pytest.approx(357.002033203)  # 6% of the lifespan
     assert t.cooldown_ticks == pytest.approx(315.569156812)
     assert t.phenotype["litter_capacity"] == pytest.approx(0.797821351)
     assert t.litter_size == 7  # 1 + round(0.798 * 7)
     assert t.gestation_ticks == pytest.approx(384.0)
     assert t.repair_upkeep == pytest.approx(0.016390619)
     assert t.readiness_upkeep == pytest.approx(0.020981254)
-    assert t.drive_upkeep == pytest.approx(0.020156211)
+    assert t.drive_upkeep == pytest.approx(0.031494079)  # 0.05 * effective drive squared
     assert t.fertility_upkeep == pytest.approx(0.024197531)
     assert t.recovery_upkeep == pytest.approx(0.022675737)
+    assert t.agility_upkeep == pytest.approx(0.058132411)
+    assert t.temperament_upkeep == pytest.approx(0.015763168)
+    assert t.learning_upkeep == 0.0
     assert t.birth_cost([t.max_energy]) == pytest.approx(87.466615404)
 
 
@@ -1032,7 +1037,7 @@ def test_pinned_animal_phenotype():
     assert t.tactile_range == pytest.approx(1.616805516)
     # repair, readiness, drive, fertility and recovery upkeep and the brain (one hidden neuron and six
     # outputs: 7 * 0.0005 + 26 * 0.0001, as every gate is off); the sense bill is on area (SENSE.11)
-    assert t.basal_metabolism == pytest.approx(0.619096544)
+    assert t.basal_metabolism == pytest.approx(0.704329991)
     assert t.call_radius == pytest.approx(13.411764706)
     assert t.call_energy_cost == pytest.approx(2.841176471)
     assert t.sex_type == 2

@@ -98,7 +98,8 @@ def test_the_energy_spent_moving_is_charged_for_the_time_moved():
         start = traits.current_energy
         world.step()
         ratio = animal.last_decision.speed
-        expected = (traits.basal_metabolism + 0.35 * traits.mass * ratio**2) * world.dt
+        speed = ratio * traits.current_max_speed
+        expected = (traits.basal_metabolism + 0.35 * traits.mass * (speed / 3.5) ** 2) * world.dt
         assert start - traits.current_energy == pytest.approx(expected)
 
 

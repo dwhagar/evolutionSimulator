@@ -258,6 +258,8 @@ class TraitSet:
 
     ``costs`` optionally maps each shared cost (upkeep, wear, a birth) to the traits that drive it, so
     the trade-offs can be listed and audited. The formulas themselves stay in ``traits.py``.
+    ``free`` maps the genes that deliberately pay nothing to the reason, so ``unpaid_genes`` only
+    lists genes nobody has decided about (``TRAIT.9``).
     """
 
     def __init__(
@@ -266,6 +268,7 @@ class TraitSet:
         layout: GenomeLayout,
         defs: Iterable[TraitDef],
         costs: Mapping[str, Iterable[str]] | None = None,
+        free: Mapping[str, str] | None = None,
     ) -> None:
         self.name = name
         self.layout = layout
@@ -302,6 +305,13 @@ class TraitSet:
             unknown = [d for d in drivers if d not in self._by_name]
             if unknown:
                 raise ValueError(f"Cost {term!r} names unknown traits {unknown}.")
+        self.free: Mapping[str, str] = dict(free or {})
+        """Genes that need no cost, with the reason."""
+        for gene_id, reason in self.free.items():
+            if gene_id not in layout:
+                raise ValueError(f"Free gene {gene_id!r} is not in layout {layout.name!r}.")
+            if not reason.strip():
+                raise ValueError(f"Free gene {gene_id!r} needs a reason.")
 
     def __getitem__(self, trait_name: str) -> TraitDef:
         return self._by_name[trait_name]
@@ -377,14 +387,15 @@ class TraitSet:
         )
 
     def unpaid_genes(self) -> tuple[str, ...]:
-        """Genes read by traits that drive no cost: what the cost table says is free. Only useful
-        when the set was given ``costs``. Gene blocks are left out."""
+        """Genes read by traits that drive no cost and are not recorded in ``free``: what nobody has
+        decided about. Only useful when the set was given ``costs``. Gene blocks are left out."""
         paid = {name for drivers in self.costs.values() for name in drivers}
         return tuple(
             gene.id
             for gene in self.layout.genes
             if gene.block is None
             and (readers := self.traits_reading(gene.id))
+            and gene.id not in self.free
             and not any(t.name in paid for t in readers)
         )
 
@@ -498,11 +509,14 @@ ANIMAL_TRAITS = TraitSet(
     ),
     costs={
         "body upkeep": ("mass",),
-        "movement burn": ("mass",),
+        "movement burn": ("mass", "speed"),
         "size slows movement": ("size",),
         "repair upkeep": ("somatic_maint",),
         "readiness upkeep": ("cooldown_days",),
-        "drive upkeep and wear": ("repro_drive",),
+        "drive upkeep and wear": ("repro_drive", "sex_strategy"),
+        "agility upkeep": ("agility",),
+        "temperament upkeep": ("aggression", "fear"),
+        "learning upkeep": ("learning_rate",),
         "fertility upkeep": ("fertility",),
         "recovery upkeep": ("recovery",),
         "sensing upkeep": (
@@ -521,6 +535,18 @@ ANIMAL_TRAITS = TraitSet(
         "gestation": ("fertility", "litter_capacity"),
         "cooldown stretch": ("somatic_maint", "cooldown_days"),
         "birth cost": ("care_fraction", "size", "somatic_maint"),
+    },
+    free={
+        "brain_gain": (
+            "A scale on the brain's own weights, which evolve too: any gain can be matched by "
+            "weights, so selection has no direction to push it. The weights above the dead zone "
+            "are what cost."
+        ),
+        "curiosity": (
+            "Pays for itself: it nudges every output at random, so the animal moves, eats and "
+            "mates less reliably, and a noisy speed costs more than a steady one because the "
+            "burn grows with the square of the speed."
+        ),
     },
 )
 
