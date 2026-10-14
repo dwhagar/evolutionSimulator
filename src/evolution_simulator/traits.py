@@ -53,6 +53,9 @@ DECISION_INTERVAL: int = 1
 default comes from the animal's ``reaction_time`` gene. Between decisions the animal keeps its last
 one. Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to
 move into the shared config object (TRAIT.3)."""
+INTERRUPT_PAIN: float = 0.05
+"""Pain at or above this (1% of maximum health lost since the last decision) cuts the decision
+interval short, so a hurt animal reacts at once (``BRAIN.22``)."""
 PAIN_FULL_FRACTION: float = 0.2
 """Losing this fraction of maximum health (or more) since the last decision reads as full pain."""
 
@@ -320,6 +323,8 @@ class AnimalTraits(BaseTraits):
         self.decision_interval: int = decision_interval
         self._decision: BrainDecision | None = None
         self._last_threat: float = 0.0
+        self._decided_threat: float = 0.0  # what the brain saw when it last ran (BRAIN.22)
+        self._decided_touch: bool = False
         """The threat closeness the last time the brain looked, for the learning log."""
         self._ticks_since_decision: int = 0
         self.brain_upkeep: float = (
@@ -578,7 +583,11 @@ class AnimalTraits(BaseTraits):
         state = self._learning_state(percepts.threat_closeness) if learner is not None else None
         if learner is not None and state is not None:
             learner.observe(state)
-        if self._decision is not None and self._ticks_since_decision < self.decision_interval:
+        if (
+            self._decision is not None
+            and self._ticks_since_decision < self.decision_interval
+            and not self._interrupted(percepts)
+        ):
             self._ticks_since_decision += 1
             return self._decision
         if not self.can_mate and (percepts.mate_closeness or percepts.mate_direction):
@@ -598,6 +607,8 @@ class AnimalTraits(BaseTraits):
             ),
         )
         self.damage_since_decision = 0.0
+        self._decided_threat = percepts.threat_closeness
+        self._decided_touch = bool(percepts.touching)
         hidden, proposal = self.brain.decide_with_hidden(inputs)
         action = self._explore(proposal, rng)
         if learner is not None and state is not None:
@@ -609,6 +620,27 @@ class AnimalTraits(BaseTraits):
         self._ticks_since_decision = 1
         return decision
 
+    def _interrupted(self, percepts: Percepts) -> bool:
+        """Whether something happened since the brain last ran that should not wait for the next
+        scheduled decision (``BRAIN.22``): it is hurting, a threat has appeared, or it is newly in
+        contact with something."""
+        if self.pain >= INTERRUPT_PAIN:
+            return True
+        if percepts.threat_closeness > 0.0 and self._decided_threat <= 0.0:
+            return True
+        return bool(percepts.touching) and not self._decided_touch
+
+    @property
+    def decided_touch(self) -> bool:
+        """Whether the animal was in contact with something when its brain last ran; the world uses
+        it to tell a new contact (which interrupts the decision interval) from a continuing one."""
+        return self._decided_touch
+
+    def interrupt(self) -> None:
+        """Make the next ``cached_decision`` return ``None``, so the brain looks at the world
+        again now instead of at the end of the interval."""
+        self._ticks_since_decision = self.decision_interval
+
     def cached_decision(self, rng: random.Random | None = None) -> BrainDecision | None:
         """The decision to repeat this tick, or ``None`` if the brain must look at the world.
 
@@ -618,6 +650,8 @@ class AnimalTraits(BaseTraits):
         exactly as ``think`` does.
         """
         if self._decision is None or self._ticks_since_decision >= self.decision_interval:
+            return None
+        if self.pain >= INTERRUPT_PAIN:
             return None
         learner = self._active_learner(rng)
         if learner is not None:
