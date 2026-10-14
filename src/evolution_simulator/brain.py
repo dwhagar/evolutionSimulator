@@ -155,13 +155,13 @@ class Brain:
         if len(inputs) != self.shape.inputs:
             raise ValueError(f"Expected {self.shape.inputs} inputs, got {len(inputs)}.")
         hidden = [
-            math.tanh(bias + sum(w * x for w, x in zip(weights, inputs)))
+            math.tanh(bias + math.sumprod(weights, inputs))
             for bias, weights in self._hidden
         ]
         signed = self.shape.signed_outputs
         result: list[float] = []
         for k, (bias, weights) in enumerate(self._outputs):
-            total = bias + sum(w * h for w, h in zip(weights, hidden))
+            total = bias + math.sumprod(weights, hidden)
             result.append(math.tanh(total) if signed[k] else _logistic(total))
         return tuple(result)
 

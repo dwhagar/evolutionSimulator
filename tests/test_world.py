@@ -81,6 +81,16 @@ def test_neighbour_queries_return_what_is_near():
     assert world.plants_near(Vec.of(100, 100), 20) == [plant]
 
 
+def test_the_within_queries_give_distances_in_id_order():
+    world = make()
+    first = world.add_animal(animal_dna(), Vec.of(103, 104))
+    second = world.add_animal(animal_dna(), Vec.of(100, 101))
+    world.add_animal(animal_dna(), Vec.of(400, 400))
+    plant = world.add_plant(plant_dna(), Vec.of(106, 108))
+    assert world.animals_within(Vec.of(100, 100), 20) == [(first, 5.0), (second, 1.0)]
+    assert world.plants_within(Vec.of(100, 100), 20) == [(plant, 10.0)]
+
+
 # --- time ---------------------------------------------------------------------
 
 
