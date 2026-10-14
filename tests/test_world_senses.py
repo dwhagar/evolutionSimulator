@@ -98,11 +98,35 @@ def test_other_animals_are_prey_threat_or_possible_mate_by_mass():
     assert seen.crowding == pytest.approx(0.3)
 
 
+def test_relative_size_is_that_of_the_nearer_of_prey_and_threat():
+    world = World()
+    me = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    world.add_animal(animal_dna(size=MASS_1), Vec.of(510, 500))  # lighter: half the mass
+    world.add_animal(animal_dna(size=MASS_4), Vec.of(500, 520))  # heavier: twice the mass, further
+    assert seen_by(world, me).relative_size == pytest.approx(-0.5)  # log2(1/2) / 2
+    world = World()
+    me = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    world.add_animal(animal_dna(size=MASS_1), Vec.of(520, 500))
+    world.add_animal(animal_dna(size=MASS_4), Vec.of(500, 510))  # now the nearer one
+    assert seen_by(world, me).relative_size == pytest.approx(0.5)  # log2(2) / 2
+    world = World()
+    alone = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    world.add_animal(animal_dna(size=MASS_2), Vec.of(510, 500))  # a possible mate is not sized
+    assert seen_by(world, alone).relative_size == 0.0
+
+
+def test_the_time_of_day_is_reported():
+    world = World()
+    me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
+    assert seen_by(world, me).daylight == 1.0  # no day cycle: always full daylight
+    assert seen_by(world, me).senses_nothing  # and that is not a sense
+
+
 def test_an_animal_does_not_sense_itself():
     world = World()
     me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
     seen = seen_by(world, me)
-    assert seen == Percepts()
+    assert seen == Percepts(daylight=1.0)  # daylight is reported even when nothing else is
 
 
 def test_touch_needs_the_touch_gene_and_something_close():

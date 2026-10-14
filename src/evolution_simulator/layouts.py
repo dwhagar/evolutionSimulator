@@ -12,26 +12,27 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from evolution_simulator.brain import DEFAULT_SHAPE
+from evolution_simulator.brain import DEFAULT_BLUEPRINT
 from evolution_simulator.dna import DNA, BlockSpec, GeneSpec, GenomeLayout
 
 BRAIN_GENE = BlockSpec(
     "brain",
-    count=DEFAULT_SHAPE.weight_count,
+    count=DEFAULT_BLUEPRINT.value_count,
     digits_per_value=2,
     low=-2.0,
     high=2.0,
-    groups=DEFAULT_SHAPE.group_sizes,
+    groups=DEFAULT_BLUEPRINT.group_sizes,
     segment="brain",
 )
-"""The brain's 198 weights and biases, two digits each (396 digits), one group per hidden neuron."""
+"""The brain: 16 slots of 28 values (gate, bias, 20 incoming and 6 outgoing weights) and the 6
+output biases, 454 values of two digits each (908 digits), one group per slot."""
 
 PLANT_MUTATION_PER_DIGIT: float = 0.005
 """Chance a plant digit changes per child: half the animal body's 0.01, so plants evolve slower."""
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=3,
+    version=4,
     specs=(
         # body
         GeneSpec("speed"),
@@ -57,12 +58,17 @@ ANIMAL_LAYOUT = GenomeLayout(
         GeneSpec("encoder_fidelity"),
         # one digit read as a category
         GeneSpec("sex_strategy", length=1),
+        # how the brain operates (BRAIN.23); the learning ones are read once learning exists
+        GeneSpec("brain_gain"),
+        GeneSpec("reaction_time"),
+        GeneSpec("curiosity"),
+        GeneSpec("learning_rate"),
         # the brain: read by the Brain object, not by the trait table
         BRAIN_GENE,
     ),
-    # The body keeps the prototype's 0.01 per digit (0.70 changes per child now that it has 70
-    # digits). The brain is about one change per child however long it is, about 0.0025 per brain digit.
-    segment_mutations={"body": 0.01 * 70, "brain": 1.0},
+    # The body keeps the prototype's 0.01 per digit (0.86 changes per child over its 86 digits). The
+    # brain is about one change per child however long it is, about 0.0011 per brain digit.
+    segment_mutations={"body": 0.01 * 86, "brain": 1.0},
 )
 
 PLANT_LAYOUT = GenomeLayout(

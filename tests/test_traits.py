@@ -636,10 +636,13 @@ def test_base_traits_hooks_are_noops_and_damage_kills():
 
 # A fixed genome, so these numbers only change when a formula or the layout does. The body digits are
 # the prototype's test genome with the three reproduction genes (caregiving, repro_interval and
-# repro_drive) set in the place its `fertility` gene held; the brain is all zeros.
+# repro_drive) set in the place its `fertility` gene held; the four operating genes and the brain are
+# all zeros. An all-zero brain has every gate off, so slot 0 stays on as the floor.
 _BODY = "3302332321121021200230232133200030321201111300230220212303212"
 _AT = ANIMAL_LAYOUT.gene("caregiving").start
-PINNED_ANIMAL = animal_dna(_BODY[:_AT] + "211" + "123" + "220" + _BODY[_AT:] + "0" * 396)
+PINNED_ANIMAL = animal_dna(
+    _BODY[:_AT] + "211" + "123" + "220" + _BODY[_AT:] + "0" * 16 + "0" * 908
+)  # 16: brain_gain, reaction_time, curiosity, learning_rate; 908: the brain
 PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122")
 
 
@@ -693,8 +696,9 @@ def test_pinned_animal_phenotype():
     assert t.smell_range == pytest.approx(50.196078431)
     assert t.body_radius == pytest.approx(0.699381521)
     assert t.tactile_range == pytest.approx(1.616805516)
-    # repair, readiness and drive upkeep and the zero-weight brain; the sense bill is on area (SENSE.11)
-    assert t.basal_metabolism == pytest.approx(0.606158009)
+    # repair, readiness and drive upkeep and the brain (one hidden neuron and six outputs: 7 * 0.0005
+    # + 26 * 0.0001, as every gate is off); the sense bill is on area (SENSE.11)
+    assert t.basal_metabolism == pytest.approx(0.586858009)
     assert t.call_radius == pytest.approx(13.411764706)
     assert t.call_energy_cost == pytest.approx(2.841176471)
     assert t.sex_type == 2

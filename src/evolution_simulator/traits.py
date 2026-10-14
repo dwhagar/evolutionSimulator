@@ -14,7 +14,7 @@ import random
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
-from evolution_simulator.brain import DEFAULT_SHAPE, Brain
+from evolution_simulator.brain import DEFAULT_BLUEPRINT, Brain
 from evolution_simulator.brain_adapter import (
     BrainDecision,
     Percepts,
@@ -34,14 +34,18 @@ from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 BRAIN_NEURON_COST: float = 0.0005
 """Per hidden or output neuron."""
 BRAIN_CONNECTION_COST: float = 0.0001
-"""Per active connection, a weight whose absolute value is above ``BRAIN_ACTIVE_THRESHOLD``."""
-BRAIN_ACTIVE_THRESHOLD: float = 0.25
-"""The brain's dead zone (``BRAIN.21``): a weight at or below this is off, both for cost and in
-``Brain.decide``, so a connection pays only if it does something."""
+"""Per active connection, a weight whose absolute value is above ``BRAIN_DEAD_ZONE``."""
+BRAIN_DEAD_ZONE: float = 0.5
+"""The brain's dead zone (``BRAIN.21``, ``BRAIN.23``): a weight at or below this is off, both for cost
+and in ``Brain.decide``, so a connection pays only if it does something. At 0.5 a quarter of random
+weights are off (the levels at about +-0.13 and +-0.4)."""
 DECISION_INTERVAL: int = 1
-"""Ticks between brain decisions (``BRAIN.11``); between them the animal keeps its last decision.
-Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to move
-into the shared config object (TRAIT.3), and later perhaps to become a gene (reaction time)."""
+"""Ticks between brain decisions (``BRAIN.11``) for an animal built with an explicit interval; the
+default comes from the animal's ``reaction_time`` gene. Between decisions the animal keeps its last
+one. Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to
+move into the shared config object (TRAIT.3)."""
+PAIN_FULL_FRACTION: float = 0.2
+"""Losing this fraction of maximum health (or more) since the last decision reads as full pain."""
 
 # Wear and repair. Lifespan is the damage an animal can take divided by its wear per tick.
 WEAR_PER_TICK: float = 0.075
@@ -114,6 +118,7 @@ class BaseTraits:
         self.current_energy: float = 0.0
         self.current_health: float = 0.0
         self.accumulated_damage: float = 0.0
+        self.damage_since_decision: float = 0.0  # health lost, for the brain's pain input
         self.vitality: float = 1.0  # Scales from 1.0 (prime) down to 0.0 (dead)
         self.age_ticks: int = 0
         self.is_alive: bool = True
@@ -123,7 +128,9 @@ class BaseTraits:
         if not self.is_alive:
             return 0.0
 
+        before = self.current_health
         self.current_health = max(0.0, self.current_health - amount)
+        self.damage_since_decision += before - self.current_health
         if self.current_health <= 0.0:
             self._die()
         else:
@@ -159,12 +166,14 @@ class AnimalTraits(BaseTraits):
     metabolic trade-offs, senescence degradation, and environmental drive flags.
     """
 
-    def __init__(self, dna: Genome, decision_interval: int = DECISION_INTERVAL) -> None:
+    def __init__(self, dna: Genome, decision_interval: int | None = None) -> None:
         if dna.layout != ANIMAL_LAYOUT:
             raise TypeError("AnimalTraits requires DNA with the animal layout.")
+        t = ANIMAL_TRAITS.express(dna)
+        if decision_interval is None:
+            decision_interval = int(t["decision_interval"])
         if decision_interval < 1:
             raise ValueError(f"Decision interval must be at least 1 tick, got {decision_interval}.")
-        t = ANIMAL_TRAITS.express(dna)
         super().__init__(dna, t)
 
         # ---------------------------------------------------------------------
@@ -202,9 +211,12 @@ class AnimalTraits(BaseTraits):
         self.smell_noise: float = direction_noise("smell", t["smell"])
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
         # The brain is read from the genome once at birth, like the body.
-        self.brain: Brain = Brain.from_values(
-            DEFAULT_SHAPE, dna.values("brain"), dead_zone=BRAIN_ACTIVE_THRESHOLD
+        # Its size comes from the gates in the genome, its sharpness from the gain gene.
+        self.brain: Brain = DEFAULT_BLUEPRINT.build(
+            dna.values("brain"), dead_zone=BRAIN_DEAD_ZONE, gain=t["brain_gain"]
         )
+        self.curiosity: float = t["curiosity"]  # read by learning (BRAIN.24)
+        self.learning_rate: float = t["learning_rate"]
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
         self._decision: BrainDecision | None = None
@@ -359,6 +371,13 @@ class AnimalTraits(BaseTraits):
         self._ticks_since_decision = 0
         self.wanderer.reset()
 
+    @property
+    def pain(self) -> float:
+        """Health lost since the last decision as a share of the pain ceiling (0 to 1)."""
+        return min(
+            1.0, self.damage_since_decision / (PAIN_FULL_FRACTION * self.max_damage_capacity)
+        )
+
     def _effective_fear(self, mate_in_view: bool = False) -> float:
         """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down.
         A driven animal is bolder while a possible mate is in view (``DRIVE_BOLDNESS``)."""
@@ -394,12 +413,14 @@ class AnimalTraits(BaseTraits):
             health_ratio=self.current_health / self.max_damage_capacity,
             vitality=self.vitality,
             ready_to_mate=self.mating_cooldown == 0,
+            pain=self.pain,
             temperament=Temperament(
                 aggression=self.current_aggression,
                 fear=min(1.0, self._effective_fear(mate_in_view=percepts.mate_closeness > 0.0)),
                 repro_drive=self.phenotype["repro_drive"],
             ),
         )
+        self.damage_since_decision = 0.0
         decision = decode_outputs(self.brain.decide(inputs))
         if rng is not None:
             decision = self.wanderer.apply(decision, percepts, rng)
