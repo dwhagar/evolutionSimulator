@@ -1,8 +1,8 @@
 """Brain adapter: the seam between the world and the brain.
 
-The brain only sees a list of 17 numbers and returns 6. This module owns what they mean (the
-contract in ``docs/design/brain.md``) so that the world model (``WORLD.1``, still open) can change
-how it measures things without touching the brain: it fills in a ``Percepts`` and reads a
+The brain only sees a list of numbers (17 now) and returns 6. This module owns what they mean (the
+contract in ``docs/design/brain.md``, the table in ``sense_channels.py``) so that the world model can
+change how it measures things without touching the brain: it fills in a ``Percepts`` and reads a
 ``BrainDecision``.
 
 Inputs are egocentric and scaled. A direction is measured from the way the creature faces, -1 hard
@@ -16,28 +16,18 @@ import math
 import random
 from dataclasses import dataclass, replace
 
+from evolution_simulator.sense_channels import (
+    INPUT_CHANNELS,
+    input_names,
+    inputs_builder,
+    percepts_class,
+)
+
 ACTION_THRESHOLD: float = 0.5
 """An action output above this value counts as "do it" (eat or attack, seek mate, call)."""
 
-INPUT_NAMES: tuple[str, ...] = (
-    "energy_ratio",
-    "health_ratio",
-    "vitality",
-    "ready_to_mate",
-    "plant_direction",
-    "plant_closeness",
-    "prey_direction",
-    "prey_closeness",
-    "threat_direction",
-    "threat_closeness",
-    "mate_direction",
-    "mate_closeness",
-    "touching",
-    "alarm_strength",
-    "mating_call_strength",
-    "call_direction",
-    "crowding",
-)
+INPUT_NAMES: tuple[str, ...] = input_names(INPUT_CHANNELS)
+"""The brain's inputs in order, generated from the sense-channel table (``sense_channels.py``)."""
 
 OUTPUT_NAMES: tuple[str, ...] = (
     "turn",
@@ -49,32 +39,9 @@ OUTPUT_NAMES: tuple[str, ...] = (
 )
 
 
-@dataclass(frozen=True)
-class Percepts:
-    """What the world tells a creature about its surroundings; everything defaults to "nothing".
-
-    ``*_direction`` is -1 to 1, ``*_closeness`` and the other strengths are 0 to 1. Values outside
-    the range are clamped when the inputs are built.
-    """
-
-    plant_direction: float = 0.0
-    plant_closeness: float = 0.0
-    prey_direction: float = 0.0
-    prey_closeness: float = 0.0
-    threat_direction: float = 0.0
-    threat_closeness: float = 0.0
-    mate_direction: float = 0.0
-    mate_closeness: float = 0.0
-    touching: bool = False
-    alarm_strength: float = 0.0
-    mating_call_strength: float = 0.0
-    call_direction: float = 0.0
-    crowding: float = 0.0
-
-    @property
-    def senses_nothing(self) -> bool:
-        """True when the world reports nothing at all: no creature, plant, contact, call or crowd."""
-        return self == Percepts()
+Percepts = percepts_class(INPUT_CHANNELS, "Percepts", __name__)
+"""The world's side of the brain's inputs, generated from the sense-channel table: one field per
+world channel, defaulting to "nothing", and a ``senses_nothing`` property."""
 
 
 TEMPERAMENT_STRENGTH: float = 0.6
@@ -218,48 +185,16 @@ class Wanderer:
         )
 
 
-def _scaled(value: float, low: float, high: float, name: str) -> float:
-    if not math.isfinite(value):
-        raise ValueError(f"Brain input {name!r} must be a finite number, got {value}.")
-    return min(high, max(low, value))
+def _temperament_factor(field_name: str, temperament: Temperament) -> float:
+    return Temperament.factor(getattr(temperament, field_name))
 
 
-def build_inputs(
-    energy_ratio: float,
-    health_ratio: float,
-    vitality: float,
-    ready_to_mate: bool,
-    percepts: Percepts,
-    temperament: Temperament | None = None,
-) -> tuple[float, ...]:
-    """The 17 brain inputs, in ``INPUT_NAMES`` order, each clamped to its range.
-
-    ``temperament`` (neutral if left out) scales the prey and threat closeness inputs; a thing that
-    is not sensed (closeness 0) stays unsensed.
-    """
-    p = percepts
-    t = temperament if temperament is not None else Temperament()
-    prey_closeness = _scaled(p.prey_closeness, 0.0, 1.0, "prey_closeness")
-    threat_closeness = _scaled(p.threat_closeness, 0.0, 1.0, "threat_closeness")
-    return (
-        _scaled(energy_ratio, 0.0, 1.0, "energy_ratio"),
-        _scaled(health_ratio, 0.0, 1.0, "health_ratio"),
-        _scaled(vitality, 0.0, 1.0, "vitality"),
-        1.0 if ready_to_mate else 0.0,
-        _scaled(p.plant_direction, -1.0, 1.0, "plant_direction"),
-        _scaled(p.plant_closeness, 0.0, 1.0, "plant_closeness"),
-        _scaled(p.prey_direction, -1.0, 1.0, "prey_direction"),
-        min(1.0, prey_closeness * Temperament.factor(t.aggression)),
-        _scaled(p.threat_direction, -1.0, 1.0, "threat_direction"),
-        min(1.0, threat_closeness * Temperament.factor(t.fear)),
-        _scaled(p.mate_direction, -1.0, 1.0, "mate_direction"),
-        _scaled(p.mate_closeness, 0.0, 1.0, "mate_closeness"),
-        1.0 if p.touching else 0.0,
-        _scaled(p.alarm_strength, 0.0, 1.0, "alarm_strength"),
-        _scaled(p.mating_call_strength, 0.0, 1.0, "mating_call_strength"),
-        _scaled(p.call_direction, -1.0, 1.0, "call_direction"),
-        _scaled(p.crowding, 0.0, 1.0, "crowding"),
-    )
+build_inputs = inputs_builder(INPUT_CHANNELS, _temperament_factor)
+"""``build_inputs(percepts, temperament=None, **body)``: the brain's inputs in ``INPUT_NAMES`` order,
+each clamped to its range and finite. ``body`` gives one keyword per body channel
+(``energy_ratio``, ``health_ratio``, ``vitality``, ``ready_to_mate``); ``temperament`` (neutral if
+left out) scales the channels the table marks ``scaled_by``, and a thing that is not sensed
+(closeness 0) stays unsensed. Generated from the sense-channel table."""
 
 
 def decode_outputs(outputs: tuple[float, ...] | list[float]) -> BrainDecision:
