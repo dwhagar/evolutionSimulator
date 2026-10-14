@@ -51,8 +51,9 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
    [Mate choice](#mate-choice)). Each pair has one child (`DNA.reproduce`, default
    crossover) placed near the parents' midpoint, and `AnimalTraits.give_birth` charges the parents
    and sets the child's energy; if either parent cannot pay, nobody is charged and there is no child.
-4. Plants grow in id order; a ready plant drops up to `seed_count` seeds within its dispersal radius
-   and shares the biomass it spent among them.
+4. Plants grow in id order; a ready plant drops up to `seed_capacity` seeds within its dispersal radius
+   and pays each one its `seed_provision` of its own full size. Seeds are mutated clones of the parent
+   (`REPRO.3`); a plant seeds only after its cooldown is over and at most `seed_capacity` seeds at once.
 5. The dead are removed and the tick counter goes up by one.
 
 Movement: the `turn` output turns the animal by up to `base_turn_rate` radians (a positive turn goes
@@ -176,7 +177,7 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
 
 - **Births are paid for (`REPRO.5`).** A child starts with the mean `care_fraction` of its parents
   times its own energy store, which the parents pay for between them (plus the repair surcharge, which
-  is lost), and a seed starts with an equal share of the biomass its parent spent. Newborns are
+  is lost), and a seed starts with the biomass its parent paid for it (`seed_provision`). Newborns are
   juveniles: they cannot breed until they are as old as their birth interval. The founders that
   `populate` creates are juveniles too.
 - **Acting on the brain is partial.** Only turn, speed, eat and seek-mating are used. Attacking

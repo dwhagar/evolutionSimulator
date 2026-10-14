@@ -11,7 +11,7 @@ Anything random takes an injected ``random.Random`` so runs are repeatable.
 from __future__ import annotations
 
 import random
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
 from evolution_simulator.brain import DEFAULT_SHAPE, Brain
@@ -58,6 +58,16 @@ REPAIR_BIRTH_SURCHARGE: float = 1.0
 """A parent's cost of a birth is multiplied by ``1 + REPAIR_BIRTH_SURCHARGE * somatic_maint``."""
 REPAIR_INTERVAL_STRETCH: float = 0.5
 """The shortest gap between births is multiplied by ``1 + REPAIR_INTERVAL_STRETCH * somatic_maint``."""
+
+# Plants (REPRO.3).
+PLANT_LIFESPAN_TICKS: int = 25_000
+"""How long a plant lives, in ticks: about five times an average animal's. A configured constant until
+plants get a lifespan gene (TRAIT.8, owner question 10 on issue #36); meant to move into the shared
+config object (TRAIT.3)."""
+SEED_BUDGET_SHARE: float = 0.35
+"""Share of its biomass a plant can put into one burst of seeds (the prototype's fixed number)."""
+SEED_READY_SHARE: float = 0.85
+"""A plant is ready to seed once it holds this share of its full size (the prototype's number)."""
 
 # Reproduction genes (REPRO.5).
 READINESS_UPKEEP: float = 0.03
@@ -596,6 +606,8 @@ class PlantTraits(BaseTraits):
         # Reproduction: Dispersal distance and seed quantity
         self.dispersal_radius: float = t["dispersal_radius"]
         self.seed_count: int = int(t["seed_count"])
+        """The most seeds one burst can hold (the clutch gene); the budget may pay for fewer."""
+        self.seed_provision: float = t["seed_provision"]
 
         # Toxicity intensity (0.0 to 1.0) and ongoing chemical defense cost
         self.toxicity: float = t["toxicity"]
@@ -618,12 +630,36 @@ class PlantTraits(BaseTraits):
         self.sunlight_factor: float = 1.0
         self.soil_competition_factor: float = 1.0
 
-        # Behavioral/Lifecycle flag
+        # Behavioral/Lifecycle flag. A seedling is a juvenile for one seeding interval, like an
+        # animal (REPRO.5): the gene that sets the gap between bursts sets the age of the first.
         self.flag_ready_to_seed: bool = False
+        self.seed_cooldown: int = self.seeding_interval_ticks
 
         # A seedling's vitality follows its starting health, not the default of 1.0.
         self._refresh_vitality_dependents()
         self._update_needs_and_drives()
+
+    @property
+    def lifespan_ticks(self) -> int:
+        """Ticks a plant lives (a configured constant for now: no lifespan gene yet)."""
+        return PLANT_LIFESPAN_TICKS
+
+    @property
+    def seeding_interval_ticks(self) -> int:
+        """Shortest gap between seed bursts, and the age of the first, as a share of the lifespan
+        (the ``seeding_interval`` gene)."""
+        return max(1, round(self.phenotype["seeding_fraction"] * self.lifespan_ticks))
+
+    @property
+    def seed_budget(self) -> float:
+        """Biomass this plant can put into a burst of seeds right now."""
+        return SEED_BUDGET_SHARE * self.current_biomass
+
+    def seed_capacity(self) -> int:
+        """How many seeds the budget pays for if each starts with ``seed_provision`` of this
+        plant's own full size, up to the clutch the genes allow."""
+        per_seed = self.seed_provision * self.max_biomass
+        return max(0, min(self.seed_count, int(self.seed_budget / per_seed)))
 
     def _refresh_vitality_dependents(self) -> None:
         health_ratio = max(0.0, self.current_health / self.max_damage_capacity)
@@ -646,6 +682,11 @@ class PlantTraits(BaseTraits):
             return
 
         self.age_ticks += 1
+        if self.age_ticks >= self.lifespan_ticks:
+            self._die()  # old age
+            return
+        if self.seed_cooldown > 0:
+            self.seed_cooldown -= 1
 
         # Photosynthetic intake scaled by growth gene, light, and soil access
         photosynthetic_gain = (
@@ -678,9 +719,13 @@ class PlantTraits(BaseTraits):
         self._update_needs_and_drives()
 
     def _update_needs_and_drives(self) -> None:
-        # A plant is ready to drop seeds when it reaches 85% biomass capacity
+        # A plant is ready to drop seeds when it is grown, healthy, past its seeding cooldown and
+        # can pay for at least one seed
         self.flag_ready_to_seed = (
-            self.current_biomass >= (self.max_biomass * 0.85) and self.vitality > 0.4
+            self.current_biomass >= (self.max_biomass * SEED_READY_SHARE)
+            and self.vitality > 0.4
+            and self.seed_cooldown == 0
+            and self.seed_capacity() >= 1
         )
 
     def _clear_flags(self) -> None:
@@ -712,13 +757,18 @@ class PlantTraits(BaseTraits):
         self.current_energy = self.current_biomass
         self._update_needs_and_drives()
 
-    def consume_reproduction_cost(self) -> float:
-        """Expends biomass to package into outgoing seeds.
-
-        Returns the total energy budget to be divided among seed offspring.
-        """
-        seed_investment = self.current_biomass * 0.35
-        self.current_biomass -= seed_investment
+    def launch_seeds(self, seeds: Sequence[PlantTraits]) -> float:
+        """Pay for a burst of seeds and start the seeding cooldown. Each seed starts with this
+        plant's ``seed_provision`` of its own full size, scaled down together if their total would
+        be more than the budget (a seed that mutated bigger costs more). Returns the biomass spent."""
+        wanted = [self.seed_provision * seed.max_biomass for seed in seeds]
+        total = sum(wanted)
+        scale = min(1.0, self.seed_budget / total) if total > 0.0 else 0.0
+        for seed, amount in zip(seeds, wanted):
+            seed.set_starting_biomass(amount * scale)
+        spent = total * scale
+        self.current_biomass -= spent
         self.current_energy = self.current_biomass
+        self.seed_cooldown = self.seeding_interval_ticks
         self.flag_ready_to_seed = False
-        return seed_investment
+        return spent

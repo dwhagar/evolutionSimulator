@@ -264,8 +264,10 @@ class World:
     ) -> Plant:
         if len(self._plants) >= self.config.max_plants:
             raise ValueError(f"The world already holds {self.config.max_plants} plants.")
-        place = self._place(position)
-        plant = Plant(self._new_id(), PlantTraits(dna), place, parents)
+        return self._insert_plant(PlantTraits(dna), self._place(position), parents)
+
+    def _insert_plant(self, traits: PlantTraits, place: Vec, parents: tuple[int, ...]) -> Plant:
+        plant = Plant(self._new_id(), traits, place, parents)
         self._plants[plant.id] = plant
         self._plant_index.insert(plant.id, plant.position)
         self.max_canopy = max(self.max_canopy, plant.radius)
@@ -465,19 +467,18 @@ class World:
         return len(newborn)
 
     def _seed(self, plant: Plant) -> int:
-        """Drop seeds. The biomass the plant spends is shared out among them, so a seed starts with
-        what its parent gave it (up to its own full size), and a plant that cannot place any seed
-        spends nothing."""
-        seeds = min(plant.traits.seed_count, self.config.max_plants - len(self._plants))
-        if seeds <= 0:
+        """Drop seeds. The plant pays for as many as its budget allows (up to its clutch gene), each
+        seed starts with the plant's ``seed_provision`` of its own full size, and a plant that cannot
+        place any seed spends nothing."""
+        count = min(plant.traits.seed_capacity(), self.config.max_plants - len(self._plants))
+        if count <= 0:
             return 0
-        share = plant.traits.consume_reproduction_cost() / seeds
-        for _ in range(seeds):
-            dna = plant.traits.dna.reproduce(None, self.rng)
+        seeds = [PlantTraits(plant.traits.dna.reproduce(None, self.rng)) for _ in range(count)]
+        plant.traits.launch_seeds(seeds)
+        for traits in seeds:
             spot = self._scatter(plant.position, plant.traits.dispersal_radius)
-            seed = self.add_plant(dna, spot, parents=(plant.id,))
-            seed.traits.set_starting_biomass(share)
-        return seeds
+            self._insert_plant(traits, spot, (plant.id,))
+        return count
 
     def _scatter(self, centre: Vec, radius: float) -> Vec:
         """A random point within ``radius`` of ``centre`` (2D), kept inside the world."""

@@ -304,55 +304,79 @@ def test_the_animal_cap_stops_births():
     assert len(world.animals) == 2
 
 
+def ready_plant(world, position, **genes):
+    """A grown plant that is ready to seed: cheap seeds, no cooldown, near full size."""
+    genes = {"seed_provision": "000", **genes}
+    plant = world.add_plant(plant_dna(**genes), position)
+    plant.traits.current_biomass = plant.traits.max_biomass * 0.95
+    plant.traits.seed_cooldown = 0
+    return plant
+
+
 def test_a_ready_plant_drops_seeds_nearby():
     world = make(bounds=Bounds((200, 200)))
-    plant = world.add_plant(
-        plant_dna(seed_clutch="3333", dispersal_radius="1111"), Vec.of(150, 150)
-    )
-    plant.traits.current_biomass = plant.traits.max_biomass * 0.95
+    plant = ready_plant(world, Vec.of(150, 150), seed_clutch="3333", dispersal_radius="1111")
     assert plant.traits.seed_count == 8
+    capacity = plant.traits.seed_capacity()
+    assert 1 <= capacity <= 8
     report = world.step()
-    assert report.plant_births == 8
+    assert report.plant_births == capacity
     seeds = [p for p in world.plants if p is not plant]
-    assert len(seeds) == 8
+    assert len(seeds) == capacity
     for seed in seeds:
         assert seed.parents == (plant.id,)
         assert seed.position.distance_to(plant.position) <= plant.traits.dispersal_radius + 1e-9
         assert world.bounds.contains(seed.position)
-    assert plant.traits.current_biomass < plant.traits.max_biomass * 0.7
+    assert plant.traits.current_biomass < plant.traits.max_biomass * 0.95
+    assert plant.traits.seed_cooldown > 0
 
 
 def test_seeds_start_with_the_biomass_their_parent_spent():
     world = make(bounds=Bounds((200, 200)))
-    plant = world.add_plant(
-        plant_dna(seed_clutch="3333", dispersal_radius="1111"), Vec.of(150, 150)
-    )
-    plant.traits.current_biomass = plant.traits.max_biomass * 0.95
+    plant = ready_plant(world, Vec.of(150, 150), seed_clutch="3333", dispersal_radius="1111")
+    before = plant.traits.current_biomass
     world.step()
     seeds = [p for p in world.plants if p is not plant]
-    spent = plant.traits.current_biomass * 0.35 / 0.65  # it spends 35% of what it had
-    assert sum(seed.traits.current_biomass for seed in seeds) == pytest.approx(spent)
+    provision = plant.traits.seed_provision
     for seed in seeds:
-        assert seed.traits.current_biomass == pytest.approx(spent / 8)
+        assert seed.traits.current_biomass == pytest.approx(provision * seed.traits.max_biomass)
         assert seed.traits.current_energy == seed.traits.current_biomass
+    spent = sum(seed.traits.current_biomass for seed in seeds)
+    assert before - plant.traits.current_biomass >= spent * 0.99  # the plant also grew a little
 
 
 def test_a_plant_with_no_room_for_seeds_keeps_its_biomass():
     world = make(max_plants=1)
-    plant = world.add_plant(plant_dna(seed_clutch="3333"), HERE)
-    plant.traits.current_biomass = plant.traits.max_biomass * 0.95
+    plant = ready_plant(world, HERE, seed_clutch="3333")
     report = world.step()
     assert report.plant_births == 0
     assert plant.traits.current_biomass >= plant.traits.max_biomass * 0.94
+    assert plant.traits.seed_cooldown == 0
 
 
 def test_the_plant_cap_stops_seeding():
     world = make(max_plants=3)
-    plant = world.add_plant(plant_dna(seed_clutch="3333"), HERE)
-    plant.traits.current_biomass = plant.traits.max_biomass * 0.95
+    ready_plant(world, HERE, seed_clutch="3333")
     report = world.step()
     assert report.plant_births == 2
     assert len(world.plants) == 3
+
+
+def test_a_plant_in_its_cooldown_does_not_seed():
+    world = make()
+    plant = ready_plant(world, HERE, seed_clutch="3333")
+    plant.traits.seed_cooldown = 50
+    assert world.step().plant_births == 0
+
+
+def test_seeds_are_clones_of_the_parent_with_a_few_mutations():
+    world = make(bounds=Bounds((200, 200)), seed=3)
+    plant = ready_plant(world, Vec.of(150, 150), seed_clutch="3333", dispersal_radius="1111")
+    world.step()
+    seeds = [p for p in world.plants if p is not plant]
+    assert all(seed.traits.dna.layout is plant.traits.dna.layout for seed in seeds)
+    mean_distance = sum(seed.traits.dna.distance(plant.traits.dna) for seed in seeds) / len(seeds)
+    assert mean_distance < 0.05  # about 0.15 digits changed in 30
 
 
 # --- reports ------------------------------------------------------------------

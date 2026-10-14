@@ -2,6 +2,7 @@ import random
 
 import pytest
 
+from evolution_simulator import traits as traits_module
 from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import AnimalTraits, BaseTraits, PlantTraits
@@ -17,8 +18,8 @@ def plant_dna(sequence: str) -> DNA:
 
 LOW_ANIMAL = animal_dna("0" * ANIMAL_LAYOUT.length)
 HIGH_ANIMAL = animal_dna("3" * ANIMAL_LAYOUT.length)
-LOW_PLANT = plant_dna("0" * 24)
-HIGH_PLANT = plant_dna("3" * 24)
+LOW_PLANT = plant_dna("0" * PLANT_LAYOUT.length)
+HIGH_PLANT = plant_dna("3" * PLANT_LAYOUT.length)
 
 
 def animal_with(**genes: str) -> DNA:
@@ -31,7 +32,7 @@ def animal_with(**genes: str) -> DNA:
 
 
 def plant_with(**genes: str) -> DNA:
-    digits = ["0"] * 24
+    digits = ["0"] * PLANT_LAYOUT.length
     for name, text in genes.items():
         gene = PLANT_LAYOUT.gene(name)
         digits[gene.start : gene.end] = text
@@ -547,14 +548,75 @@ def test_grazing_cannot_exceed_standing_biomass_and_can_kill():
     assert traits.graze(5.0) == (0.0, 0.0)
 
 
-def test_seed_cost_takes_35_percent_of_biomass():
+def test_the_seed_budget_is_35_percent_of_biomass():
     traits = PlantTraits(HIGH_PLANT)
     traits.current_biomass = traits.max_biomass
-    traits.flag_ready_to_seed = True
-    budget = traits.consume_reproduction_cost()
-    assert budget == pytest.approx(traits.max_biomass * 0.35)
-    assert traits.current_biomass == pytest.approx(traits.max_biomass * 0.65)
+    assert traits.seed_budget == pytest.approx(traits.max_biomass * 0.35)
+
+
+def test_seed_capacity_is_the_clutch_the_budget_can_pay_for():
+    small = PlantTraits(plant_with(max_biomass="3333", seed_clutch="3333", seed_provision="000"))
+    small.current_biomass = small.max_biomass
+    assert small.seed_count == 8 and small.seed_capacity() == 7  # 0.35 / 0.05
+
+    dear = PlantTraits(plant_with(max_biomass="3333", seed_clutch="3333", seed_provision="333"))
+    dear.current_biomass = dear.max_biomass
+    assert dear.seed_provision == pytest.approx(0.50)
+    assert dear.seed_capacity() == 0  # one seed costs more than the budget
+    empty = PlantTraits(plant_with(seed_clutch="3333"))
+    empty.current_biomass = 0.0
+    assert empty.seed_capacity() == 0
+
+
+def test_launch_seeds_pays_provision_per_seed_and_restarts_the_cooldown():
+    parent = PlantTraits(
+        plant_with(max_biomass="3333", seed_provision="000", seeding_interval="333")
+    )
+    parent.current_biomass = parent.max_biomass
+    parent.flag_ready_to_seed = True
+    seeds = [PlantTraits(parent.dna) for _ in range(3)]
+    spent = parent.launch_seeds(seeds)
+    each = parent.seed_provision * parent.max_biomass
+    assert spent == pytest.approx(3 * each)
+    assert parent.current_biomass == pytest.approx(parent.max_biomass - 3 * each)
+    assert all(seed.current_biomass == pytest.approx(each) for seed in seeds)
+    assert parent.seed_cooldown == parent.seeding_interval_ticks > 0
+    assert not parent.flag_ready_to_seed
+
+
+def test_launch_seeds_scales_down_together_when_over_budget():
+    parent = PlantTraits(plant_with(max_biomass="3333", seed_provision="333"))
+    parent.current_biomass = parent.max_biomass
+    seeds = [PlantTraits(parent.dna) for _ in range(4)]
+    spent = parent.launch_seeds(seeds)
+    assert spent == pytest.approx(parent.max_biomass * 0.35)
+    shares = {round(seed.current_biomass, 9) for seed in seeds}
+    assert len(shares) == 1
+
+
+def test_a_young_plant_waits_a_seeding_interval_before_it_seeds():
+    traits = PlantTraits(plant_with(max_biomass="3333", growth_rate="3333", seeding_interval="333"))
+    assert traits.seed_cooldown == traits.seeding_interval_ticks
+    for _ in range(traits.seeding_interval_ticks - 1):
+        traits.update_growth_and_metabolism()
     assert not traits.flag_ready_to_seed
+    for _ in range(5):
+        traits.update_growth_and_metabolism()
+    assert traits.flag_ready_to_seed
+
+
+def test_the_seeding_interval_gene_sets_the_wait():
+    short = PlantTraits(plant_with(seeding_interval="000"))
+    long = PlantTraits(plant_with(seeding_interval="333"))
+    assert short.seeding_interval_ticks < long.seeding_interval_ticks
+    assert long.seeding_interval_ticks <= traits_module.PLANT_LIFESPAN_TICKS
+
+
+def test_a_plant_dies_of_old_age():
+    traits = PlantTraits(plant_with(max_biomass="3333"))
+    traits.age_ticks = traits.lifespan_ticks - 1
+    traits.update_growth_and_metabolism()
+    assert not traits.is_alive
 
 
 # --- base class -------------------------------------------------------------
@@ -578,7 +640,7 @@ def test_base_traits_hooks_are_noops_and_damage_kills():
 _BODY = "3302332321121021200230232133200030321201111300230220212303212"
 _AT = ANIMAL_LAYOUT.gene("caregiving").start
 PINNED_ANIMAL = animal_dna(_BODY[:_AT] + "211" + "123" + "220" + _BODY[_AT:] + "0" * 396)
-PINNED_PLANT = plant_dna("330233232112102120023023")
+PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122")
 
 
 def test_animal_drive_flags_are_set_at_birth():
