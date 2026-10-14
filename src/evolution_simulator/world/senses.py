@@ -123,13 +123,8 @@ class WorldSenses:
             body = animal.radius
             detected: tuple[float, int, Plant] | None = None
             felt: tuple[float, int, Plant] | None = None
-            for plant, centre in world.plants_within(
-                position, plant_reach + body + world.max_canopy
-            ):
-                canopy = plant.traits.canopy_radius
+            for plant, centre, canopy in world.plants_in_reach(position, plant_reach + body):
                 surface = centre - body - canopy
-                if surface > plant_reach:
-                    continue
                 key = (surface, plant.id)
                 if surface <= touch and (felt is None or key < felt[:2]):
                     felt = (*key, plant)
@@ -158,11 +153,8 @@ class WorldSenses:
                     )
                 )
         if farthest > 0.0:
-            query = farthest + animal.radius + world.max_body
-            for other, centre in world.animals_within(position, query):
+            for other, centre, _ in world.animals_in_reach(position, farthest + animal.radius):
                 if other is animal:
-                    continue
-                if centre - animal.radius - other.radius > farthest:
                     continue
                 alarm, mating = world.calls.get(other.id, (0.0, 0.0))
                 neighbours.append(

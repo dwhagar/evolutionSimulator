@@ -229,6 +229,8 @@ class AnimalTraits(BaseTraits):
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
         self._decision: BrainDecision | None = None
+        self._last_threat: float = 0.0
+        """The threat closeness the last time the brain looked, for the learning log."""
         self._ticks_since_decision: int = 0
         self.brain_upkeep: float = (
             BRAIN_NEURON_COST * self.brain.neuron_count
@@ -411,7 +413,8 @@ class AnimalTraits(BaseTraits):
         fixed-rule flags with it) belongs to the world loop.
         """
         learner = self._active_learner(rng)
-        state = self._learning_state(percepts) if learner is not None else None
+        self._last_threat = percepts.threat_closeness
+        state = self._learning_state(percepts.threat_closeness) if learner is not None else None
         if learner is not None and state is not None:
             learner.observe(state)
         if self._decision is not None and self._ticks_since_decision < self.decision_interval:
@@ -445,6 +448,22 @@ class AnimalTraits(BaseTraits):
         self._ticks_since_decision = 1
         return decision
 
+    def cached_decision(self, rng: random.Random | None = None) -> BrainDecision | None:
+        """The decision to repeat this tick, or ``None`` if the brain must look at the world.
+
+        Between brain runs (``decision_interval``) ``think`` returns the last decision and ignores
+        the percepts, so the world can skip sensing for those ticks. An animal that is logging its
+        day (``BRAIN.24``) logs the threat level it saw when the brain last ran. Counts the tick
+        exactly as ``think`` does.
+        """
+        if self._decision is None or self._ticks_since_decision >= self.decision_interval:
+            return None
+        learner = self._active_learner(rng)
+        if learner is not None:
+            learner.observe(self._learning_state(self._last_threat))
+        self._ticks_since_decision += 1
+        return self._decision
+
     def _explore(self, proposal: tuple[float, ...], rng: random.Random | None) -> tuple[float, ...]:
         """The brain's proposal plus curiosity noise (``BRAIN.24``): each output moves by up to
         ``curiosity`` either way and stays in its range. Without ``rng`` there is no noise."""
@@ -467,12 +486,12 @@ class AnimalTraits(BaseTraits):
             self.learner = Learner(self.brain.shape.hidden, self.brain.shape.outputs, rules)
         return self.learner
 
-    def _learning_state(self, percepts: Percepts) -> State:
+    def _learning_state(self, threat: float) -> State:
         return State(
             energy=self.current_energy / self.max_energy,
             damage=self.damage_taken / self.max_damage_capacity,
             matings=self.matings,
-            threat=percepts.threat_closeness,
+            threat=threat,
         )
 
     def learn_night(self) -> bool:
