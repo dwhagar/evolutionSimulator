@@ -27,14 +27,16 @@ left to +1 hard right (so a positive direction needs a positive ``turn`` to stee
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from evolution_simulator.brain_adapter import Percepts
 from evolution_simulator.world.organisms import Animal, Plant
+from evolution_simulator.world.scent import CARRION
 from evolution_simulator.world.vector import Vec
 
 if TYPE_CHECKING:
     from evolution_simulator.sensing import Neighbour, SensingRules
+    from evolution_simulator.world.scent import ScentField
     from evolution_simulator.world.world import World
 
 PREY_MASS_RATIO: float = 0.8
@@ -209,6 +211,9 @@ class WorldSenses:
                     )
                 )
         edge_gap, edge_direction = world.edge_state(position)
+        scent = world.scent
+        if scent is not None and reach["smell"] > 0.0:
+            neighbours.extend(self._trails(world, animal, scent, reach["smell"], rules))
         return sense(
             position,
             animal.heading,
@@ -223,3 +228,58 @@ class WorldSenses:
             edge_direction=edge_direction,
             reach=reach,
         )
+
+    @staticmethod
+    def _trails(world: World, animal: Animal, scent: ScentField, smelling: float, rules: Any):
+        """The scent left behind that this animal can pick up (``SENSE.20``), as at most one
+        neighbour for each thing the sensing step reports: the nearest trail of prey (to a meat
+        eater), of a threat (a bigger meat eater) and of carrion. Trails are smelled from the
+        centre of their cell, as weakly as live prey and threats are, and only if smell is open."""
+        # Imported here because ``sensing`` itself imports from this package.
+        from evolution_simulator.sensing import Neighbour
+
+        traits = animal.traits
+        body = animal.radius
+        weak = smelling * rules.weak_smell
+        hunter = traits.effective_carn_eff > MEAT_EATER
+        best: dict[tuple[str, bool], tuple[float, int, float, float, int, int]] = {}
+        for kind, cx, cy, distance, strength, mass, meat_eater in scent.smelled(
+            animal.position, smelling + body, world.tick, exclude=animal.id, carrion=hunter
+        ):
+            carrion = kind == CARRION
+            if carrion:
+                if not hunter:
+                    continue
+                role, limit = "prey", smelling
+            else:
+                ratio = mass / traits.mass
+                if ratio <= PREY_MASS_RATIO and hunter:
+                    role = "prey"
+                elif ratio >= THREAT_MASS_RATIO and meat_eater:
+                    role = "threat"
+                else:
+                    continue
+                limit = weak
+            surface = max(0.0, distance - body)
+            if surface > limit * strength:
+                continue
+            ident = -1 - ((cx + 32768) * 65536 + (cy + 32768)) * 2 - kind
+            key = (surface, ident)
+            held = best.get((role, carrion))
+            if held is None or key < held[:2]:
+                best[(role, carrion)] = (surface, ident, strength, mass, cx, cy)
+        found = []
+        for (role, carrion), (_, ident, strength, mass, cx, cy) in sorted(best.items()):
+            found.append(
+                Neighbour(
+                    ident=ident,
+                    role=role,
+                    position=scent.centre_of(cx, cy),
+                    loudness=0.0,
+                    scent=strength,
+                    mass=mass,
+                    carrion=carrion,
+                    trail=True,
+                )
+            )
+        return found
