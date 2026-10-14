@@ -18,6 +18,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from operator import ne
 from typing import Any, Protocol, Self
 
 BASES: tuple[int, ...] = (0, 1, 2, 3)
@@ -496,7 +497,7 @@ class DNA:
     def distance(self, other: DNA) -> float:
         """Fraction of digits that differ (0.0 identical, 1.0 every digit differs)."""
         self._require_compatible(other)
-        differing = sum(1 for a, b in zip(self._sequence, other._sequence) if a != b)
+        differing = sum(map(ne, self._sequence, other._sequence))
         return differing / self.length
 
     # -------------------------------------------------------------------------

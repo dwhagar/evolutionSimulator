@@ -230,22 +230,37 @@ def inputs_builder(
     """
     rows = validate_channels(channels)
     body_names = {c.name for c in body_channels(rows)}
+    # The table read once into plain tuples: this runs for every decision of every animal.
+    plan = tuple(
+        (c.name, c.source == "body", c.is_flag, c.low, c.high, c.scaled_by, c.clamp) for c in rows
+    )
+    isfinite = math.isfinite
 
     def build_inputs(percepts: Any, temperament: Any = None, **body: float) -> tuple[float, ...]:
-        missing = body_names - body.keys()
-        extra = body.keys() - body_names
-        if missing or extra:
+        if body.keys() != body_names:
+            missing = body_names - body.keys()
+            extra = body.keys() - body_names
             raise TypeError(
                 f"Body inputs must be exactly {sorted(body_names)}; "
                 f"missing {sorted(missing)}, unexpected {sorted(extra)}."
             )
         values: list[float] = []
-        for c in rows:
-            raw = body[c.name] if c.source == "body" else getattr(percepts, c.name)
-            value = c.clamp(raw)
-            if c.scaled_by is not None and temperament is not None:
-                value = min(c.high, value * temperament_factor(c.scaled_by, temperament))
-            values.append(value)
+        append = values.append
+        factors: dict[str, float] = {}
+        for name, is_body, is_flag, low, high, scaled_by, clamp in plan:
+            raw = body[name] if is_body else getattr(percepts, name)
+            if is_flag:
+                value = 1.0 if raw else 0.0
+            elif isfinite(raw):
+                value = min(high, max(low, raw))
+            else:
+                value = clamp(raw)  # raises, naming the channel
+            if scaled_by is not None and temperament is not None:
+                factor = factors.get(scaled_by)
+                if factor is None:
+                    factor = factors[scaled_by] = temperament_factor(scaled_by, temperament)
+                value = min(high, value * factor)
+            append(value)
         return tuple(values)
 
     return build_inputs

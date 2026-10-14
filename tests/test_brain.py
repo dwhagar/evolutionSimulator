@@ -434,3 +434,33 @@ def test_temperament_values_are_validated():
             Temperament(aggression=bad)
         with pytest.raises(ValueError):
             Temperament(fear=bad)
+
+
+@pytest.mark.parametrize("dead_zone", [0.0, 0.3])
+def test_output_offsets_build_the_same_brain_as_a_full_rebuild(dead_zone):
+    rng = random.Random(4)
+    shape = DEFAULT_SHAPE
+    values = [rng.uniform(-1.0, 1.0) for _ in range(shape.weight_count)]
+    brain = Brain(shape, values, dead_zone=dead_zone, gain=1.5)
+    weights = [[rng.uniform(-0.6, 0.6) for _ in range(shape.hidden)] for _ in range(shape.outputs)]
+    biases = [rng.uniform(-0.5, 0.5) for _ in range(shape.outputs)]
+    fast = brain.with_output_offsets(weights, biases)
+
+    size, out_start = shape.neuron_size, 1 + shape.inputs
+    expected = list(values)
+    for j in range(shape.hidden):
+        for k in range(shape.outputs):
+            expected[j * size + out_start + k] += weights[k][j]
+    for k in range(shape.outputs):
+        expected[shape.hidden * size + k] += biases[k]
+    slow = Brain(shape, expected, dead_zone=dead_zone, gain=1.5)
+
+    assert fast == slow
+    assert fast.network() == slow.network()
+    inputs = [rng.uniform(-1.0, 1.0) for _ in range(shape.inputs)]
+    assert fast.decide_with_hidden(inputs) == slow.decide_with_hidden(inputs)
+    assert fast.to_values() == slow.to_values()
+    with pytest.raises(ValueError):
+        brain.with_output_offsets(
+            [[math.inf] * shape.hidden] * shape.outputs, [0.0] * shape.outputs
+        )
