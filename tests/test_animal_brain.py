@@ -206,12 +206,12 @@ def test_pinned_decision_for_a_fixed_genome():
 
 def test_think_is_repeatable_and_changes_nothing():
     traits = adult(PINNED)
-    before = (traits.current_energy, traits.age_ticks, traits.flag_wants_mate, traits.vitality)
+    before = (traits.current_energy, traits.age_ticks, traits.wants_mate, traits.vitality)
     assert traits.think(SEEN) == traits.think(SEEN)
     assert (
         traits.current_energy,
         traits.age_ticks,
-        traits.flag_wants_mate,
+        traits.wants_mate,
         traits.vitality,
     ) == before
 
@@ -303,10 +303,8 @@ def test_the_temperament_given_to_the_brain_follows_the_animals_current_drives()
     assert traits.think(PREY) != calm
 
 
-def test_fear_as_the_fixed_rule_uses_it_comes_from_one_place():
+def test_fear_as_the_brain_reads_it_comes_from_one_place():
     traits = with_genes(fear="3000")
-    traits.set_environmental_stimuli(threat_detected=True)
-    assert traits.flag_in_fear == (traits._effective_fear() > traits.current_aggression)
     traits.vitality = 0.2
     assert traits._effective_fear() == pytest.approx(traits.base_fear_weight * (1.2 - 0.1))
 

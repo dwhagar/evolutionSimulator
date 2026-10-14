@@ -130,7 +130,7 @@ def test_animal_dies_of_starvation_without_food():
             break
     assert not traits.is_alive
     assert traits.current_energy == 0.0
-    assert not traits.flag_wants_mate and not traits.flag_wants_to_attack
+    assert not traits.wants_mate
 
 
 def test_animal_ages_out_when_fed():
@@ -229,53 +229,16 @@ def test_inspect_food_uses_injected_rng():
     assert 0 < sometimes < 500
 
 
-def test_hunger_sets_food_flags():
-    traits = AnimalTraits(animal_with(herbivore_eff="3333"))
-    traits.current_energy = traits.max_energy * 0.2
-    traits.set_environmental_stimuli(threat_detected=False)
-    assert traits.flag_wants_food
-    assert traits.flag_target_is_plant
-    assert not traits.flag_target_is_prey
+def test_willingness_to_mate_needs_energy_and_a_ready_body():
+    traits = AnimalTraits(animal_with(repro_drive="000"))
+    traits.mating_cooldown = 0.0
     traits.current_energy = traits.max_energy
-    traits.set_environmental_stimuli(threat_detected=False)
-    assert not traits.flag_wants_food
-
-
-def test_fear_beats_aggression_for_a_timid_animal():
-    timid = AnimalTraits(animal_with(fear="3333", aggression="0000"))
-    timid.set_environmental_stimuli(threat_detected=True)
-    assert timid.flag_in_fear
-    assert not timid.flag_wants_to_attack
-    assert not timid.flag_wants_mate
-
-
-def test_bold_animal_stands_and_fights():
-    bold = AnimalTraits(animal_with(fear="0000", aggression="3333"))
-    bold.set_environmental_stimuli(threat_detected=True)
-    assert not bold.flag_in_fear
-    assert bold.flag_wants_to_attack
-
-
-def test_alarm_and_mating_signals():
-    caller = AnimalTraits(animal_with(fear="3333", encoder_fidelity="3333"))
-    caller.set_environmental_stimuli(threat_detected=True)
-    energy = caller.current_energy
-    assert caller.trigger_signal_emission() == 2
-    assert caller.current_energy == pytest.approx(energy - caller.call_energy_cost)
-    assert caller.trigger_signal_emission() is None  # flag consumed
-
-    mute = AnimalTraits(animal_with(fear="3333", encoder_fidelity="0000"))
-    mute.set_environmental_stimuli(threat_detected=True)
-    assert mute.trigger_signal_emission() is None
-
-
-def test_tactile_reflex_needs_touch():
-    numb = AnimalTraits(animal_with(touch="0000"))
-    feeling = AnimalTraits(animal_with(touch="3333"))
-    numb.set_environmental_stimuli(False, tactile_contact=True)
-    feeling.set_environmental_stimuli(False, tactile_contact=True)
-    assert not numb.flag_tactile_evade
-    assert feeling.flag_tactile_evade
+    assert traits.wants_mate
+    traits.current_energy = 0.0
+    assert not traits.wants_mate
+    traits.current_energy = traits.max_energy
+    traits.mating_cooldown = 10.0
+    assert not traits.wants_mate
 
 
 def newborn_of(**genes: str) -> AnimalTraits:
@@ -346,7 +309,7 @@ def test_the_effective_drive_sets_the_threshold_and_the_brain_input():
     def wants(traits: AnimalTraits, ratio: float) -> bool:
         traits.current_energy = ratio * traits.max_energy
         traits._update_needs_and_drives()
-        return traits.flag_wants_mate
+        return traits.wants_mate
 
     just = 0.85 - 0.5 * drive
     assert wants(plain, just + 0.01) and not wants(plain, just - 0.01)
@@ -373,7 +336,7 @@ def test_a_mating_costs_each_partner_three_percent_and_starts_the_cooldown():
     assert father.mating_cooldown == pytest.approx(2.0 * 24)
     assert mother.mating_cooldown == pytest.approx(90.0 * 24)
     assert not mother.is_pregnant
-    assert not father.flag_wants_mate and not mother.flag_wants_mate
+    assert not father.wants_mate and not mother.wants_mate
 
 
 def test_nobody_mates_in_cooldown_pregnant_dead_or_without_the_energy():
@@ -441,7 +404,7 @@ def test_a_pregnant_bearer_is_slower_hungrier_and_does_not_look_for_a_mate():
     free_speed, free_basal = free.current_max_speed, free.basal_metabolism
     assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.CONCEIVED
     assert mother.is_pregnant and mother.mating_cooldown == 0.0  # her cooldown starts at the birth
-    assert not mother.can_mate and not mother.flag_wants_mate
+    assert not mother.can_mate and not mother.wants_mate
     assert mother.current_max_speed == pytest.approx(free_speed * (1 - 0.3))  # litter of 8 of 8
     mother.current_energy = 100.0
     mother.update_metabolism_and_aging()
@@ -553,7 +516,7 @@ def test_the_birth_starts_the_bearers_cooldown():
         assert AnimalTraits.give_birth(due(mother), [newborn_of()])
     assert quick.mating_cooldown == pytest.approx(2.0 * 24)
     assert slow.mating_cooldown == pytest.approx(90.0 * 24)
-    assert not quick.flag_wants_mate and not slow.flag_wants_mate
+    assert not quick.wants_mate and not slow.wants_mate
 
 
 def test_repair_stretches_the_cooldown_and_the_lifespan():
@@ -577,12 +540,12 @@ def test_the_cooldown_gene_spans_two_to_ninety_days():
 def test_a_newborn_is_a_juvenile_for_six_percent_of_its_lifespan():
     traits = AnimalTraits(animal_with(repro_drive="333"))
     assert traits.mating_cooldown == pytest.approx(0.06 * traits.lifespan_ticks)
-    assert not traits.flag_wants_mate
+    assert not traits.wants_mate
     for _ in range(round(0.06 * traits.lifespan_ticks) + 1):
         traits.current_energy = traits.max_energy
         traits.update_metabolism_and_aging()
     assert traits.mating_cooldown == 0.0
-    assert traits.flag_wants_mate
+    assert traits.wants_mate
 
 
 def test_longer_lived_animals_mature_later():
@@ -728,7 +691,7 @@ def test_the_drive_lowers_the_energy_needed_to_look_for_a_mate():
         traits = grown(AnimalTraits(animal_with(repro_drive=drive)))
         traits.current_energy = energy_ratio * traits.max_energy
         traits._update_needs_and_drives()
-        return traits.flag_wants_mate
+        return traits.wants_mate
 
     assert not wants("000", 0.80) and wants("000", 0.86)  # threshold 0.85 with no drive
     assert not wants("333", 0.30) and wants("333", 0.36)  # threshold 0.35 at full drive
@@ -739,10 +702,10 @@ def test_failing_health_also_lowers_the_threshold():
     traits = grown(AnimalTraits(animal_with(repro_drive="000")))
     traits.current_energy = 0.7 * traits.max_energy
     traits._update_needs_and_drives()
-    assert not traits.flag_wants_mate
+    assert not traits.wants_mate
     traits.vitality = 0.2  # threshold 0.85 - 0.2 * 0.8 = 0.69
     traits._update_needs_and_drives()
-    assert traits.flag_wants_mate
+    assert traits.wants_mate
 
 
 def test_a_driven_animal_is_bolder_while_a_mate_is_in_view():
@@ -756,7 +719,7 @@ def test_a_driven_animal_is_bolder_while_a_mate_is_in_view():
 
 def test_stimuli_are_clamped():
     traits = AnimalTraits(LOW_ANIMAL)
-    traits.set_environmental_stimuli(False, target_size_ratio=-5, local_density=7)
+    traits.set_environmental_stimuli(target_size_ratio=-5, local_density=7)
     assert traits.env_target_size_ratio == 0.1
     assert traits.env_local_density == 1.0
     assert 0.0 <= traits.current_aggression <= 1.0
@@ -766,7 +729,7 @@ def test_animal_simulation_is_deterministic():
     def run() -> tuple[float, int, bool]:
         traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(5)))
         for i in range(200):
-            traits.set_environmental_stimuli(i % 5 == 0, local_density=(i % 10) / 10)
+            traits.set_environmental_stimuli(local_density=(i % 10) / 10)
             traits.feed(15.0, is_meat=bool(i % 2))
             traits.update_metabolism_and_aging((i % 4) / 3)
         return traits.current_energy, traits.age_ticks, traits.is_alive
@@ -778,7 +741,7 @@ def test_random_animals_always_have_valid_state():
     for seed in range(100):
         traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(seed)))
         for i in range(50):
-            traits.set_environmental_stimuli(i % 3 == 0, 1.0 + (i % 3), (i % 10) / 10)
+            traits.set_environmental_stimuli(1.0 + (i % 3), (i % 10) / 10)
             traits.update_metabolism_and_aging((i % 4) / 3)
             assert 0.0 <= traits.vitality <= 1.0
             assert 0.0 <= traits.current_aggression <= 1.0
@@ -970,21 +933,17 @@ PINNED_ANIMAL = dna_from_v6(
 PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122" + "000")
 
 
-def test_animal_drive_flags_are_set_at_birth():
+def test_animal_is_unwilling_to_mate_at_birth():
     traits = AnimalTraits(PINNED_ANIMAL)
-    assert (
-        not traits.flag_wants_mate
-    )  # well fed, but a juvenile until its birth interval has passed
-    assert not traits.flag_wants_food
+    assert not traits.wants_mate  # well fed, but a juvenile until its birth interval has passed
     assert traits.vitality == 1.0
-    assert grown(traits).flag_wants_mate
+    assert grown(traits).wants_mate
 
 
-def test_hungry_newborn_wants_food_without_waiting_for_a_tick():
+def test_hungry_newborn_is_unwilling_to_mate_without_waiting_for_a_tick():
     traits = AnimalTraits(PINNED_ANIMAL)
     traits.current_energy = 0.1 * traits.max_energy
-    traits._update_needs_and_drives()
-    assert traits.flag_wants_food and not traits.flag_wants_mate
+    assert not traits.wants_mate
 
 
 def test_plant_vitality_matches_health_at_birth():

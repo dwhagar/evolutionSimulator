@@ -80,36 +80,20 @@ class BodyRules:
 class BehaviourRules:
     """Drives, temperament, feeding and calling (animals)."""
 
-    hunger_threshold: float = 0.5
-    """Below this share of the energy store an animal wants food."""
-    forage_efficiency: float = 0.1
-    """It only targets plants (or prey) it digests at least this well."""
-    prey_aggression: float = 0.2
-    """It only targets prey if its aggression is above this."""
-    hunt_aggression: float = 0.4
-    hunt_starvation: float = 0.3
-    """Without a threat in view it wants to attack when aggression and starvation pass these (and it
-    can digest meat)."""
     hunger_aggression_gain: float = 1.6
     """Aggression is multiplied by ``1 + gain * starvation ** 2``."""
     crowd_aggression_gain: float = 0.4
     """Aggression is multiplied by ``1 + gain * local density``."""
     size_confidence_range: tuple[float, float] = (0.2, 2.0)
-    """The target-to-own size ratio, clamped, scales aggression and the fight-or-flight test."""
+    """The target-to-own size ratio, clamped, scales aggression."""
     min_target_size_ratio: float = 0.1
     fear_wear_base: float = 1.2
     fear_wear_slope: float = 0.5
     """Fear acts as ``gene * (base - slope * vitality)``: stronger when worn down."""
-    tactile_threshold: float = 0.1
-    """The touch gene must be above this for a tactile reflex."""
     tournament_male_aggression: float = 1.35
     tournament_male_fear: float = 0.65
     brooding_female_fear: float = 1.3
     """The sex digit's behaviour offsets (digit 0 and digit 3); the prototype's."""
-    signal_gene_threshold: float = 0.05
-    """The encoder gene must be above this to call at all."""
-    mating_call_wear: float = 0.3
-    """A wanting animal calls for a mate once it has lost this much vitality."""
     taste_detection_base: float = 0.2
     taste_detection_gain: float = 0.8
     """Chance to notice toxin: ``toxicity * (base + gain * taste)``."""
