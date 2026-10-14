@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `REPRO.5`, `TRAIT.6`: Reproduction genes `caregiving`, `repro_interval` and `repro_drive` replace `fertility` (animal layout version 3), births are paid by both parents or not at all (`give_birth`), and more repair makes births dearer and the interval longer, with an upkeep cost that grows with the square. The world takes child energy and seed biomass from the parents. [#74](https://github.com/dwhagar/evolutionSimulator/pull/74)
 - `WORLD.5`: Day-night cycle and sleep: daylight from simulated time, darker nights shrink vision, sleeping animals stop sensing, moving, eating and mating and burn less energy, with a sleep listener hook for nightly learning. [#70](https://github.com/dwhagar/evolutionSimulator/pull/70)
 - `SENSE.11`: Sense genes: ranges that reach zero (a sense can be lost), noise that falls with the gene, and a cost charged on the area covered. [#68](https://github.com/dwhagar/evolutionSimulator/pull/68)
 - `WORLD.9`: The sensing and brain pass runs about 2.7 times faster. [#67](https://github.com/dwhagar/evolutionSimulator/pull/67)
