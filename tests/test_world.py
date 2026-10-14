@@ -116,6 +116,14 @@ def test_animals_move_and_age():
     assert animal.traits.current_energy < energy
 
 
+def test_an_animal_that_senses_nothing_wanders_instead_of_standing_still():
+    world = make(seed=9)
+    animal = world.add_animal(animal_dna(brain=STILL), HERE, heading=0.0)
+    world.run(20)
+    assert animal.last_decision is not None and animal.last_decision.wandering
+    assert animal.position.distance_to(HERE) > 1.0
+
+
 def test_walls_stop_animals_at_the_edge():
     world = make(bounds=Bounds((100, 100)))
     runner = world.add_animal(animal_dna(brain={"speed": 2.0}), Vec.of(99, 50), heading=0.0)

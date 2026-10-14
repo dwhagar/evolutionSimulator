@@ -4,7 +4,7 @@ A ``World`` holds animals and plants at positions in a bounded space, a seeded r
 a tick counter. ``step`` advances one tick, always in the same order:
 
 1. Every living animal senses the world as it stands at the start of the tick and its brain
-   decides (all decisions are made before anyone acts).
+   decides, with the wander fallback on (all decisions are made before anyone acts).
 2. In id order each animal ages and burns energy, turns, moves (walls stop it) and, if its brain
    says "eat" and a plant is in reach, grazes.
 3. Animals that want to mate, are ready, and are close enough pair off in id order; each pair
@@ -222,7 +222,8 @@ class World:
 
         # 1. Sense and decide, all from the same start-of-tick world.
         for animal in animals:
-            animal.last_decision = animal.traits.think(self.senses.perceive(self, animal))
+            percepts = self.senses.perceive(self, animal)
+            animal.last_decision = animal.traits.think(percepts, self.rng)
 
         # 2. Live, move and eat.
         for animal in animals:

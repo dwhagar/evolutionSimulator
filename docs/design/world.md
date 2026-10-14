@@ -34,8 +34,10 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 
 ## One tick
 
-1. Every living animal senses the world as it stands and its brain decides. All decisions are made
-   before anyone acts, so the order of animals does not change what they see.
+1. Every living animal senses the world as it stands and its brain decides (`AnimalTraits.think`,
+   given the world's random generator so the wander fallback is on: an animal that senses nothing,
+   or whose outputs are all quiet, turns at random and moves instead of standing still). All
+   decisions are made before anyone acts, so the order of animals does not change what they see.
 2. In id order each animal ages and burns energy (`update_metabolism_and_aging`, with the brain's
    speed output as the movement ratio), turns, moves and, if the brain says "eat" and a plant is
    within reach, grazes it.
