@@ -35,7 +35,7 @@ Not yet given a version; the owner sets milestones.
 
 ## Next: the interface
 
-Asked for by the owner on 2026-10-14 (task area `UX`): a graphical viewer with a world view, speed and time controls, a creature inspector, population and gene charts, run setup and save and load. It starts with a research and design note (`UX.1`) and four owner questions ([#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to [#126](https://github.com/dwhagar/evolutionSimulator/issues/126)); the working default is a native desktop program (PySide6) with the simulation kept as a headless core.
+Asked for by the owner on 2026-10-14 (task area `UX`): a graphical viewer with a world view, speed and time controls, a creature inspector, population and gene charts, run setup and save and load. The design note is done (`UX.1`, [docs/design/ux.md](design/ux.md), [#135](https://github.com/dwhagar/evolutionSimulator/pull/135)): a native desktop program (PySide6, pyqtgraph) with the simulation kept as a headless core in its own process. Owner questions are [#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to [#126](https://github.com/dwhagar/evolutionSimulator/issues/126) and [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) to [#134](https://github.com/dwhagar/evolutionSimulator/issues/134). The builds (`UX.6` to `UX.22`) run in four waves, starting with the simulation session (`UX.6`).
 
 ## Later
 
