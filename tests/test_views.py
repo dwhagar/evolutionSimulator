@@ -2,7 +2,7 @@
 
 import pickle
 
-from world_support import animal_dna, plant_dna
+from world_support import animal_dna, plant_dna, world_config
 
 from evolution_simulator.brain_adapter import INPUT_NAMES, OUTPUT_NAMES
 from evolution_simulator.world import (
@@ -43,7 +43,7 @@ def test_there_is_one_view_per_organism_in_id_order():
 
 
 def test_an_animal_view_reads_the_animal():
-    world = World(WorldConfig(seed=1, day_cycle=None))
+    world = World(world_config(seed=1, day_cycle=None))
     animal = world.add_animal(animal_dna(carnivore_eff="3333", herbivore_eff="0000"), HERE, 1.5)
     view = world.animal_views()[0]
     assert (view.id, view.x, view.y, view.heading) == (animal.id, 500.0, 500.0, 1.5)
@@ -65,7 +65,7 @@ def test_a_plant_view_reads_the_plant():
 
 
 def test_a_dead_animal_leaves_a_corpse_view():
-    world = World(WorldConfig(seed=1, day_cycle=None))
+    world = World(world_config(seed=1, day_cycle=None))
     animal = world.add_animal(animal_dna(), HERE, 0.0)
     animal.traits.current_energy = 0.001
     world.step()

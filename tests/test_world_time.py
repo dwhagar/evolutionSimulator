@@ -1,7 +1,7 @@
 """The tick length scales the physics, and the defaults are an hour and a 24-hour day (WORLD.7)."""
 
 import pytest
-from world_support import ANIMAL_BASE, PLANT_BASE, animal_dna, hourly_world, plant_dna
+from world_support import ANIMAL_BASE, PLANT_BASE, animal_dna, hourly_world, plant_dna, world_config
 
 from evolution_simulator.world import (
     SPEED_PRESETS,
@@ -24,7 +24,7 @@ STILL = {"speed": -2.0}
 
 def world_of(time_scale, **config):
     config.setdefault("day_cycle", None)
-    return World(WorldConfig(seed=1, time_scale=time_scale, **config))
+    return World(world_config(seed=1, time_scale=time_scale, **config))
 
 
 # --- the defaults ---------------------------------------------------------------

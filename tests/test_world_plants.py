@@ -3,9 +3,9 @@
 import math
 
 import pytest
-from world_support import plant_dna
+from world_support import plant_dna, world_config
 
-from evolution_simulator.world import Bounds, PlantRules, Vec, World, WorldConfig
+from evolution_simulator.world import Bounds, PlantRules, Vec, World
 
 BIG = {"max_biomass": "3333"}  # canopy radius 12, biomass up to 200
 HERE = Vec.of(500, 500)
@@ -13,7 +13,7 @@ HERE = Vec.of(500, 500)
 
 def make(rules=None, seed=0, **config):
     config.setdefault("day_cycle", None)
-    return World(WorldConfig(seed=seed, plants=rules or PlantRules(refresh_interval=1), **config))
+    return World(world_config(seed=seed, plants=rules or PlantRules(refresh_interval=1), **config))
 
 
 def test_a_lone_plant_is_not_limited():

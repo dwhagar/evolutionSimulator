@@ -6,10 +6,10 @@ whom, REPRO.4), ``events`` and ``views`` (what listeners and viewers may read, U
 (swappable), ``persistence`` (save and load, UX.9) and ``world`` (WORLD.2).
 """
 
+from evolution_simulator.config import DayCycle, PlantRules
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
 from evolution_simulator.world.corpses import Corpse, CorpseRules
-from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.events import Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.persistence import SaveFormatError, load_world, save_world
@@ -31,7 +31,7 @@ from evolution_simulator.world.views import (
     CorpseView,
     PlantView,
 )
-from evolution_simulator.world.world import PlantRules, StepReport, World, WorldConfig
+from evolution_simulator.world.world import StepReport, World, WorldConfig
 
 __all__ = [
     "ANIMAL_FIELDS",

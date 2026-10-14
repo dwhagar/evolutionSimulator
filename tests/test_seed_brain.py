@@ -3,6 +3,7 @@
 import random
 
 import pytest
+from world_support import world_config
 
 from evolution_simulator.brain import DEFAULT_BLUEPRINT
 from evolution_simulator.brain_adapter import INPUT_NAMES
@@ -24,7 +25,7 @@ from evolution_simulator.seed_brain import (
     seeded_dna,
 )
 from evolution_simulator.traits import AnimalTraits
-from evolution_simulator.world import World, WorldConfig
+from evolution_simulator.world import World
 
 INDEX = {name: i for i, name in enumerate(INPUT_NAMES)}
 
@@ -188,7 +189,7 @@ def test_negative_variation_is_rejected():
 
 
 def populated(seed, seeded):
-    world = World(WorldConfig(seed=seed, day_cycle=None))
+    world = World(world_config(seed=seed, day_cycle=None))
     world.populate(animals=20, plants=120, seeded=seeded)
     return world
 

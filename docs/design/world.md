@@ -11,7 +11,8 @@ question 3.
 ```python
 from evolution_simulator.world import World, WorldConfig, Bounds, TimeScale
 
-world = World(WorldConfig(seed=7, bounds=Bounds((1000, 1000)), time_scale=TimeScale.from_preset("hour")))
+config = WorldConfig(seed=7, bounds=Bounds((1000, 1000))).with_time_scale(TimeScale.from_preset("hour"))
+world = World(config)
 world.populate(animals=50, plants=300)   # random bodies with the seeded brain, at random places (seeded=False: random brains)
 report = world.run(1000)                 # 1000 ticks; the report sums births and deaths
 print(world.elapsed, len(world.animals), len(world.plants))
@@ -26,9 +27,9 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 | --- | --- | --- |
 | `vector.py` | `Vec`, an immutable position for any number of dimensions (only the angle helpers are 2D) | WORLD.2 |
 | `bounds.py` | `Bounds`, a box from the origin to `size`, default 1000 by 1000; `clamp` makes the edges walls | WORLD.4 |
-| `timescale.py` | `TimeScale`, the speed presets, `Pacer` (real time to whole ticks), `format_duration` | WORLD.3 |
+| `timescale.py` | `TimeScale` (a view of `traits.time`'s tick length and speed), the speed presets, `Pacer` (real time to whole ticks), `format_duration` | WORLD.3 |
 | `spatial.py` | `SpatialIndex`, a grid for "what is near this point" | WORLD.2 |
-| `daycycle.py` | `DayCycle`: daylight, night and day number as a function of simulated time | WORLD.5 |
+| `daycycle.py` | re-exports `DayCycle` (`config.py`, `TraitRules.day_cycle`): daylight, night and day number as a function of simulated time | WORLD.5, TRAIT.10 |
 | `sleep.py` | the `SleepListener` hook (`SleepRules` is `TraitRules.sleep` in `config.py`) | WORLD.5, TRAIT.10 |
 | `organisms.py` | `Animal` and `Plant`: traits plus a place (and heading for animals) | WORLD.2 |
 | `senses.py` | the `Senses` interface and `WorldSenses`: neighbour search and classifier feeding the sensing step | SENSE.12 |
@@ -199,7 +200,7 @@ hourly tick). The world starts at noon. `World.daylight`, `World.is_night` and `
 
 The finding: with the prototype constants 300 random plants reached the 5000 cap in about 200
 ticks, because a plant's growth (0.2 to 1.0 a tick) is several times its upkeep (about 0.1) and
-nothing took it away. Plants now limit each other (`PlantRules` in `WorldConfig`):
+nothing took it away. Plants now limit each other (`PlantRules`, `TraitRules.plant_limits`):
 
 - **Soil.** Within 25 units, a plant's own biomass and its neighbours' add up. The plant keeps
   `1 - biomass per unit of ground / capacity` of its soil access (`capacity` is 0.015 biomass per

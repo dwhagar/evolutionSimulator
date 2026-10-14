@@ -1,7 +1,7 @@
 """World events and death causes (UX.6): births, deaths and matings, told to listeners."""
 
 import pytest
-from world_support import animal_dna, breeding_pair, hourly_world, plant_dna
+from world_support import animal_dna, breeding_pair, hourly_world, plant_dna, world_config
 
 from evolution_simulator.deaths import DeathCause
 from evolution_simulator.traits import AnimalTraits, PlantTraits
@@ -15,7 +15,7 @@ BITER = {"speed": -2.0, "eat": 2.0}
 def make(**config):
     config.setdefault("day_cycle", None)
     config.setdefault("calls_enabled", False)
-    return World(WorldConfig(**config))
+    return World(world_config(**config))
 
 
 def listen(world):

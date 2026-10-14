@@ -10,9 +10,10 @@ from world_support import (
     hourly_world,
     lover_dna,
     plant_dna,
+    world_config,
 )
 
-from evolution_simulator.world import Bounds, TimeScale, Vec, World, WorldConfig
+from evolution_simulator.world import Bounds, TimeScale, Vec, World
 
 HERE = Vec.of(500, 500)
 STILL = {"speed": -2.0}  # logistic(-2) = 0.12 of top speed: nearly still
@@ -22,7 +23,7 @@ BIG_PLANT = {"max_biomass": "3333", "toxicity": "0000", "growth_rate": "0000"}
 
 
 def make(seed=0, **config):
-    return World(WorldConfig(seed=seed, **config))
+    return World(world_config(seed=seed, **config))
 
 
 # --- repeatability ------------------------------------------------------------

@@ -29,12 +29,16 @@ on 60 random genomes over 40 ticks).
   layout depends on them. Changing a range is a decision about the genes, not a tuning of a run.
 - **The fixed shape of a formula**: half of a care fraction per parent, the one half in a half-life, a
   square in the cost of a sense. Only numbers somebody might want to retune are fields.
-- **Settings that still have their own object** (`TRAIT.10` is moving them in, one group per change):
-  `DayCycle`, `TimeScale`, `PlantRules` (the world's soil and shade
-  limits) and the `WorldConfig` fields such as `graze_amount`. `LearningRules` and `SleepRules` have moved: they
-  live in `config.py` as `TraitRules.learning` (`None` turns learning off) and `TraitRules.sleep`,
-  `WorldConfig.learning` and `.sleep` read them and `AnimalTraits.learning_rules` starts from the first. `WorldConfig.with_rules(**sections)` gives a config
-  with some sections replaced.
+- **Settings that are not tuning**: `WorldConfig` keeps the bounds, the seed, `graze_amount`,
+  `mating_reach`, `birth_scatter`, `calls_enabled`, the bite and corpse rules (`attack`, `corpses`) and the
+  population caps. Everything else a run tunes is in the tree (`TRAIT.10`): `LearningRules`
+  (`TraitRules.learning`, `None` turns learning off), `SleepRules` (`sleep`), `DayCycle` (`day_cycle`, `None`
+  for permanent daylight and no sleep), the world's soil and shade limits `PlantRules` (`plant_limits`) and the
+  tick length and speed (`time.seconds_per_tick`, `time.speed`; the old `TimeScale`). `WorldConfig` reads them
+  through properties of the old names (`learning`, `sleep`, `day_cycle`, `plants`, `time_scale`), so reading
+  `config.day_cycle` still works; to change one, use `config.with_rules(day_cycle=...)` (a section that
+  already holds the value leaves the config untouched) or `config.with_time_scale(TimeScale.from_preset("day"))`.
+  Saves written before the move are upgraded when loaded (save formats 2 to 4).
 
 ## Where each old name went
 
@@ -65,6 +69,8 @@ The reference tick every per-tick rate is written for.
 | --- | --- | --- |
 | `reference_tick_seconds` | `3600.0` | Simulated seconds in one reference tick. The world's `dt` is its tick length over this. |
 | `ticks_per_day` | `24.0` | Reference ticks in a simulated day. |
+| `seconds_per_tick` | `3600.0` | Simulated seconds in one tick of this run (`TRAIT.10`; was `TimeScale.seconds_per_tick`). A tick of the reference length gives the world a `dt` of 1. |
+| `speed` | `1.0` | Simulated seconds that pass for each real second; how fast a viewer asks the run to go. |
 
 ### `body` (`BodyRules`)
 
@@ -271,3 +277,24 @@ Sleep (`WORLD.5`): who stays awake, what a sleeper burns and regains, what wakes
 | `metabolism_factor` | `0.4` | Fraction of its basal metabolism an animal burns while asleep. |
 | `energy_regain` | `0.002` | Fraction of its energy store regained each reference tick (hour) of sleep, at average `recovery`. |
 | `alarm_wakes_above` | `0.2` | An alarm call heard at least this strongly wakes a sleeper, and it stays awake until the next day (`SENSE.7`). |
+
+### `day_cycle` (`DayCycle`, or `None`)
+
+One day of light and dark (`WORLD.5`); `None` means permanent full daylight and no sleep. Moved here from `world/daycycle.py`.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `length_seconds` | `86400.0` | Simulated seconds in a day (24 hours). |
+| `start_phase` | `0.5` | Fraction of the day gone at tick 0 (0.5 is noon). |
+| `night_below` | `0.3` | It is night while daylight is below this. |
+
+### `plant_limits` (`PlantRules`)
+
+How neighbouring plants limit each other's growth (`WORLD.8`). Moved here from `world/world.py`.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `neighbourhood` | `25.0` | Units around a plant within which neighbours hold soil. |
+| `capacity` | `0.015` | Biomass per unit of ground that the soil can feed. |
+| `shade_strength` | `1.0` | How strongly shade from a heavier neighbour cuts the light. |
+| `refresh_interval` | `10` | One in this many plants has its soil and shade refreshed each tick. |
