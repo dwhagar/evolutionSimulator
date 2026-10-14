@@ -325,7 +325,7 @@ class World:
         place = self._place(position)
         facing = self.rng.uniform(-math.pi, math.pi) if heading is None else wrap_angle(heading)
         return self._insert_animal(
-            AnimalTraits(dna, rules=self.config.traits), place, facing, parents
+            AnimalTraits(dna, rules=self.config.traits, dt=self.dt), place, facing, parents
         )
 
     def _insert_animal(
@@ -721,7 +721,7 @@ class World:
             if count <= 0:
                 continue
             litter = [
-                AnimalTraits(genome, rules=self.config.traits)
+                AnimalTraits(genome, rules=self.config.traits, dt=self.dt)
                 for genome in pregnancy.children[:count]
             ]
             if not AnimalTraits.give_birth(mother.traits, litter):
