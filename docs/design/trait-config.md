@@ -30,10 +30,10 @@ on 60 random genomes over 40 ticks).
 - **The fixed shape of a formula**: half of a care fraction per parent, the one half in a half-life, a
   square in the cost of a sense. Only numbers somebody might want to retune are fields.
 - **Settings that still have their own object** (`TRAIT.10` is moving them in, one group per change):
-  `SleepRules` (`world/sleep.py`), `DayCycle`, `TimeScale`, `PlantRules` (the world's soil and shade
-  limits) and the `WorldConfig` fields such as `graze_amount`. `LearningRules` has moved: it lives in
-  `config.py` as `TraitRules.learning` (`None` turns learning off), `WorldConfig.learning` reads it and
-  `AnimalTraits.learning_rules` starts from it. `WorldConfig.with_rules(**sections)` gives a config
+  `DayCycle`, `TimeScale`, `PlantRules` (the world's soil and shade
+  limits) and the `WorldConfig` fields such as `graze_amount`. `LearningRules` and `SleepRules` have moved: they
+  live in `config.py` as `TraitRules.learning` (`None` turns learning off) and `TraitRules.sleep`,
+  `WorldConfig.learning` and `.sleep` read them and `AnimalTraits.learning_rules` starts from the first. `WorldConfig.with_rules(**sections)` gives a config
   with some sections replaced.
 
 ## Where each old name went
@@ -260,3 +260,14 @@ Learning during life (`BRAIN.24`): the log, the reward and the size of a night's
 | `night_cap` | `0.5` | The most any one number may change in one night. |
 | `fade` | `0.0` | Share of the learned offsets lost each night (forgetting). |
 | `max_offset` | `2.0` | The most a number's total learned change may reach. |
+
+### `sleep` (`SleepRules`)
+
+Sleep (`WORLD.5`): who stays awake, what a sleeper burns and regains, what wakes it. Moved here from `world/sleep.py` by `TRAIT.10`.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `starving_below` | `0.15` | An animal with less than this fraction of its energy store stays awake to find food. |
+| `metabolism_factor` | `0.4` | Fraction of its basal metabolism an animal burns while asleep. |
+| `energy_regain` | `0.002` | Fraction of its energy store regained each reference tick (hour) of sleep, at average `recovery`. |
+| `alarm_wakes_above` | `0.2` | An alarm call heard at least this strongly wakes a sleeper, and it stays awake until the next day (`SENSE.7`). |

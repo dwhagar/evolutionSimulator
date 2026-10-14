@@ -371,6 +371,17 @@ def test_a_format_1_save_has_its_learning_rules_moved_into_the_trait_rules():
     assert restored.config.learning == world.config.learning
 
 
+def test_a_format_2_save_has_its_sleep_rules_moved_into_the_trait_rules():
+    world = rich_world_at(10)
+    old = world_to_dict(world)
+    config = old["world"]["config"]
+    config["sleep"] = config["traits"].pop("sleep")  # where format 2 kept it
+    old["format_version"] = 2
+    restored = world_from_dict(old)
+    assert_same_world(restored, world)
+    assert restored.config.sleep == world.config.sleep
+
+
 def test_an_older_format_with_no_migration_is_refused(monkeypatch):
     data = world_to_dict(rich_world_at(3))
     monkeypatch.setattr(saves, "FORMAT_VERSION", FORMAT_VERSION + 1)

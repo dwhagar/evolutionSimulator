@@ -34,7 +34,13 @@ import math
 import random
 from dataclasses import dataclass, field, replace
 
-from evolution_simulator.config import DEFAULT_RULES, LearningRules, SensingRules, TraitRules
+from evolution_simulator.config import (
+    DEFAULT_RULES,
+    LearningRules,
+    SensingRules,
+    SleepRules,
+    TraitRules,
+)
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import founder_animal_dna, founder_plant_dna
 from evolution_simulator.learning import NightlyLearning
@@ -54,7 +60,7 @@ from evolution_simulator.world.senses import (
     classify,
     wrap_angle,
 )
-from evolution_simulator.world.sleep import SleepListener, SleepRules
+from evolution_simulator.world.sleep import SleepListener
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.vector import Vec
@@ -115,7 +121,6 @@ class WorldConfig:
     """A litter appears within this distance of its mother."""
     day_cycle: DayCycle | None = field(default_factory=DayCycle)
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
-    sleep: SleepRules = field(default_factory=SleepRules)
     attack: AttackRules = field(default_factory=AttackRules)
     """Bites (``BRAIN.10``)."""
     corpses: CorpseRules = field(default_factory=CorpseRules)
@@ -137,6 +142,11 @@ class WorldConfig:
     def sensing(self) -> SensingRules:
         """The constants of the sensing step: light and sleep factors, weak smell, noise."""
         return self.traits.sensing
+
+    @property
+    def sleep(self) -> SleepRules:
+        """Who sleeps at night and what sleep does (``WORLD.5``). Part of the trait rules."""
+        return self.traits.sleep
 
     @property
     def learning(self) -> LearningRules | None:
