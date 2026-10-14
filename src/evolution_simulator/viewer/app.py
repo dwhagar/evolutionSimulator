@@ -190,6 +190,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     if setup is not None and resumed is None and not wants_new_world(args):
         setup.reveal()  # nothing saved yet: offer the founders to choose
     if args.quit_after is not None:
+        window.ask_before_close = False  # a smoke test closes the window itself; nobody to ask
         QTimer.singleShot(args.quit_after, window.close)
     code = app.exec()
     controller.backend.close()  # not `backend`: a resumed run may have replaced it

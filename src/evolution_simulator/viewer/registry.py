@@ -45,6 +45,7 @@ class ViewerContext:
         add_menu_action: Callable[[MenuName, QAction], None] | None = None,
         set_run_label: Callable[[str], None] | None = None,
         settings: QSettings | None = None,
+        add_close_guard: Callable[[Callable[[], bool]], None] | None = None,
     ) -> None:
         self.controller = controller
         self.actions = actions
@@ -53,6 +54,7 @@ class ViewerContext:
         self._show_message = show_message
         self._add_menu_action = add_menu_action
         self._set_run_label = set_run_label
+        self._add_close_guard = add_close_guard
         self.settings = settings
         """Where the window keeps its settings, for a screen that has some of its own to remember
         (keep to your own key prefix); ``None`` when the window has none."""
@@ -69,6 +71,13 @@ class ViewerContext:
         owns the menus, so a screen that needs a menu entry adds it from its factory."""
         if self._add_menu_action is not None:
             self._add_menu_action(menu, action)
+
+    def add_close_guard(self, guard: Callable[[], bool]) -> None:
+        """Be asked when the window is about to close: return ``False`` to keep it open (after
+        asking the user something, say). The window skips the guards when it was told not to ask
+        (``ask_before_close``, for ``--quit-after``)."""
+        if self._add_close_guard is not None:
+            self._add_close_guard(guard)
 
     def set_run_label(self, text: str) -> None:
         """Name the run in the status bar and the window title (empty clears it)."""

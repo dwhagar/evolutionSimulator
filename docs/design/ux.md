@@ -447,6 +447,18 @@ are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
   `RunManager.local_world()`. Through the process host they wait for `UX.31` (the host creating the recorder,
   sending history and starting from `Run.resume`); that function is the one place to change. Listing, history,
   export and delete need no world and work with any backend.
+- **Closing the window (`UX.37`).** A plain launch starts the default founders unsaved, so closing the
+  window on a world that was never saved asks "Save this run?" (Save, Discard, Cancel). Save starts a run
+  like File, Save run now and then closes; if the save fails the window stays open with the reason on the
+  status bar; Cancel keeps it open. A world in this process whose run has gone on since its last
+  checkpoint is asked too. A world in its own process needs no question once it has a run: the process
+  writes a last checkpoint when the window closes. A made-up world, a crashed one and a world at tick 0
+  are never asked (`RunManager.unsaved_on_close`). The window offers this through a general hook,
+  `ViewerContext.add_close_guard(fn)` (`fn() -> bool`, `False` keeps the window open), and the runs panel
+  registers `confirm_close`. `MainWindow.ask_before_close = False` skips the guards; `--quit-after` sets it
+  because a smoke test closes the window itself. Tests answer the dialog through
+  `RunsPanel.ask_to_save`; `tests/conftest.py` makes the default answer Discard so a test that closes a
+  window never waits on a dialog.
 ### As built: the charts (`UX.16`)
 
 `viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with five

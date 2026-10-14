@@ -21,6 +21,24 @@ def sure_conception(monkeypatch):
     monkeypatch.setattr(world_support, "TEST_RULES", sure)
 
 
+@pytest.fixture(autouse=True)
+def no_save_prompt(monkeypatch):
+    """Closing a window on an unsaved world asks "Save this run?" (UX.37); a test that closes one
+    must not wait on a dialog nobody answers, so the answer is Discard unless the test sets its
+    own (``panel.ask_to_save = ...``)."""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+
+        from evolution_simulator.viewer.panels import runs
+    except ImportError:  # the gui extra is not installed
+        return
+    monkeypatch.setattr(
+        runs.RunsPanel,
+        "ask_to_save",
+        lambda self, never_saved: QMessageBox.StandardButton.Discard,
+    )
+
+
 @pytest.fixture(scope="session")
 def qapp():
     """The one ``QApplication`` of a test run, on Qt's offscreen platform (no display needed).
