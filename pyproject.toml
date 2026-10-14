@@ -34,3 +34,8 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.format]
+# Ruff also formats the Python code blocks inside Markdown; the design notes keep their sketches
+# as written, so `ruff format .` leaves Markdown alone (INFRA.5).
+exclude = ["*.md"]

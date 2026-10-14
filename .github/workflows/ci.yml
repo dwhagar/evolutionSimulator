@@ -28,5 +28,7 @@ jobs:
           pip install -e ".[dev,gui]"
       - name: Lint
         run: ruff check .
+      - name: Format
+        run: ruff format --check .
       - name: Test
         run: pytest

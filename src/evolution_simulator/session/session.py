@@ -108,6 +108,9 @@ class Update:
     frame: Frame | None = None
     detail: AnimalDetail | None = None
     """The selected animal now; with ``alive`` false once, when it has just died."""
+    frame_skipped: bool = False
+    """A frame was due but ``update(frames=False)`` held it back; it is built by the next update
+    that allows frames."""
 
 
 class Session:
@@ -271,9 +274,11 @@ class Session:
     # Running
     # -------------------------------------------------------------------------
 
-    def update(self) -> Update:
+    def update(self, frames: bool = True) -> Update:
         """Run the ticks that are due and say what to send. Call it often (every few milliseconds
-        to every frame); it returns at once when nothing is due."""
+        to every frame); it returns at once when nothing is due. With ``frames=False`` no frame is
+        built (the host does this while the viewer is behind): the update says so in
+        ``frame_skipped`` and the frame comes with the next one that allows it."""
         now = self._clock()
         elapsed = min(max(0.0, now - self._last_update), self.rules.max_elapsed)
         self._last_update = now
@@ -282,8 +287,14 @@ class Session:
             self._dirty = True
 
         detail = self._detail_due(now, ticks)
-        frame = self._frame_due(now)
-        return Update(ticks, dropped, report, frame, detail)
+        skipped = False
+        frame = None
+        if self._frame_is_due(now):
+            if frames:
+                frame = self.frame(now=now)
+            else:
+                skipped = True
+        return Update(ticks, dropped, report, frame, detail, skipped)
 
     def _run(self, now: float, elapsed: float) -> tuple[int, int, StepReport | None]:
         rules = self.rules
@@ -380,13 +391,27 @@ class Session:
     def _settled(self) -> bool:
         return not self._running and self._steps_left == 0
 
-    def _frame_due(self, now: float) -> Frame | None:
+    def _frame_is_due(self, now: float) -> bool:
         last = self._last_frame_at
-        if last is not None and not self._dirty:
-            return None
-        if last is not None and now - last < self.rules.frame_interval:
-            return None
-        return self.frame(now=now)
+        if self.rules.frame_interval == float("inf"):
+            return False
+        if last is None:
+            return True
+        if not self._dirty:
+            return False
+        return now - last >= self.rules.frame_interval
+
+    def set_frame_rate(self, hz: float) -> None:
+        """Send at most ``hz`` frames a second (0 sends none: a minimised window costs nothing)."""
+        if not hz >= 0.0 or hz == float("inf"):
+            raise CommandError(f"A frame rate must be zero or more, got {hz!r}.")
+        interval = float("inf") if hz == 0.0 else 1.0 / hz
+        self.rules = replace(self.rules, frame_interval=interval)
+
+    def request_plants(self) -> None:
+        """Put the plants in the next frame (a viewer that has just opened or lost them)."""
+        self._last_plants_at = None
+        self._dirty = True
 
     def frame(self, *, include_plants: bool | None = None, now: float | None = None) -> Frame:
         """Build a frame of the world as it stands. ``include_plants`` forces the plants in or out;
