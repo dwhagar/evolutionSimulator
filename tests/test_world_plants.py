@@ -102,10 +102,14 @@ def test_crowded_plants_grow_slower_than_a_lone_plant():
 
 
 def test_a_small_world_settles_instead_of_running_to_the_cap():
+    # Small, fast-growing plants that live about a month: the random founders of an hourly world
+    # starve before they seed (WORLD.11), which would end the run before it settles.
     world = make(PlantRules(), seed=3, bounds=Bounds((200, 200)))
-    world.populate(plants=20)
+    seed_plant = plant_dna(growth_rate="3333", toxicity="0000", longevity="112", max_biomass="0000")
+    for _ in range(20):
+        world.add_plant(seed_plant, Vec.of(world.rng.uniform(0, 200), world.rng.uniform(0, 200)))
     counts = []
-    for _ in range(8):
+    for _ in range(14):
         world.run(100)
         counts.append(len(world.plants))
     assert max(counts) < world.config.max_plants / 4

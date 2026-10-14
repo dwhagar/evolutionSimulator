@@ -146,9 +146,9 @@ into clusters, with the five reproduction genes next to each other: layout versi
   (`REFERENCE_TICK_SECONDS = 3600`), and every duration is kept in reference ticks (`TICKS_PER_DAY = 24`). The
   world multiplies the rates by `dt = seconds_per_tick / 3600` (`World.dt`), and
   `update_metabolism_and_aging(movement_speed_ratio, dt)` charges wear, upkeep, healing, the cooldown and the
-  pregnancy by it. Movement is charged per tick and not per `dt`, because it follows the distance moved; moving
-  and eating per hour of simulated time is a `WORLD.7` job, and until then only a one-hour tick gives the
-  balance the numbers were set for. The world's default tick is still one second.
+  pregnancy by it. Since `WORLD.7` the world scales movement, turning, the energy spent moving, grazing,
+  poison and plant growth and upkeep by `dt` too, and the default tick is one hour (`dt` = 1), which is what the
+  numbers were set for.
 - **Lifespan.** `wear_per_tick` is `WEAR_BASE * (1 + 0.6 * repro_drive) / (1 + 3.5 * somatic_maint)` with
   `WEAR_BASE = 0.0362`, so `lifespan_ticks` (in reference ticks, hours) is the damage the body can take divided by
   that. An animal with size 0.5 and repair and drive 0.5 lives 8,765 hours, about a simulated year; a drive of 1

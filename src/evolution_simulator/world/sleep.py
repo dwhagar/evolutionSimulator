@@ -29,7 +29,8 @@ class SleepRules:
     metabolism_factor: float = 0.4
     """Fraction of its basal metabolism an animal burns while asleep."""
     energy_regain: float = 0.002
-    """Fraction of its energy store an animal regains each tick of sleep, on top of burning less."""
+    """Fraction of its energy store an animal regains each reference tick (hour) of sleep, at
+    average ``recovery``, on top of burning less."""
     alarm_wakes_above: float = 0.2
     """An alarm call heard at least this strongly (1 at the caller, 0 at the edge of its radius)
     wakes a sleeper, and it stays awake until the next day (SENSE.7)."""

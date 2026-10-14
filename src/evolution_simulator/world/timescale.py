@@ -1,6 +1,9 @@
 """Time scale (WORLD.3): how simulated time relates to ticks and to real time.
 
-A tick is a fixed length of simulated time, 1 second by default. The *speed* says how many
+A tick is a fixed length of simulated time, one hour by default (``WORLD.7``: the length every rate in
+the organisms' code is written for, so a default animal lives about a simulated year, 8,765 ticks, and
+a default plant about a month). One second and any other length still work: the world scales its
+physics by the tick length (``World.dt``). The *speed* says how many
 simulated seconds pass for each real second, so it sets how many ticks should run per real second.
 The presets are the owner's list (issue 10): 1 real second equals 1 minute, 1 hour, 1 day, 7 days,
 1 month, 1 year, 10 years, 100 years or 1000 years. A year is 365.25 days and a month a twelfth of
@@ -20,6 +23,8 @@ HOUR: float = 60.0 * MINUTE
 DAY: float = 24.0 * HOUR
 YEAR: float = 365.25 * DAY
 MONTH: float = YEAR / 12.0
+DEFAULT_SECONDS_PER_TICK: float = HOUR
+"""The default tick: one simulated hour."""
 
 SPEED_PRESETS: dict[str, float] = {
     "real-time": 1.0,
@@ -40,7 +45,7 @@ SPEED_PRESETS: dict[str, float] = {
 class TimeScale:
     """Seconds of simulated time in one tick, and simulated seconds per real second."""
 
-    seconds_per_tick: float = 1.0
+    seconds_per_tick: float = DEFAULT_SECONDS_PER_TICK
     speed: float = 1.0
 
     def __post_init__(self) -> None:
@@ -49,7 +54,9 @@ class TimeScale:
                 raise ValueError(f"{name} must be a positive finite number, got {value}.")
 
     @classmethod
-    def from_preset(cls, name: str, seconds_per_tick: float = 1.0) -> TimeScale:
+    def from_preset(
+        cls, name: str, seconds_per_tick: float = DEFAULT_SECONDS_PER_TICK
+    ) -> TimeScale:
         if name not in SPEED_PRESETS:
             raise ValueError(f"Unknown speed preset {name!r}; choose from {sorted(SPEED_PRESETS)}.")
         return cls(seconds_per_tick=seconds_per_tick, speed=SPEED_PRESETS[name])

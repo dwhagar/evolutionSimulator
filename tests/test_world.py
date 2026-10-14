@@ -101,8 +101,16 @@ def test_the_within_queries_give_distances_in_id_order():
 # --- time ---------------------------------------------------------------------
 
 
-def test_a_tick_is_a_second_and_the_clock_follows():
+def test_a_tick_is_an_hour_by_default_and_the_clock_follows():
     world = make()
+    world.run(30)
+    assert world.tick == 30
+    assert world.simulated_seconds == 30 * 3600.0
+    assert world.elapsed == "1d 06:00:00"
+
+
+def test_a_one_second_tick_still_works():
+    world = make(time_scale=TimeScale(seconds_per_tick=1.0))
     world.run(3725)
     assert world.tick == 3725
     assert world.simulated_seconds == 3725.0
@@ -255,7 +263,7 @@ def test_a_willing_pair_conceives_and_the_litter_arrives_after_the_gestation(sur
 def test_the_gestation_runs_on_the_reference_clock_not_the_tick_count(sure_conception):
     hourly = hourly_world()
     _, slow = conceived(hourly)
-    daily = hourly_world(time_scale=TimeScale(seconds_per_tick=24 * 3600.0))
+    daily = hourly_world(time_scale=TimeScale(seconds_per_tick=24 * 3600.0), mating_reach=50.0)
     _, quick = conceived(daily)
     assert hourly.dt == 1.0 and daily.dt == 24.0
     assert quick.traits.pregnancy.remaining == slow.traits.pregnancy.remaining  # same litter
@@ -473,7 +481,7 @@ def test_a_plant_ages_by_the_hour_whatever_the_tick():
     hourly.step()
     assert not week.is_alive and week.id not in {p.id for p in hourly.plants}
 
-    slow = make(day_cycle=None)  # one-second ticks: a week is far away
+    slow = make(day_cycle=None, time_scale=TimeScale(seconds_per_tick=1.0))  # a week is far away
     plant = slow.add_plant(plant_dna(longevity="000", growth_rate="3333", toxicity="0000"), HERE)
     slow.run(500)
     assert plant.traits.lived_ticks == pytest.approx(500 / 3600)

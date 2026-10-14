@@ -21,9 +21,10 @@ sequence of calls always give the same world (``state_digest`` shows it).
 A child's starting energy and a seed's starting biomass come out of its parents (REPRO.5, REPRO.8),
 and a litter is born only if both parents can afford it (TRAIT.5). Animals age, burn energy, heal
 and carry young per reference tick (an hour of simulated time), scaled by the world's tick length:
-a tick of ``seconds_per_tick`` is ``seconds_per_tick / 3600`` of that clock. Movement and grazing
-are per tick and not scaled yet (WORLD.7). Attacking prey and acting on the other brain outputs are
-BRAIN.10.
+a tick of ``seconds_per_tick`` is ``seconds_per_tick / 3600`` of that clock (``World.dt``). So are
+movement, turning, grazing, the plants' growth and upkeep and the energy a sleeper regains (WORLD.7):
+every rate in the code is "per reference tick", and the one-hour tick the numbers were set for is the
+default. Attacking prey and acting on the other brain outputs are BRAIN.10.
 """
 
 from __future__ import annotations
@@ -98,7 +99,8 @@ class WorldConfig:
     time_scale: TimeScale = field(default_factory=TimeScale)
     seed: int = 0
     graze_amount: float = 5.0
-    """Biomass an animal can take from a plant in one tick."""
+    """Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer
+    tick takes proportionally less or more."""
     mating_reach: float = 3.0
     """Two animals mate only if their centres are this close or closer."""
     birth_scatter: float = 1.0
@@ -389,14 +391,14 @@ class World:
             if not animal.is_alive:
                 continue
             animal.heading = wrap_angle(
-                animal.heading - decision.turn * animal.traits.base_turn_rate
+                animal.heading - decision.turn * animal.traits.base_turn_rate * dt
             )
-            step_length = decision.speed * animal.traits.current_max_speed
+            step_length = decision.speed * animal.traits.current_max_speed * dt
             animal.position = self.bounds.clamp(
                 animal.position + Vec.from_angle(animal.heading, step_length)
             )
             if decision.eats_or_attacks:
-                self._graze(animal)
+                self._graze(animal, dt)
 
         # 3. Mate, then deliver the litters that are due.
         self._refresh_animal_index()
@@ -554,7 +556,7 @@ class World:
         for animal in self.animals:
             self._animal_index.insert(animal.id, animal.position, animal.radius)
 
-    def _graze(self, animal: Animal) -> None:
+    def _graze(self, animal: Animal, dt: float) -> None:
         reach = animal.radius + self.max_canopy
         best: Plant | None = None
         best_distance = math.inf
@@ -566,8 +568,8 @@ class World:
             return
         if animal.traits.inspect_food(best.traits.toxicity, self.rng):
             return  # it tasted the poison and refused
-        eaten, toxicity = best.traits.graze(self.config.graze_amount)
-        animal.traits.feed(eaten, is_meat=False, toxicity=toxicity)
+        eaten, toxicity = best.traits.graze(self.config.graze_amount * dt)
+        animal.traits.feed(eaten, is_meat=False, toxicity=toxicity, dt=dt)
 
     def _mate(self, animals: list[Animal]) -> int:
         """Pair the willing animals off and try each pair. Returns the matings that took."""

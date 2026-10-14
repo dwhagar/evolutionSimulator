@@ -67,7 +67,7 @@ class BodyRules:
     gut_cost: float = 0.06
     """Upkeep of the gut: ``gut_cost * (herbivore_eff ** 2 + carnivore_eff ** 2)``."""
     kinetic_burn: float = 0.35
-    """Energy per tick moving at full speed per unit of mass, times the speed ratio squared."""
+    """Energy per reference tick moving at full speed per unit of mass, times the speed ratio squared."""
     speed_floor: float = 0.3
     """Top speed at no vitality is this share of the base speed (the rest scales with vitality)."""
     sense_floor: float = 0.4
