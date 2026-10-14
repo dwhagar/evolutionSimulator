@@ -12,7 +12,7 @@ question 3.
 from evolution_simulator.world import World, WorldConfig, Bounds, TimeScale
 
 world = World(WorldConfig(seed=7, bounds=Bounds((1000, 1000)), time_scale=TimeScale.from_preset("hour")))
-world.populate(animals=50, plants=300)   # random genomes at random places
+world.populate(animals=50, plants=300)   # random bodies with the seeded brain, at random places (seeded=False: random brains)
 report = world.run(1000)                 # 1000 ticks; the report sums births and deaths
 print(world.elapsed, len(world.animals), len(world.plants))
 ```
