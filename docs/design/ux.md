@@ -298,8 +298,8 @@ dependencies (a test checks that no core module names Qt or numpy).
 `evolution_simulator.viewer` is the PySide6 window, behind the `gui` extra (`pip install
 "evolution-simulator[gui]"`: PySide6, numpy, pyqtgraph). The core never imports it (the isolation test
 skips this package and still checks that `viewer.backend` and `viewer.app` load without Qt).
-`evolution-simulator-gui` or `python -m evolution_simulator.viewer` opens it, on `FakeSimulation` by
-default and the real world with `--world` (in this process, until UX.7 and UX.17 exist).
+`evolution-simulator-gui` or `python -m evolution_simulator.viewer` opens it: on the real world in its
+own process by default (UX.33, UX.36), on `FakeSimulation` with `--fake`.
 
 - **Backend.** The window talks to a `Backend` (`send(command)`, `poll() -> Batch`, `status`) and never
   to a `Session`. `LocalBackend` runs a `Session` in the same process; UX.7's client fits the same two
@@ -519,10 +519,16 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 ### As built: the window over the process host (`UX.33`)
 
 - **`ProcessBackend`** (`viewer/process_backend.py`, no Qt) is the `Backend` over a `SimClient`
-  (a `ProcessClient` unless given one). `--world` now uses it, so the window answers however fast the
-  simulation runs; `--in-process` keeps the old in-process world for debugging, `--process` puts the
-  made-up world in a process too, and the default (the made-up world) and the tests still use
-  `LocalBackend`.
+  (a `ProcessClient` unless given one). The real world uses it, so the window answers however fast the
+  simulation runs; `--in-process` keeps the world in the window's process for debugging, `--fake` shows
+  the made-up world there, `--fake --process` puts that in a process too, and the tests use `LocalBackend`.
+  (`--world`, the old way to ask for the real world, is accepted and does nothing.)
+- **What a plain launch does (`UX.36`).** It opens the newest saved run that has a checkpoint
+  (`ResumeSpec`; the `RunManager` adopts it as the current run, so Save run now checkpoints it), and with
+  none saved starts a new world with the default founders (seed 0, 120 animals, 600 plants, unsaved until
+  Save run now) and opens the New run panel so the founders can be changed. `--new`, `--seed`, `--animals`,
+  `--plants`, `--fake` and `--in-process` start a new world and leave the saved runs alone. The Windows
+  program's plain double-click is this same launch.
 - **Starting.** `starting` is true until the host's `Ready`; the status bar says "Starting the
   simulation", `ViewerController.starting` and `backend_ready` follow it, and commands sent meanwhile wait
   in the pipe. `Batch` gained `rejected` (text of commands the host refused, which the controller emits as

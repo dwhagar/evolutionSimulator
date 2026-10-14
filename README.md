@@ -23,10 +23,24 @@ python -m evolution_simulator list --out runs/
 
 Each run is a folder with its settings, history and checkpoints; see [docs/design/ux.md](docs/design/ux.md).
 
+## The window
+
+```bash
+pip install -e ".[gui]"
+python -m evolution_simulator.viewer            # the real world, in its own process
+python -m evolution_simulator.viewer --fake     # a made-up world, for trying the screens
+```
+
+A plain launch opens the newest saved run, or, with none saved, a new world with the default
+founders and the New run panel to change them. `--new` (or `--seed`, `--animals`, `--plants`) starts a
+new world even when runs are saved, and `--in-process` keeps the simulation in the window's own
+process, for debugging.
+
 ## Windows download
 
 A build for Windows is made on request (the "Package Windows" workflow in the Actions tab), as a zip
-named `evolutionSimulator-<version>-win64.zip`. Unzip the whole folder and run `evolutionSimulator.exe`.
+named `evolutionSimulator-<version>-win64.zip`. Unzip the whole folder and run `evolutionSimulator.exe`;
+it opens the real world, the same as a plain launch above.
 The program is not signed with a code-signing certificate, which costs money every year, so Windows
 SmartScreen may say "Windows protected your PC" the first time: choose "More info", then "Run anyway".
 The warning says the publisher is unknown, nothing more, and the source is all here to read. The zip

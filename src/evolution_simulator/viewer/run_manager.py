@@ -208,6 +208,15 @@ class RunManager(QObject):
         self.message.emit(f"Saved {self.current_run.name}" + (f". {warning}" if warning else ""))  # type: ignore[union-attr]
         return info
 
+    def adopt(self, run: Run) -> None:
+        """Make ``run`` the current run without touching the world: the simulation behind the
+        controller was started on it (a launch that opened the newest saved run)."""
+        self._release()
+        self.current_run = run
+        self._seen_written = 0
+        self._timer.start()
+        self._after_change()
+
     def _save_hosted(self, hosted: ProcessBackend, name: str | None) -> CheckpointInfo:
         """Ask the simulation process to start a run or checkpoint it, and wait for its answer. The
         process autosaves from then on."""

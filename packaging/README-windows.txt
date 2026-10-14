@@ -2,7 +2,11 @@ Evolution Simulator (Windows)
 =============================
 
 To start: unzip this whole folder somewhere (not inside the zip), then double-click
-evolutionSimulator.exe.
+evolutionSimulator.exe. It opens a real world that runs in its own process, so the window stays
+responsive however fast time runs; a moment passes with "Starting the simulation" at the bottom
+before the world appears. The first time, the "New run" panel is open on the left so you can
+choose how many animals and plants to start with. Save from File > Save run now; the next launch opens
+the newest saved run (File > Saved runs lists the others; File > New run starts a fresh world).
 
 Windows may say "Windows protected your PC" the first time. The program is not signed with a
 certificate, because certificates cost money every year and this is a free, public-domain project.
