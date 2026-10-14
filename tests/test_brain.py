@@ -187,6 +187,41 @@ def test_active_connections_counts_weights_above_the_threshold_not_biases():
     assert Brain.zeros(shape).active_connections() == 0
 
 
+# --- the dead zone (BRAIN.21) --------------------------------------------------
+
+
+def test_a_weight_inside_the_dead_zone_does_nothing_but_biases_still_count():
+    shape = BrainShape(2, 2, 1)
+    values = [0.4, 0.5, 0.1, 0.3] + [-0.2, -0.5, 0.25, 0.0] + [0.7]
+    zone = Brain.from_values(shape, values, dead_zone=0.25)
+    # the same brain with the weights at or below 0.25 set to zero by hand
+    by_hand = Brain.from_values(shape, [0.4, 0.5, 0.0, 0.3, -0.2, -0.5, 0.0, 0.0, 0.7])
+    for x in ([0.0, 0.0], [1.0, -1.0], [0.3, 0.9]):
+        assert zone.decide(x) == by_hand.decide(x)
+    assert zone.active_connections() == 3  # 0.5, 0.3, -0.5; 0.25 is on the line, so off
+    assert zone.active_connections(0.4) == 2
+    biases_only = Brain.from_values(shape, [0.4, 0.0, 0.1, 0.0, -0.2, 0.0, 0.2, 0.0, 0.7], 0.25)
+    assert biases_only.active_connections() == 0
+    assert biases_only.decide([1.0, 1.0]) == biases_only.decide([-1.0, 0.0])
+    assert biases_only.decide([1.0, 1.0]) != Brain.zeros(shape).decide([1.0, 1.0])
+
+
+def test_the_dead_zone_does_not_change_the_numbers_a_brain_reports():
+    shape = BrainShape(2, 2, 1)
+    values = [0.4, 0.5, 0.1, 0.3, -0.2, -0.5, 0.2, 0.0, 0.7]
+    brain = Brain.from_values(shape, values, dead_zone=0.25)
+    assert brain.to_values() == tuple(values)
+    assert Brain.from_values(shape, brain.to_values(), brain.dead_zone) == brain
+    assert brain != Brain.from_values(shape, values)  # it behaves differently
+    assert Brain.from_values(shape, values).dead_zone == 0.0  # off unless asked for
+
+
+def test_the_dead_zone_must_be_a_sensible_number():
+    for bad in (-0.1, math.nan, math.inf):
+        with pytest.raises(ValueError):
+            Brain.from_values(BrainShape(1, 1, 1), [0.0] * 4, dead_zone=bad)
+
+
 # --- the adapter ------------------------------------------------------------
 
 
