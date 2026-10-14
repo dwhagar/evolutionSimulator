@@ -18,7 +18,13 @@ pytest
 ```
 src/evolution_simulator/   package source
 tests/                     pytest test suite
+docs/                      roadmap, design, research, archive
+scripts/version.py         prints the current MAJOR.minor.build version
 ```
+
+## Versioning
+
+Versions are `MAJOR.minor.build`, and every commit bumps the build. See [docs/versioning.md](docs/versioning.md).
 
 ## Continuous integration
 
