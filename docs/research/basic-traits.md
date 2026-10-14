@@ -172,8 +172,9 @@ Filed as GitHub issues so they can be answered there. They are the points where 
 - [#9 Behavior as genes or as a decision rule/brain?](https://github.com/dwhagar/evolutionSimulator/issues/9)
 - [#10 World model: grid or continuous space, and what is one time step?](https://github.com/dwhagar/evolutionSimulator/issues/10)
 - [#11 How should aging and lifespan work (and are climate traits in scope)?](https://github.com/dwhagar/evolutionSimulator/issues/11)
+- Follow-ups from the prototype review: [#16 Should longevity carry a real cost?](https://github.com/dwhagar/evolutionSimulator/issues/16) and [#17 What should fertility do, and should reproduction have its own genes?](https://github.com/dwhagar/evolutionSimulator/issues/17)
 
-The prototypes uploaded later (`dna.py`, `trait.py`) already answer most of these implicitly. Section 9 lists what they imply; the recommendations in the issues are superseded by that where they differ, pending confirmation on each issue.
+The prototypes uploaded later (`dna.py`, `trait.py`) answered #6, #7, #8, #9 and #11, which were closed with a note pointing to section 9 (reopen any that was closed in error). #10 (world model) is still open, and #16 and #17 are new follow-ups.
 
 ## 8. Further reading
 
@@ -217,19 +218,39 @@ Prototype files uploaded to the Research 2 thread. They were read as-is and not 
 
 Beyond the research: acoustic signalling (`encoder_fidelity`), sex strategies, toxicity and taste for plants.
 
-### 9.3 Observations worth settling before Foundations 1
+### 9.3 Observations, and how they line up with the DNA research
 
-These are things I would fix or decide when the code becomes real, not criticisms of the prototype.
+The DNA side is covered in `dna-and-reproduction.md` (Research 1). This table keeps one position on each point so the two notes do not disagree. Where the DNA note owns the decision, this note follows it.
 
-1. **Crossover and mutation work on single digits, but genes are four-digit numbers.** Each gene is a big-endian base-4 number, so the first digit is worth 64/255 of the range. A per-digit uniform crossover mixes digits from both parents inside one gene, so the child's value can land far from both parents (parents at 0.0 and 1.0 can produce 0.75). A point mutation in the first digit moves the value by a quarter to three quarters of the range, and the `mod 4` wraps around from 3 to 0. Options: crossover at gene boundaries (whole genes inherited), use a Gray code so adjacent values differ by one digit, or accept it as deliberate. This overlaps with Research 1.
-2. **Sex is a single inherited digit.** It comes from a random parent and can mutate, so nothing keeps the sexes balanced. In a small population one sex can drift out and the population dies out. Assigning sex at birth (or a simple sex-chromosome rule) avoids that.
-3. **Randomness is global.** `dna.py` and `inspect_food` use the `random` module directly, so runs cannot be seeded or reproduced and tests will be flaky. Passing a `random.Random` instance in is a small change that pays off.
-4. **Unused gene: `fertility`.** It occupies four digits and has no effect. Either wire it to offspring count or investment, or drop it.
-5. **Energy can go negative at mating.** `consume_mating_cost` subtracts a share of max energy without checking that the animal has it. The organism only dies on the next metabolism tick. Probably want a precondition in `flag_wants_mate` (it does check energy ratio, so it may be fine in practice).
-6. **Aging is cheap to evolve.** Repair costs `0.12*somatic_maint` per tick against a wear reduction of up to 4.5 times, so selection will push `somatic_maint` to the maximum unless reproduction or another cost punishes long life. A cost that scales with the value, or a reproductive penalty for repair, is the usual fix (the disposable soma idea).
-7. **Plants have no senescence.** They die only from damage or starvation. Fine for a first version, noted so it is deliberate.
-8. **Structure.** Both files use a flat import (`from dna import ...`); in the package they will become `evolution_simulator.dna` and `.traits`. `typing.Optional`, `List` and `Tuple` can be the built-in forms on Python 3.12.
+| Observation | Owner | Position |
+|---|---|---|
+| Crossover mixes digits inside a gene, so children often match neither parent | DNA note, [#14](https://github.com/dwhagar/evolutionSimulator/issues/14) | Follow it: swap whole genes, about one cut point per chromosome. |
+| First digit of a gene is worth 64/255 of the range, so mutation size is very uneven | DNA note, [#15](https://github.com/dwhagar/evolutionSimulator/issues/15) | Follow it: keep the encoding for now, add a per-position mutation weight setting. |
+| Mutation rate is per digit, so animals and plants differ | DNA note | Follow it: define the setting as expected mutations per genome. |
+| Global `random` makes runs unrepeatable | DNA note | Follow it: every random choice takes an injected `random.Random`. This includes `inspect_food` in `trait.py`. |
+| Sex is one inherited digit with no balancing | DNA note ([#4](https://github.com/dwhagar/evolutionSimulator/issues/4)) and the simulation | Follow it: the simulation, not DNA, decides who may mate. If one of each type is required, a 1:1 ratio tends to emerge, but small populations can still lose a sex. |
+| `fertility` gene is decoded but unused | This note, [#17](https://github.com/dwhagar/evolutionSimulator/issues/17) | Default is to remove it until it has a job. |
+| Longevity is cheap, so `somatic_maint` goes to its maximum | This note, [#16](https://github.com/dwhagar/evolutionSimulator/issues/16) | Default is to keep and tune after the first runs. |
+| Plants have no senescence | This note | Fine for a first version; deliberate. |
+| Initial state: `PlantTraits` never calls `_refresh_vitality_dependents()`, and `AnimalTraits.__init__` never calls `_update_needs_and_drives()` | This note (noticed by both) | Call both once at the end of `__init__` so flags and vitality are correct from birth. |
+| `consume_mating_cost` can take energy below zero | This note | Add a precondition or clamp; the organism otherwise dies on the next tick. |
+| Imports and typing | Both | Relative imports inside the package; built-in `list`, `tuple` and `X | None` on Python 3.12. |
 
-### 9.4 Suggestion for the trait object
+### 9.4 Contract between the DNA object and the trait object
 
-The prototype repeats the same two steps for every trait: a gene slice, then a hand-written formula in `__init__`. The trait record described in section 6 (name, range, scale, default, mutation step) would let the DNA class derive the slice offsets and the normalized accessors from one table instead of 16 hand-written properties, and make the cost constants easy to find. That would be the first job for Foundations 1.
+This follows the interface in the DNA note's "What the DNA object must provide" section.
+
+- **DNA does not know trait names.** Today `AnimalDNA` has properties named `speed`, `fear` and so on. In the scaffolding the DNA object exposes alleles by stable gene ID and the decode API (`get_slice`, `decode_int`, `decode_normalized`); nothing else.
+- **Traits declare what they read.** A trait definition (section 6) lists the gene IDs it depends on, its range and scale, and its mutation step size. DNA gets step sizes from the trait definitions, not from constants.
+- **One gene-to-trait map.** It reads alleles and produces the phenotype, so one gene can affect several traits (size already does) and several genes can affect one (polygeny) without changing DNA.
+- **Gene layout is data.** A table of `GeneSpec(name, start, length)` per species replaces the 16 hand-written properties. The same table can feed the trait definitions, so adding a trait is a one-line change.
+- **Phenotype is computed once at birth** from DNA, as in the prototype. Vitality, health and energy are runtime state kept separately.
+- **All constants in one place.** The `k_*` constants and exponents from section 4, plus the hand-written costs from the prototype, live in one config object.
+
+### 9.5 What Foundations 1 builds from this note
+
+1. `traits` package with `BaseTraits`, `AnimalTraits` and `PlantTraits` ported from the prototype: same formulas, same behavior, tests that lock in the current numbers.
+2. Trait definitions as data (name, gene IDs, range, scale, mutation step), and a config object for the cost constants.
+3. Fixes from the table in 9.3 that are not open questions: initial state, mating cost precondition, injected random generator, relative imports.
+4. Defaults for the open issues until answered: remove `fertility` (#17), keep `somatic_maint` as is (#16), world model unspecified (#10).
+5. Tests: phenotype within range, derived values monotonic in the gene value, the energy budget is non-negative for the reference organism, a dead organism clears all flags, and the same seed gives the same result.
