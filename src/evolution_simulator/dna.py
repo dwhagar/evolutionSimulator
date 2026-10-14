@@ -29,6 +29,13 @@ DEFAULT_MUTATION_RATE: float = 0.01
 DEFAULT_SEGMENT: str = "body"
 """Segment a gene belongs to unless it names another."""
 
+DEFAULT_MEAN_CUTS: float = 1.0
+"""Expected crossover cut points per genome (``crossover_linked``)."""
+
+DEFAULT_GENE_FIDELITY: float = 0.9
+"""How closely crossover follows whole genes: the chance that a cut falls exactly between genes.
+1.0 always cuts between genes; 0.0 always cuts somewhere inside a gene."""
+
 
 @dataclass(frozen=True)
 class GeneSpec:
@@ -500,6 +507,56 @@ class DNA:
             digits.extend(source[gene.start : gene.end])
         return type(self)(self._layout, digits)
 
+    def crossover_linked(
+        self,
+        partner: DNA,
+        rng: random.Random,
+        mean_cuts: float = DEFAULT_MEAN_CUTS,
+        gene_fidelity: float = DEFAULT_GENE_FIDELITY,
+    ) -> Self:
+        """Cut-point crossover that follows genes, the default for reproduction (``DNA.7``).
+
+        The genome is read start to finish, taking digits from one parent until a cut point, then
+        from the other, and so on. The first parent is chosen at random.
+
+        * ``mean_cuts`` is the expected number of cut points in the whole genome. A value of 1 or
+          more always makes at least one cut (as meiosis does) and averages ``mean_cuts``; below 1 it
+          is the chance of making a single cut.
+        * Cuts normally fall between units: between genes, or between groups inside a gene block (a
+          hidden neuron stays whole). ``gene_fidelity`` is the chance that a cut does so. With the
+          remaining chance the cut lands at a random digit inside the unit that follows it, so that
+          one unit is a digit-level mix of both parents, which is the slightly odd crossover the
+          owner asked for. 1.0 keeps every unit whole; 0.0 makes every cut inside a unit.
+
+        Neighbouring genes tend to travel together, so the settings also set how strong linkage is.
+        """
+        self._require_compatible(partner)
+        if mean_cuts < 0:
+            raise ValueError(f"Mean cuts must not be negative, got {mean_cuts}.")
+        if not 0.0 <= gene_fidelity <= 1.0:
+            raise ValueError(f"Gene fidelity must be between 0 and 1, got {gene_fidelity}.")
+        units = self._layout.units
+        boundaries = len(units) - 1
+        count = min(boundaries, _cut_count(rng, mean_cuts))
+        positions: list[int] = []
+        for index in rng.sample(range(1, boundaries + 1), count):
+            start, end = units[index]
+            if end - start > 1 and rng.random() >= gene_fidelity:
+                positions.append(rng.randint(start + 1, end - 1))
+            else:
+                positions.append(start)
+        positions.sort()
+        source, other = (self._sequence, partner._sequence)
+        if rng.random() < 0.5:
+            source, other = other, source
+        digits: list[int] = []
+        previous = 0
+        for position in [*positions, self.length]:
+            digits.extend(source[previous:position])
+            source, other = other, source
+            previous = position
+        return type(self)(self._layout, digits)
+
     def crossover_by_unit(self, partner: DNA, rng: random.Random) -> Self:
         """Block-aware crossover: each whole unit comes from either parent with equal chance.
 
@@ -534,13 +591,14 @@ class DNA:
     ) -> Self:
         """Single reproduction entry point.
 
-        With no partner this clones and mutates. With a partner it crosses over (uniform per-digit
-        unless ``crossover`` supplies another strategy, for example ``DNA.crossover_by_unit``) and
-        then mutates. Mutation settings are as for ``mutated``.
+        With no partner this clones and mutates. With a partner it crosses over (``crossover_linked``
+        with its default settings, unless ``crossover`` supplies another strategy, for example
+        ``functools.partial(DNA.crossover_linked, mean_cuts=2, gene_fidelity=1.0)`` or
+        ``DNA.crossover``) and then mutates. Mutation settings are as for ``mutated``.
         """
         if partner is None:
             return self.clone_with_mutation(rng, mutation_rate, mutations_per_segment)
-        strategy = crossover if crossover is not None else type(self).crossover
+        strategy = crossover if crossover is not None else type(self).crossover_linked
         child = strategy(self, partner, rng)
         return child.mutated(rng, mutation_rate, mutations_per_segment)
 
@@ -564,3 +622,19 @@ class DNA:
                 f"Cannot combine distinct DNA species: {self._layout.name!r} vs "
                 f"{other._layout.name!r}"
             )
+
+
+def _cut_count(rng: random.Random, mean_cuts: float) -> int:
+    """Number of cut points. At least one when ``mean_cuts`` >= 1, averaging ``mean_cuts``."""
+    if mean_cuts <= 0:
+        return 0
+    if mean_cuts < 1:
+        return 1 if rng.random() < mean_cuts else 0
+    extra = mean_cuts - 1.0
+    count = 1
+    if extra > 0:
+        t = rng.expovariate(extra)
+        while t < 1.0:
+            count += 1
+            t += rng.expovariate(extra)
+    return count

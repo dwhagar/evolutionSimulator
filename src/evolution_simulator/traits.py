@@ -14,7 +14,14 @@ import random
 from collections.abc import Mapping
 
 from evolution_simulator.brain import DEFAULT_SHAPE, Brain
-from evolution_simulator.brain_adapter import BrainDecision, Percepts, build_inputs, decode_outputs
+from evolution_simulator.brain_adapter import (
+    BrainDecision,
+    Percepts,
+    Temperament,
+    Wanderer,
+    build_inputs,
+    decode_outputs,
+)
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
@@ -137,6 +144,7 @@ class AnimalTraits(BaseTraits):
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
         # The brain is read from the genome once at birth, like the body.
         self.brain: Brain = Brain.from_values(DEFAULT_SHAPE, dna.values("brain"))
+        self.wanderer: Wanderer = Wanderer()
         self.brain_upkeep: float = (
             BRAIN_NEURON_COST * self.brain.neuron_count
             + BRAIN_CONNECTION_COST * self.brain.active_connections(BRAIN_ACTIVE_THRESHOLD)
@@ -253,12 +261,21 @@ class AnimalTraits(BaseTraits):
         if self.is_alive:
             self._update_needs_and_drives()
 
-    def think(self, percepts: Percepts) -> BrainDecision:
+    def _effective_fear(self) -> float:
+        """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down."""
+        return self.base_fear_weight * (1.2 - (0.5 * self.vitality))
+
+    def think(self, percepts: Percepts, rng: random.Random | None = None) -> BrainDecision:
         """Ask the brain what to do given what the world reports.
 
         Adds this animal's own state (energy, health, vitality, readiness to mate) to the world's
-        ``percepts`` and returns the brain's decision. It only reads state: acting on the decision
-        (and replacing the fixed-rule flags with it) belongs to the world loop.
+        ``percepts`` and returns the brain's decision. Its behaviour genes bend what the brain sees:
+        aggression (as it currently acts, after hunger, crowding and size) scales how close prey
+        looks and fear scales how close a threat looks (``BRAIN.14``). Pass ``rng`` to turn on the wander fallback
+        (``BRAIN.16``): when the animal senses nothing or its brain outputs are all quiet, the
+        decision comes back with a random turn and ``wandering`` set. Without ``rng`` the brain's
+        decision is returned as is. It only reads state, apart from the wander turn it remembers:
+        acting on the decision (and replacing the fixed-rule flags with it) belongs to the world loop.
         """
         inputs = build_inputs(
             energy_ratio=self.current_energy / self.max_energy,
@@ -266,8 +283,14 @@ class AnimalTraits(BaseTraits):
             vitality=self.vitality,
             ready_to_mate=self.mating_cooldown == 0,
             percepts=percepts,
+            temperament=Temperament(
+                aggression=self.current_aggression, fear=min(1.0, self._effective_fear())
+            ),
         )
-        return decode_outputs(self.brain.decide(inputs))
+        decision = decode_outputs(self.brain.decide(inputs))
+        if rng is not None:
+            decision = self.wanderer.apply(decision, percepts, rng)
+        return decision
 
     def _update_needs_and_drives(self) -> None:
         energy_ratio = self.current_energy / self.max_energy
@@ -291,7 +314,7 @@ class AnimalTraits(BaseTraits):
 
         # Fear vs Aggression Fight-or-Flight
         if self.env_threat_detected:
-            effective_fear = self.base_fear_weight * (1.2 - (0.5 * self.vitality))
+            effective_fear = self._effective_fear()
             if effective_fear > (self.current_aggression * size_confidence):
                 self.flag_in_fear = True
                 self.flag_wants_to_attack = False
