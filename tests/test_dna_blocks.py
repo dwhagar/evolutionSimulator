@@ -164,7 +164,7 @@ def test_mutation_defaults_do_not_change_layout_identity():
 
 
 def test_animal_layout_version_covers_the_brain():
-    assert ANIMAL_LAYOUT.version == 6
+    assert ANIMAL_LAYOUT.version == 7
     old = {"layout": "animal", "layout_version": 1, "sequence": "0" * 65}
     with pytest.raises(ValueError):
         dna_from_dict(old)

@@ -3,6 +3,7 @@
 import random
 
 import pytest
+from genome_support import dna_from_v6
 
 from evolution_simulator import traits as traits_module
 from evolution_simulator.brain import DEFAULT_BLUEPRINT, DEFAULT_SHAPE, Brain
@@ -33,7 +34,7 @@ OPERATING = (
     "0" * 16
 )  # brain_gain, reaction_time, curiosity, learning_rate: gain 0.5, think every tick
 BRAIN = "".join(str((i * 7 + i // 5) % 4) for i in range(908))  # fixed, varied, not saturated
-PINNED = DNA(ANIMAL_LAYOUT, BODY + OPERATING + BRAIN)
+PINNED = dna_from_v6(BODY + OPERATING, BRAIN)
 FAINT = (
     "13" * 454
 )  # every value is level 7 of 16: -0.133, so every gate is off and weights are dead

@@ -12,7 +12,7 @@ The numbers are starting values to tune, not measurements of the running simulat
 > **Built (animals).** `REPRO.8` built everything for animals in this note on top of
 > [#74](https://github.com/dwhagar/evolutionSimulator/pull/74): the four genes and the sex digit, `recovery`
 > (`TRAIT.7`), pregnancies, absolute-day durations and per-hour charging, with the constants named as in the
-> table at the end. Animal layout version 5, 472 digits. Differences from the note: the pregnancy list is
+> table at the end. Animal layout version 5 then (1,000 digits; version 7 and 1,004 digits after `SENSE.16` and `DNA.15`, which also made the litter size follow the `litter_capacity` cluster). Differences from the note: the pregnancy list is
 > kept on the bearers, not in a separate world list; the protective effect of `parenting` and the "own young"
 > channel wait for `SENSE.14`; a father who has died pays nothing and gives nothing at the birth; the
 > costs of drive (wear, upkeep) follow the gene, while the threshold, boldness and brain input follow the
@@ -388,6 +388,33 @@ What it shows:
   nothing to pay for. The design starts parenting at 0 on purpose, so that evolution has to find the
   benefit. This check cannot show whether it does; it needs predation, newborn vulnerability and the
   parent staying near its young (`SENSE.14`).
+
+### Re-check after the clusters (`DNA.15`)
+
+`DNA.15` regrouped the genes, so the genome is read in a different order and crossover keeps the
+reproduction genes more closely linked. Four runs of 36,000 ticks on the clustered layout (before `SENSE.16`'s acuity gene and seeded senses, which the chemostat does not use), and two on the unclustered layout
+with the same seeds for comparison (the seeds give different founders on the two layouts, so only the pattern
+compares). `litter_capacity` also makes the litter follow body size and recovery now.
+
+| Layout and seed | `fertility` | `repro_cooldown` | `repro_drive` | `recovery` | `parenting` | `somatic_maint` | Population |
+|---|---|---|---|---|---|---|---|
+| clustered, seed 1 | 0.75 to 0.57 | 0.51 to 0.59 | 0.52 | 0.51 to 0.26 | 0.01 | 0.48 to 0.09 | 114 |
+| clustered, seed 2 | 0.75 to 0.70 | 0.51 to 0.52 | 0.51 to **0.04** | 0.51 to 0.25 | 0.01 | 0.44 to 0.22 | 168 |
+| clustered, seed 3 | 0.75 to 0.55 | 0.51 | 0.47 | 0.51 to 0.28 | 0.01 | 0.38 | 119 |
+| clustered, seed 4 | 0.75 to 0.58 | 0.51 to 0.59 | 0.55 | 0.51 to **0.02** | 0.01 | 0.16 | 178 |
+| unclustered, seed 3 | 0.75 to 0.60 | 0.53 | 0.51 to 0.29 | 0.51 | 0.02 | 0.13 | 131 |
+| unclustered, seed 4 | 0.75 to 0.24 | 0.52 | 0.52 | 0.51 to 0.24 | 0.01 | 0.17 | 149 |
+
+The pattern holds: `fertility` and `repro_cooldown` stay clear of the ends in every run. What changes from
+run to run is which of the two genes that are only a cost here, `repro_drive` and `recovery`, drifts down, and
+how far. In two of the four new runs one of them reached the bottom (`repro_drive` in seed 2 within about 6,000
+ticks, `recovery` in seed 4), where the old layout only got as far as 0.29 and 0.24 in its two runs. That fits
+selection on one gene dragging its neighbours along when they are inherited together, but six runs do not prove
+it. In the chemostat both genes are only a cost (upkeep and wear for the drive, upkeep for healing), because
+a meeting happens at a fixed chance whatever the drive, and injuries are rare. In the world, mate scarcity and
+real injury should pay for them; this is the first thing to read when the check can run there. If it still
+happens, the first remedy is to leave the clusters as tags (as built) and not set `cluster_units`, and the
+second is a floor on the gene's cost.
 
 So the result is: nothing runs to the top, and the one gene at the bottom is there because the chemostat
 only stands in for the pressures that should hold it up. Repeat the check in the world once populations

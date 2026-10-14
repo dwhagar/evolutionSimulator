@@ -335,7 +335,7 @@ def test_an_animal_that_does_not_seek_a_mate_is_left_alone(sure_conception):
 
 def test_the_animal_cap_limits_the_litter_and_it_pays_only_for_those_born(sure_conception):
     world = hourly_world(max_animals=3)
-    _, mother = conceived(world, fertility="333")  # a litter of 8
+    _, mother = conceived(world, fertility="333", size="3333", recovery="333")  # a litter of 8
     assert mother.traits.pregnancy.litter == 8
     due(world, mother)
     assert world.step().animal_births == 1
@@ -385,7 +385,7 @@ def test_a_first_generation_starts_with_large_litters_and_no_parenting():
         traits = animal.traits
         assert traits.phenotype["fertility"] == pytest.approx(0.75, abs=0.02)
         assert traits.phenotype["care_fraction"] == pytest.approx(0.10)
-        assert traits.litter_size == 6
+        assert 5 <= traits.litter_size <= 7  # fertility 0.75, scaled 0.8 to 1.2 by body size
         assert traits.phenotype["repro_drive"] == pytest.approx(0.5, abs=0.02)
         assert traits.phenotype["recovery"] == pytest.approx(0.5, abs=0.02)
 

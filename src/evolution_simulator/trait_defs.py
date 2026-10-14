@@ -6,14 +6,19 @@ a genome through a set gives the phenotype's primary values; DNA never sees trai
 a trait is one new row.
 
 Several traits may read the same gene (pleiotropy: ``size`` already feeds ``mass``) and one trait
-may read several genes (polygeny: the mean of the genes' values). Derived quantities that combine
-traits, such as speed damped by size, stay as functions in ``traits.py``.
+may read several genes (a cluster, ``DNA.15``). A cluster is read by its ``Combine`` rule: the
+weighted mean of the genes (polygeny), or one main gene whose effect modifier genes strengthen or
+weaken (epistasis). Each gene is read through dominance first, then the cluster combines them.
+Derived quantities that combine traits, such as speed damped by size, stay as functions in
+``traits.py``. A ``TraitSet`` can also list which traits drive which cost, so trade-offs can be read
+and audited (``TraitSet.explain``).
 """
 
 from __future__ import annotations
 
+import math
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from evolution_simulator.dna import Genome, GenomeLayout, position_bias_for_step
@@ -41,6 +46,13 @@ prototype's fixed 15% sits inside it. A starting range to tune."""
 DEFAULT_MUTATION_STEP: float = 0.05
 """Typical size of one mutation as a fraction of a trait's range (the research note's 5%)."""
 
+MODIFIER_SWING: float = 2.0
+"""A ``MODIFIED`` cluster scales its main gene by ``1 + MODIFIER_SWING * sum(w * (g - 0.5))`` over the
+modifier genes, so a modifier at its middle value changes nothing and one at an end changes the
+effect by up to its weight."""
+DEFAULT_MODIFIER_WEIGHT: float = 0.2
+"""A modifier gene's weight when a cluster row gives none."""
+
 
 class Scale(Enum):
     """How a gene value from 0 to 1 maps onto a trait's range."""
@@ -57,30 +69,82 @@ class Kind(Enum):
     CATEGORY = "category"  # the raw digit of a single-digit gene, ignoring range and scale
 
 
+class Role(Enum):
+    """What a gene does in a cluster."""
+
+    MAIN = "main"
+    MODIFIER = "modifier"
+
+
+class Combine(Enum):
+    """How a trait reads the genes of its cluster."""
+
+    MEAN = "mean"  # the weighted mean of the genes (polygeny)
+    MODIFIED = "modified"  # the main gene, scaled by the modifier genes (epistasis)
+
+
+@dataclass(frozen=True)
+class GeneTerm:
+    """One gene in a trait's cluster, with its role and weight.
+
+    A plain gene ID in ``TraitDef.genes`` is a term with the main role and the default weight. A
+    weight left out is 1 in a ``MEAN`` cluster and ``DEFAULT_MODIFIER_WEIGHT`` for a modifier in a
+    ``MODIFIED`` one; a modifier's weight may be negative to weaken the main gene's effect as it
+    rises. The main gene of a ``MODIFIED`` cluster has no weight.
+    """
+
+    gene: str
+    role: Role = Role.MAIN
+    weight: float | None = None
+
+    def __post_init__(self) -> None:
+        if not self.gene:
+            raise ValueError("A gene term needs a gene ID.")
+        object.__setattr__(self, "role", Role(self.role))
+        if self.weight is not None and not math.isfinite(self.weight):
+            raise ValueError(f"Gene term {self.gene!r} needs a finite weight, got {self.weight}.")
+
+
+def _weight(term: GeneTerm) -> float:
+    """A term's weight; a trait fills every weight in when it is built, so this is its value there."""
+    return 1.0 if term.weight is None else term.weight
+
+
 @dataclass(frozen=True)
 class TraitDef:
     """One trait.
 
-    ``genes`` lists the gene IDs it reads; with more than one, the mean of their values is used.
+    ``genes`` lists the genes it reads, as IDs or ``GeneTerm`` rows (after construction it holds just
+    the IDs and ``terms`` holds the resolved rows). With more than one, ``combine`` says how they
+    are read: ``MEAN`` (the default) is the weighted mean, ``MODIFIED`` is one main gene scaled by
+    the others. ``cluster`` optionally names the layout cluster all of them must belong to.
     ``mutation_step`` is the typical mutation size as a fraction of the range. It is data for the
     mutation operator: ``TraitSet.position_biases()`` turns it into the per-gene bias that
     ``DNA.mutated(gene_biases=...)`` reads, so a trait with a small step changes mostly in its low digits.
     """
 
     name: str
-    genes: tuple[str, ...]
+    genes: tuple[str | GeneTerm, ...]
     lo: float = 0.0
     hi: float = 1.0
     scale: Scale = Scale.LINEAR
     kind: Kind = Kind.CONTINUOUS
     mutation_step: float = DEFAULT_MUTATION_STEP
     description: str = ""
+    combine: Combine = Combine.MEAN
+    cluster: str | None = None
+    terms: tuple[GeneTerm, ...] = field(init=False, repr=False, compare=False)
+    """The cluster as resolved rows, with every weight filled in."""
 
     def __post_init__(self) -> None:
         if not self.name:
             raise ValueError("A trait needs a name.")
         if not self.genes:
             raise ValueError(f"Trait {self.name!r} must read at least one gene.")
+        rows = tuple(g if isinstance(g, GeneTerm) else GeneTerm(g) for g in self.genes)
+        object.__setattr__(self, "combine", Combine(self.combine))
+        object.__setattr__(self, "terms", self._resolve(rows))
+        object.__setattr__(self, "genes", tuple(term.gene for term in self.terms))
         if self.kind is Kind.CATEGORY:
             if len(self.genes) != 1:
                 raise ValueError(f"Category trait {self.name!r} must read exactly one gene.")
@@ -94,6 +158,64 @@ class TraitDef:
         if self.kind is Kind.INTEGER and (self.lo != int(self.lo) or self.hi != int(self.hi)):
             raise ValueError(f"Integer trait {self.name!r} needs whole-number bounds.")
 
+    def _resolve(self, rows: tuple[GeneTerm, ...]) -> tuple[GeneTerm, ...]:
+        """Check the cluster's rows and fill in every weight."""
+        if len({row.gene for row in rows}) != len(rows):
+            raise ValueError(f"Trait {self.name!r} reads the same gene twice.")
+        if self.combine is Combine.MEAN:
+            resolved = tuple(GeneTerm(r.gene, r.role, _weight(r)) for r in rows)
+            if any(_weight(r) <= 0 for r in resolved):
+                raise ValueError(f"Trait {self.name!r} needs positive weights for a mean.")
+            return resolved
+        mains = [r for r in rows if r.role is Role.MAIN]
+        if len(mains) != 1 or len(rows) < 2:
+            raise ValueError(
+                f"Modified trait {self.name!r} needs one main gene and at least one modifier."
+            )
+        resolved_rows = []
+        for row in rows:
+            if row.role is Role.MAIN:
+                weight = 1.0
+            else:
+                weight = DEFAULT_MODIFIER_WEIGHT if row.weight is None else row.weight
+                if weight == 0.0:
+                    raise ValueError(f"Modifier {row.gene!r} of {self.name!r} needs a weight.")
+            resolved_rows.append(GeneTerm(row.gene, row.role, weight))
+        return tuple(resolved_rows)
+
+    @property
+    def main_gene(self) -> str:
+        """The gene a ``MODIFIED`` cluster scales (the first gene of a ``MEAN`` one)."""
+        if self.combine is Combine.MODIFIED:
+            return next(t.gene for t in self.terms if t.role is Role.MAIN)
+        return self.terms[0].gene
+
+    def step_multiplier(self, gene_id: str) -> float:
+        """How much larger a change in this gene must be to move the trait by one mutation step: the
+        reciprocal of the share of the trait that gene controls. In a mean that is its share of the
+        total weight; a modifier moves the trait by at most ``MODIFIER_SWING * |weight|`` of its own
+        change, and the main gene fully."""
+        term = next(t for t in self.terms if t.gene == gene_id)
+        if self.combine is Combine.MEAN:
+            return sum(_weight(t) for t in self.terms) / _weight(term)
+        if term.role is Role.MAIN:
+            return 1.0
+        return 1.0 / min(1.0, MODIFIER_SWING * abs(_weight(term)))
+
+    def unit(self, dna: Genome) -> float:
+        """The cluster's value from 0 to 1, before it is mapped onto the trait's range. Each gene is
+        read through the genome, so dominance acts first, inside each gene; then the cluster
+        combines the genes."""
+        if self.combine is Combine.MEAN:
+            total = sum(_weight(t) for t in self.terms)
+            return sum(_weight(t) * dna.value(t.gene) for t in self.terms) / total
+        swing = 0.0
+        for t in self.terms:
+            if t.role is Role.MODIFIER:
+                swing += _weight(t) * (dna.value(t.gene) - 0.5)
+        main = dna.value(self.main_gene)
+        return min(1.0, max(0.0, main * (1.0 + MODIFIER_SWING * swing)))
+
     def from_unit(self, unit: float) -> float:
         """Map a gene value in [0, 1] onto this trait's range and scale."""
         unit = min(1.0, max(0.0, unit))
@@ -105,7 +227,7 @@ class TraitDef:
         """This trait's value for a genome."""
         if self.kind is Kind.CATEGORY:
             return dna.digit(self.genes[0])
-        unit = sum(dna.value(gene_id) for gene_id in self.genes) / len(self.genes)
+        unit = self.unit(dna)
         if self.kind is Kind.INTEGER:
             if self.scale is Scale.LOG:
                 return int(self.from_unit(unit))
@@ -113,10 +235,36 @@ class TraitDef:
         return self.from_unit(unit)
 
 
-class TraitSet:
-    """The trait table for one species, checked against that species' layout."""
+@dataclass(frozen=True)
+class TraitExplanation:
+    """What is behind one trait, for reading and tests (``TraitSet.explain``)."""
 
-    def __init__(self, name: str, layout: GenomeLayout, defs: Iterable[TraitDef]) -> None:
+    trait: str
+    combine: Combine
+    terms: tuple[GeneTerm, ...]
+    """The genes it reads, with role and weight."""
+    clusters: tuple[str, ...]
+    """The layout clusters those genes belong to."""
+    shared: Mapping[str, tuple[str, ...]]
+    """For each gene it reads that other traits read too (pleiotropy), those other traits."""
+    costs: tuple[str, ...]
+    """The cost terms that this trait drives."""
+
+
+class TraitSet:
+    """The trait table for one species, checked against that species' layout.
+
+    ``costs`` optionally maps each shared cost (upkeep, wear, a birth) to the traits that drive it, so
+    the trade-offs can be listed and audited. The formulas themselves stay in ``traits.py``.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        layout: GenomeLayout,
+        defs: Iterable[TraitDef],
+        costs: Mapping[str, Iterable[str]] | None = None,
+    ) -> None:
         self.name = name
         self.layout = layout
         self.defs: tuple[TraitDef, ...] = tuple(defs)
@@ -132,7 +280,26 @@ class TraitSet:
                     )
             if trait.kind is Kind.CATEGORY and layout.gene(trait.genes[0]).length != 1:
                 raise ValueError(f"Category trait {trait.name!r} needs a single-digit gene.")
+            if trait.cluster is not None:
+                members = layout.clusters.get(trait.cluster)
+                if members is None:
+                    raise ValueError(
+                        f"Trait {trait.name!r} names cluster {trait.cluster!r}, which layout "
+                        f"{layout.name!r} does not have."
+                    )
+                outside = [g for g in trait.genes if g not in members]
+                if outside:
+                    raise ValueError(
+                        f"Trait {trait.name!r} reads {outside} outside cluster {trait.cluster!r}."
+                    )
         self._by_name: dict[str, TraitDef] = {d.name: d for d in self.defs}
+        self.costs: Mapping[str, tuple[str, ...]] = {
+            term: tuple(drivers) for term, drivers in (costs or {}).items()
+        }
+        for term, drivers in self.costs.items():
+            unknown = [d for d in drivers if d not in self._by_name]
+            if unknown:
+                raise ValueError(f"Cost {term!r} names unknown traits {unknown}.")
 
     def __getitem__(self, trait_name: str) -> TraitDef:
         return self._by_name[trait_name]
@@ -163,10 +330,11 @@ class TraitSet:
         """Per-gene position bias for ``DNA.mutated(gene_biases=...)``, from the traits' steps.
 
         For each single-value gene a trait reads, the bias at which a typical mutation moves the
-        gene by about the trait's ``mutation_step`` (see ``position_bias_for_step``). A trait that
-        averages several genes moves only a share of one gene's change, so its step is scaled up
-        by the number of genes; a gene read by several traits uses their mean step. Genes no trait
-        reads (and gene blocks) are left out and use the caller's default.
+        gene by about the trait's ``mutation_step`` (see ``position_bias_for_step``). A cluster
+        moves only a share of one gene's change, so the step is scaled up by the reciprocal of that
+        share (``TraitDef.step_multiplier``: the number of genes in an equal mean); a gene read by
+        several traits uses their mean step. Genes no trait reads (and gene blocks) are left out and
+        use the caller's default.
         """
         steps: dict[str, list[float]] = {}
         for trait in self.defs:
@@ -174,7 +342,7 @@ class TraitSet:
                 continue
             for gene_id in trait.genes:
                 steps.setdefault(gene_id, []).append(
-                    min(1.0, trait.mutation_step * len(trait.genes))
+                    min(1.0, trait.mutation_step * trait.step_multiplier(gene_id))
                 )
         return {
             gene_id: position_bias_for_step(
@@ -182,6 +350,41 @@ class TraitSet:
             )
             for gene_id, wanted in steps.items()
         }
+
+    def explain(self, trait_name: str) -> TraitExplanation:
+        """The genes, weights and clusters behind a trait, the other traits that read the same genes
+        and the costs it drives. For reading and tests, not for the simulation."""
+        trait = self._by_name[trait_name]
+        shared = {
+            gene_id: others
+            for gene_id in trait.genes
+            if (others := tuple(t.name for t in self.traits_reading(gene_id) if t is not trait))
+        }
+        clusters: list[str] = []
+        for gene_id in trait.genes:
+            cluster = self.layout.gene(gene_id).cluster
+            if cluster is not None and cluster not in clusters:
+                clusters.append(cluster)
+        return TraitExplanation(
+            trait=trait.name,
+            combine=trait.combine,
+            terms=trait.terms,
+            clusters=tuple(clusters),
+            shared=shared,
+            costs=tuple(term for term, drivers in self.costs.items() if trait.name in drivers),
+        )
+
+    def unpaid_genes(self) -> tuple[str, ...]:
+        """Genes read by traits that drive no cost: what the cost table says is free. Only useful
+        when the set was given ``costs``. Gene blocks are left out."""
+        paid = {name for drivers in self.costs.values() for name in drivers}
+        return tuple(
+            gene.id
+            for gene in self.layout.genes
+            if gene.block is None
+            and (readers := self.traits_reading(gene.id))
+            and not any(t.name in paid for t in readers)
+        )
 
     def unread_genes(self) -> tuple[str, ...]:
         """Layout genes that no trait reads. Gene blocks are left out: the brain reads those."""
@@ -256,6 +459,19 @@ ANIMAL_TRAITS = TraitSet(
             scale=Scale.LOG,
             description="Simulated days between matings, before the repair stretch.",
         ),
+        TraitDef(
+            "litter_capacity",
+            (
+                GeneTerm("fertility"),
+                GeneTerm("size", Role.MODIFIER),
+                GeneTerm("recovery", Role.MODIFIER),
+            ),
+            combine=Combine.MODIFIED,
+            description=(
+                "Fertility sets the litter, a big or quick-healing body carries more (0 to 1; "
+                "DNA.14's example)."
+            ),
+        ),
         # How the brain operates (BRAIN.23). Curiosity and the learning rate wait for BRAIN.24.
         TraitDef(
             "brain_gain",
@@ -278,6 +494,32 @@ ANIMAL_TRAITS = TraitSet(
             "learning_rate", ("learning_rate",), 0.0, 2.0, description="Strength of learning."
         ),
     ),
+    costs={
+        "body upkeep": ("mass",),
+        "movement burn": ("mass",),
+        "size slows movement": ("size",),
+        "repair upkeep": ("somatic_maint",),
+        "readiness upkeep": ("cooldown_days",),
+        "drive upkeep and wear": ("repro_drive",),
+        "fertility upkeep": ("fertility",),
+        "recovery upkeep": ("recovery",),
+        "sensing upkeep": (
+            "sight_reach",
+            "sight_fov",
+            "sight_acuity",
+            "fov_half_degrees",
+            "hearing_range",
+            "smell_range",
+            "touch",
+            "taste",
+        ),
+        "gut upkeep": ("herbivore_eff", "carnivore_eff"),
+        "brain upkeep": ("decision_interval",),
+        "calling": ("call_radius", "call_energy_cost"),
+        "gestation": ("fertility", "litter_capacity"),
+        "cooldown stretch": ("somatic_maint", "cooldown_days"),
+        "birth cost": ("care_fraction", "size", "somatic_maint"),
+    },
 )
 
 # =============================================================================

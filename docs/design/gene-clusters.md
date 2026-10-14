@@ -7,6 +7,17 @@ Design note for `DNA.14`. Written 2026-10-14 by the Research 2 thread. It answer
 [dna-traits-interaction.md](dna-traits-interaction.md) (what is built) and the diploid model
 (`DNA.13`, [dna-and-traits.md](dna-and-traits.md#diploid-genomes)).
 
+> **Built.** `DNA.15` built the machinery and the first cluster row: `GeneTerm`, `Role`, `Combine`
+> (`MEAN` and `MODIFIED`), `TraitDef.cluster`, `GeneSpec.cluster`, `GenomeLayout.clusters` with the contiguity
+> check and the `cluster_units` flag, `TraitSet.explain`, a cost table for the animal traits and `unpaid_genes`.
+> The animal layout is version 7 (after `SENSE.16` added `sight_acuity`, which joins the sight cluster) with the clusters in the table below (`touch` and the four brain operating genes are
+> not tagged) and `litter_size` now follows the `litter_capacity` row. Differences from this note: a trait
+> may name its cluster (`TraitDef.cluster`, checked by `TraitSet`) instead of every multi-gene trait having to
+> sit in one, since `litter_capacity` reads three clusters; and a modifier moves a trait by up to
+> `MODIFIER_SWING * weight` (twice its weight) of its own change, so `position_biases` uses that. The
+> `SWITCH` combiner is not built. After the change, neighbouring genes are split by crossover in about 2 to 3% of
+> children, two apart about 5%, and ten apart about 24% (the genome has 43 units, not 28).
+
 The measured figures below come from running the merged code (`DNA.crossover_linked` on the animal
 layout, 20,000 crossovers of an all-0 genome with an all-1 genome). The formulas and weights are
 proposals.
@@ -170,7 +181,7 @@ and planned gene IDs.
 | --- | --- | --- |
 | frame | size, speed, agility | mass, energy store, speed, turning |
 | repair | somatic_maint, recovery | wear, healing, upkeep |
-| sight | sight_range, sight_fov | reach, field of view |
+| sight | sight_range, sight_fov, sight_acuity | reach, field of view, sharpness |
 | hearing and calling | hearing, encoder_fidelity | hearing range, call radius and cost |
 | chemical | smell, taste | smell range, toxin detection |
 | touch | touch | tactile range |

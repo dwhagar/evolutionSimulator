@@ -57,6 +57,9 @@ class GeneSpec:
     length: int = 4
     segment: str = DEFAULT_SEGMENT
     """The part of the genome this gene belongs to; the genes of a segment must be consecutive."""
+    cluster: str | None = None
+    """A set of genes that feed one trait (``DNA.14``). The genes of a cluster must be consecutive,
+    so crossover tends to inherit them together. ``None`` for a gene that stands alone."""
 
     def __post_init__(self) -> None:
         if not self.id:
@@ -65,6 +68,8 @@ class GeneSpec:
             raise ValueError(f"Gene {self.id!r} must be at least 1 digit long.")
         if not self.segment:
             raise ValueError(f"Gene {self.id!r} needs a non-empty segment name.")
+        if self.cluster is not None and not self.cluster:
+            raise ValueError(f"Gene {self.id!r} needs a non-empty cluster name or none.")
 
 
 @dataclass(frozen=True)
@@ -163,6 +168,8 @@ class Gene:
     segment: str = DEFAULT_SEGMENT
     block: BlockSpec | None = None
     """Set when the gene is an array of values rather than one value."""
+    cluster: str | None = None
+    """The cluster this gene was tagged with, if any."""
 
     @property
     def length(self) -> int:
@@ -208,7 +215,12 @@ class GenomeLayout:
     segments: Mapping[str, tuple[int, int]] = field(init=False, repr=False, compare=False)
     """Digit range (start, end) of each segment, in layout order."""
     units: tuple[tuple[int, int], ...] = field(init=False, repr=False, compare=False)
-    """Digit ranges recombination keeps whole: every gene, or every group inside a block."""
+    """Digit ranges recombination keeps whole: every gene, or every group inside a block. With
+    ``cluster_units`` a whole cluster is one unit."""
+    clusters: Mapping[str, tuple[str, ...]] = field(init=False, repr=False, compare=False)
+    """The gene IDs of each cluster, in genome order."""
+    cluster_units: bool = field(init=False, repr=False, compare=False)
+    """Whether recombination treats a cluster as one unit. Off unless asked for."""
     default_mutations: Mapping[str, float] = field(init=False, repr=False, compare=False)
     """Expected changed digits per child for each segment, used when a caller sets no rate."""
     position_bias: float = field(init=False, repr=False, compare=False)
@@ -224,10 +236,12 @@ class GenomeLayout:
         segment_mutations: Mapping[str, float] | None = None,
         position_bias: float = DEFAULT_POSITION_BIAS,
         locality: float = DEFAULT_LOCALITY,
+        cluster_units: bool = False,
     ) -> None:
         """``segment_mutations`` sets the expected changed digits per child for the segments it
         names (a segment left out gets ``DEFAULT_MUTATION_RATE`` per digit). ``position_bias`` and
-        ``locality`` are the layout's default mutation shape (see ``DNA.mutated``). All three are
+        ``locality`` are the layout's default mutation shape (see ``DNA.mutated``). ``cluster_units``
+        makes recombination keep each cluster of genes whole (see ``GeneSpec.cluster``). All four are
         defaults for callers, not part of the layout's identity."""
         _check_bias(position_bias)
         _check_locality(locality)
@@ -239,17 +253,31 @@ class GenomeLayout:
             raise ValueError(f"Duplicate gene IDs in layout {name!r}.")
         placed: list[Gene] = []
         segments: dict[str, tuple[int, int]] = {}
+        clusters: dict[str, list[str]] = {}
         position = 0
         previous = ""
+        previous_cluster: str | None = None
         for spec in specs:
             block = spec if isinstance(spec, BlockSpec) else None
-            gene = Gene(spec.id, position, position + spec.length, spec.segment, block)
+            cluster = None if block is not None else spec.cluster
+            gene = Gene(spec.id, position, position + spec.length, spec.segment, block, cluster)
             placed.append(gene)
             position = gene.end
             if spec.segment != previous and spec.segment in segments:
                 raise ValueError(
                     f"Layout {name!r}: genes of segment {spec.segment!r} must be consecutive."
                 )
+            if cluster is not None:
+                if cluster != previous_cluster and cluster in clusters:
+                    raise ValueError(
+                        f"Layout {name!r}: genes of cluster {cluster!r} must be consecutive."
+                    )
+                if clusters.get(cluster) and placed[-2].segment != spec.segment:
+                    raise ValueError(
+                        f"Layout {name!r}: cluster {cluster!r} must sit inside one segment."
+                    )
+                clusters.setdefault(cluster, []).append(gene.id)
+            previous_cluster = cluster
             first = segments.get(spec.segment, (gene.start, gene.start))[0]
             segments[spec.segment] = (first, gene.end)
             previous = spec.segment
@@ -267,7 +295,9 @@ class GenomeLayout:
         object.__setattr__(self, "genes", tuple(placed))
         object.__setattr__(self, "length", position)
         object.__setattr__(self, "segments", segments)
-        object.__setattr__(self, "units", tuple(unit for gene in placed for unit in gene.units))
+        object.__setattr__(self, "cluster_units", cluster_units)
+        object.__setattr__(self, "clusters", {c: tuple(ids) for c, ids in clusters.items()})
+        object.__setattr__(self, "units", _recombination_units(placed, cluster_units))
         object.__setattr__(self, "position_bias", position_bias)
         object.__setattr__(self, "locality", locality)
         object.__setattr__(
@@ -291,6 +321,20 @@ class GenomeLayout:
     @property
     def gene_ids(self) -> tuple[str, ...]:
         return tuple(gene.id for gene in self.genes)
+
+
+def _recombination_units(genes: Sequence[Gene], cluster_units: bool) -> tuple[tuple[int, int], ...]:
+    """The digit ranges crossover keeps whole: each gene (or block group), or with ``cluster_units``
+    each cluster of consecutive genes as one."""
+    units: list[tuple[int, int]] = []
+    previous_cluster: str | None = None
+    for gene in genes:
+        if cluster_units and gene.cluster is not None and gene.cluster == previous_cluster:
+            units[-1] = (units[-1][0], gene.end)
+        else:
+            units.extend(gene.units)
+        previous_cluster = gene.cluster
+    return tuple(units)
 
 
 def _check_bias(bias: float) -> None:
