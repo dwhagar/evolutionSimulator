@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.33`: The window runs the simulation in its own process (`--world`): it says "Starting the simulation" until the host is ready, shows a warning with the traceback and a Restart button if the simulation crashes, and saves and resumes runs through the process. A viewer that stops reading can no longer freeze the simulation (the host sends from a thread). [#188](https://github.com/dwhagar/evolutionsimulator/pull/188)
 - `WORLD.14`: Faster ticks again, with identical results for one seed: night learning shares the hidden layer, the daylight lookup runs once a tick and sensing reuses reach; about 8-9% per tick (38.4 to 35.2 ms at 300 animals and 3000 plants). [#178](https://github.com/dwhagar/evolutionsimulator/pull/178), [#184](https://github.com/dwhagar/evolutionsimulator/pull/184)
 - `UX.17`: The setup screen: File > New run with presets, animal and plant counts, a seed, a name and a searchable form of every tuning value generated from the config, which saves the new run as soon as it starts. Also fixed events being lost after the first poll in the viewer's local backend. [#183](https://github.com/dwhagar/evolutionSimulator/pull/183)
 - `UX.31`: The simulation process now records history and can run a saved run: it streams the statistics to the window in batches, saves checkpoints on its own and on request, and resumes a run from a checkpoint. [#181](https://github.com/dwhagar/evolutionSimulator/pull/181)
