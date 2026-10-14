@@ -27,8 +27,8 @@ open questions in issues #2 to #11 by example; those answers are used here and l
   (`dna.digit(gene_id)`, used for `sex_strategy`).
 - The shape of a genome is a **`GenomeLayout`**: an ordered table of `GeneSpec(id, length)` rows. Order fixes
   the digit positions and the sum of lengths is the genome length, so adding a gene means adding one row.
-  Positions match the prototype digit for digit. Each layout has a name and a `version` to bump whenever
-  the table changes shape.
+  Genes that feed one system are tagged as a cluster and sit together (`DNA.15`), so positions are no longer
+  the prototype's. Each layout has a name and a `version` to bump whenever the table changes shape.
 - A **gene block** (`BlockSpec`) is a gene that holds an array of numbers instead of one value: `count`
   values of `digits_per_value` digits each, decoded onto a range `low` to `high` (`dna.values(gene_id)`).
   The animal's brain is one block of 198 two-digit values over -2 to 2. A block's values come in `groups`
@@ -127,9 +127,11 @@ every step. The harness is not in the repo.
 `WORLD.7`), from the design in [reproduction-genes.md](reproduction-genes.md) and the owner's answers to
 [#16](https://github.com/dwhagar/evolutionSimulator/issues/16),
 [#17](https://github.com/dwhagar/evolutionSimulator/issues/17) and
-[#36](https://github.com/dwhagar/evolutionSimulator/issues/36). The animal layout is version 5: 76 body digits
-(five 3-digit reproduction genes, `parenting`, `repro_cooldown`, `repro_drive`, `fertility` and `recovery`) and the
-396-digit brain, 472 in all.
+[#36](https://github.com/dwhagar/evolutionSimulator/issues/36). The animal layout was version 5 then (76 body digits,
+five 3-digit reproduction genes, `parenting`, `repro_cooldown`, `repro_drive`, `fertility` and `recovery`, and the
+396-digit brain, 472 in all) and is version 6 after `DNA.15` (92 body digits with the brain's four operating genes, a
+908-digit brain, 1,000 in all; the genes are regrouped into clusters, with the five reproduction genes next to each
+other, see [gene-clusters.md](gene-clusters.md)).
 
 | Gene | Trait | Range | What it does |
 | --- | --- | --- | --- |

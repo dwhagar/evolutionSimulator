@@ -114,7 +114,8 @@ FERTILITY_CONCEPTION_BASE: float = 0.30
 FERTILITY_CONCEPTION_SLOPE: float = 0.60
 """A mating takes with chance ``BASE + SLOPE * mean fertility of the two``."""
 LITTER_MAX: int = 8
-"""Litter size is ``1 + round(fertility * (LITTER_MAX - 1))`` (the bearer's gene)."""
+"""Litter size is ``1 + round(litter_capacity * (LITTER_MAX - 1))``: the bearer's ``fertility`` gene
+scaled by her size and recovery genes."""
 GESTATION_DAYS_BASE: float = 2.0
 GESTATION_DAYS_SPAN: float = 18.0
 """Gestation is ``BASE + SPAN * fertility`` days (the bearer's gene)."""
@@ -415,8 +416,9 @@ class AnimalTraits(BaseTraits):
 
     @property
     def litter_size(self) -> int:
-        """Young per birth if this animal bears (the ``fertility`` gene)."""
-        return 1 + round(self.phenotype["fertility"] * (LITTER_MAX - 1))
+        """Young per birth if this animal bears: the ``litter_capacity`` cluster, which is the
+        ``fertility`` gene scaled by body size and recovery (``DNA.15``)."""
+        return 1 + round(self.phenotype["litter_capacity"] * (LITTER_MAX - 1))
 
     @property
     def gestation_ticks(self) -> float:

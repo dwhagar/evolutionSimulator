@@ -45,10 +45,17 @@ See [brain.md](brain.md#as-built) for the layout, the cost and what is not built
 
 ### 1. Layout: where the genes are (`dna.py`, `layouts.py`)
 
-A `GenomeLayout` is an ordered list of `GeneSpec(id, length)`. Order fixes positions, so reordering or
-resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (472 digits:
-76 body digits, that is 14 four-digit genes, five three-digit genes and one single-digit gene, then a 396-digit brain block) and
-`PLANT_LAYOUT` (30 digits) are plain data.
+A `GenomeLayout` is an ordered list of `GeneSpec(id, length, cluster)`. Order fixes positions, so reordering or
+resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (1,000 digits,
+version 6: 92 body digits, that is 14 four-digit genes, five three-digit genes, one single-digit gene and the
+four brain operating genes, then a 908-digit brain block) and `PLANT_LAYOUT` (30 digits) are plain data.
+
+Genes that feed one trait or one system are tagged with a **cluster** name and sit next to each other
+(`DNA.15`): `frame` (size, speed, agility), `repair`, `sight`, `hearing`, `chemical`, `diet`, `temperament`
+and `reproduction`. The layout checks that a cluster's genes are consecutive and inside one segment, and
+lists them in `layout.clusters`. Crossover already keeps neighbours together (neighbouring genes are split
+in about 2 to 3% of children), so the tag costs nothing at run time; building the layout with
+`cluster_units=True` goes further and makes each cluster one crossover unit, which is off by default.
 
 A `DNA` pairs a layout with an immutable digit string. It offers four reads and nothing else (a
 `DiploidDNA` of two strands offers `value`, `digit` and `values`, with the two blended; see
@@ -71,22 +78,32 @@ A `TraitDef` is one row:
 | Field | Meaning |
 | --- | --- |
 | `name` | the trait's name in the phenotype |
-| `genes` | gene IDs it reads; with several, the mean of their values (polygeny) |
+| `genes` | the genes it reads: gene IDs, or `GeneTerm(gene, role, weight)` rows. A plain ID is a main gene with weight 1 |
+| `combine` | how several genes are read: `MEAN` (the default: the weighted mean, polygeny) or `MODIFIED` (epistasis: one main gene, scaled by `1 + 2 * sum(w * (g - 0.5))` over the modifier genes, clamped to 0 to 1) |
+| `cluster` | optional: the layout cluster all its genes must belong to (checked by `TraitSet`) |
 | `lo`, `hi`, `scale` | the range, and whether 0 to 1 maps onto it linearly or geometrically (`Scale.LOG`, `lo` must be above 0) |
 | `kind` | `CONTINUOUS` (a float), `INTEGER` (`lo + int(g * (hi - lo))`), or `CATEGORY` (the raw digit of a single-digit gene) |
 | `mutation_step` | typical mutation size as a fraction of the range; `TraitSet.position_biases()` turns it into the per-gene `gene_biases` that `DNA.mutated` reads |
 
 A `TraitSet` is the table for one species. It checks at construction that every gene ID exists in the
 layout and every name is unique, and `TraitSet.express(dna)` returns a dictionary of every trait's value. It
-refuses a genome with a different layout.
+refuses a genome with a different layout. It can also be given a **cost table**, which cost term (upkeep of
+repair, a birth, wear) is driven by which traits; `TraitSet.explain(name)` returns a trait's genes, weights,
+clusters, the other traits reading the same genes and the costs it drives, and `unpaid_genes()` lists genes
+whose traits drive no cost, so the "no free lunch" gaps are visible. The formulas stay in `traits.py`.
 
 Two patterns fall out of the table with no extra code:
 
 - **Pleiotropy, one gene feeding several traits.** The `size` gene feeds the trait `size` (0 to 1, used by
   damage capacity, energy and speed) and the trait `mass` (1 to 4). `traits_reading("size")` lists them,
   which is what a mutation in that gene can change.
-- **Polygeny, several genes feeding one trait.** List several gene IDs in `genes`. The animal and plant
-  tables do not use it yet; the tests do.
+- **Polygeny, several genes feeding one trait.** List several gene IDs in `genes`; the trait is their
+  (weighted) mean.
+- **Epistasis, one gene changing what another does.** Use `combine=Combine.MODIFIED` with one main gene and
+  modifier genes. The animal's `litter_capacity` is the `fertility` gene scaled by `size` and `recovery`
+  (weight 0.2 each), so the same fertility gives a litter of 4, 6 or 8 depending on the body. Each gene is
+  read through the genome first, so for a diploid animal dominance acts inside each gene and the cluster
+  combines the results.
 
 Traits with simple linear ranges (`fov_degrees` 40 to 360, `max_biomass` 20 to 200) live in the table.
 Quantities that combine traits live in code (see below).
@@ -133,7 +150,8 @@ Every random choice (`random`, `mutated`, `crossover*`, `reproduce`, `inspect_fo
 
 | To add | Do this |
 | --- | --- |
-| A trait that reads existing genes | one `TraitDef` row in `trait_defs.py` |
+| A trait that reads existing genes | one `TraitDef` row in `trait_defs.py` (several genes: weighted terms, or a main gene with modifiers) |
+| A cost that traits share | one entry in the `costs` table of the `TraitSet`, and the formula in `traits.py` |
 | A gene | one `GeneSpec` row in `layouts.py`, and bump that layout's `version` (saved genomes stop loading, on purpose) |
 | A new species | a `GenomeLayout`, a `TraitSet`, and an organism class that applies formulas to the phenotype; add the layout to `LAYOUTS` so saved genomes restore |
 | A derived quantity | a formula in the organism class, reading `phenotype`, not DNA |
@@ -166,6 +184,10 @@ These wait on the owner's answers or on other tasks and are tracked in [TODO.md]
   `reproduce` defaults to `crossover_linked`, a few cut points that mostly fall between genes, with
   `gene_fidelity` (default 0.9) setting how often one falls inside a gene. Its mutation counterpart is
   `locality`.
+- Gene clusters are built (`DNA.15`, from [gene-clusters.md](gene-clusters.md)): weighted terms with a main
+  or modifier role, `MEAN` and `MODIFIED`, cluster tags checked by the layout, an optional whole-cluster
+  crossover unit, `TraitSet.explain` and the cost table. The `SWITCH` combiner (one gene silences another) is
+  not built; add it when a trait needs it.
 - Tuning constants inside the formulas are still inline numbers (`TRAIT.3`). The trait table already holds
   the ranges; the formula constants (`0.08`, `0.18`, `0.75`) are what remain.
 - Diploid is built (`DNA.13`, [#3](https://github.com/dwhagar/evolutionSimulator/issues/3)):

@@ -4,7 +4,8 @@ Gene IDs are the stable names that traits refer to. Positions follow from the or
 so reordering, resizing, adding or removing a row changes every later position: bump the layout's
 ``version`` when you do, since saved genomes carry it.
 
-Body positions match the original prototype digit for digit; the brain block follows them.
+The body is grouped into clusters of genes that feed one system, so the order is not the prototype's
+any more (layout version 6, ``DNA.15``); the brain block follows the body.
 """
 
 from __future__ import annotations
@@ -33,35 +34,37 @@ PLANT_MUTATION_PER_DIGIT: float = 0.005
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=5,
+    version=6,
     specs=(
-        # body
-        GeneSpec("speed"),
-        GeneSpec("agility"),
-        GeneSpec("size"),
-        GeneSpec("somatic_maint"),
+        # Genes that feed one trait or one system sit together, tagged as a cluster (DNA.15), so
+        # crossover tends to inherit them together (see docs/design/gene-clusters.md).
+        # frame: mass, energy store, speed, turning
+        GeneSpec("size", cluster="frame"),
+        GeneSpec("speed", cluster="frame"),
+        GeneSpec("agility", cluster="frame"),
+        # repair: wear, healing, upkeep
+        GeneSpec("somatic_maint", cluster="repair"),
+        GeneSpec("recovery", length=3, cluster="repair"),
         # senses
-        GeneSpec("sight_range"),
-        GeneSpec("sight_fov"),
-        GeneSpec("hearing"),
-        GeneSpec("smell"),
+        GeneSpec("sight_range", cluster="sight"),
+        GeneSpec("sight_fov", cluster="sight"),
+        GeneSpec("hearing", cluster="hearing"),
+        GeneSpec("encoder_fidelity", cluster="hearing"),
+        GeneSpec("smell", cluster="chemical"),
+        GeneSpec("taste", cluster="chemical"),
         GeneSpec("touch"),
-        GeneSpec("taste"),
         # feeding and behaviour
-        GeneSpec("herbivore_eff"),
-        GeneSpec("carnivore_eff"),
-        GeneSpec("aggression"),
-        GeneSpec("fear"),
-        # reproduction (REPRO.8): how much each parent gives a newborn, the gap between matings,
-        # the urge to mate, litter size and gestation, and how fast the body heals
-        GeneSpec("parenting", length=3),
-        GeneSpec("repro_cooldown", length=3),
-        GeneSpec("repro_drive", length=3),
-        GeneSpec("fertility", length=3),
-        GeneSpec("recovery", length=3),
-        GeneSpec("encoder_fidelity"),
-        # one digit read as a category
-        GeneSpec("sex_strategy", length=1),
+        GeneSpec("herbivore_eff", cluster="diet"),
+        GeneSpec("carnivore_eff", cluster="diet"),
+        GeneSpec("aggression", cluster="temperament"),
+        GeneSpec("fear", cluster="temperament"),
+        # reproduction (REPRO.8): the urge to mate, the gap between matings, litter size and
+        # gestation, how much each parent gives a newborn, and the sex digit read as a category
+        GeneSpec("repro_drive", length=3, cluster="reproduction"),
+        GeneSpec("repro_cooldown", length=3, cluster="reproduction"),
+        GeneSpec("fertility", length=3, cluster="reproduction"),
+        GeneSpec("parenting", length=3, cluster="reproduction"),
+        GeneSpec("sex_strategy", length=1, cluster="reproduction"),
         # how the brain operates (BRAIN.23); the learning ones are read once learning exists
         GeneSpec("brain_gain"),
         GeneSpec("reaction_time"),

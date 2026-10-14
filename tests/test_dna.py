@@ -44,19 +44,23 @@ def test_genes_are_contiguous_and_cover_the_genome(layout):
     assert position == layout.length
 
 
-def test_animal_gene_positions_match_prototype():
+def test_animal_gene_positions_follow_the_clusters():
     def span(layout, gene_id):
         gene = layout.gene(gene_id)
         return gene.start, gene.end
 
-    assert span(ANIMAL_LAYOUT, "speed") == (0, 4)
-    assert span(ANIMAL_LAYOUT, "size") == (8, 12)
-    assert span(ANIMAL_LAYOUT, "parenting") == (56, 59)
-    assert span(ANIMAL_LAYOUT, "repro_cooldown") == (59, 62)
-    assert span(ANIMAL_LAYOUT, "repro_drive") == (62, 65)
-    assert span(ANIMAL_LAYOUT, "fertility") == (65, 68)
-    assert span(ANIMAL_LAYOUT, "recovery") == (68, 71)
-    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (71, 75)
+    assert span(ANIMAL_LAYOUT, "size") == (0, 4)
+    assert span(ANIMAL_LAYOUT, "speed") == (4, 8)
+    assert span(ANIMAL_LAYOUT, "somatic_maint") == (12, 16)
+    assert span(ANIMAL_LAYOUT, "recovery") == (16, 19)
+    assert span(ANIMAL_LAYOUT, "hearing") == (27, 31)
+    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (31, 35)
+    assert span(ANIMAL_LAYOUT, "touch") == (43, 47)
+    assert span(ANIMAL_LAYOUT, "fear") == (59, 63)
+    assert span(ANIMAL_LAYOUT, "repro_drive") == (63, 66)
+    assert span(ANIMAL_LAYOUT, "repro_cooldown") == (66, 69)
+    assert span(ANIMAL_LAYOUT, "fertility") == (69, 72)
+    assert span(ANIMAL_LAYOUT, "parenting") == (72, 75)
     assert span(ANIMAL_LAYOUT, "sex_strategy") == (75, 76)
     assert span(ANIMAL_LAYOUT, "brain_gain") == (76, 80)  # the operating genes follow the body
     assert span(ANIMAL_LAYOUT, "learning_rate") == (88, 92)
@@ -66,7 +70,7 @@ def test_animal_gene_positions_match_prototype():
 
 def test_layout_lookup():
     assert "size" in ANIMAL_LAYOUT and "nope" not in ANIMAL_LAYOUT
-    assert ANIMAL_LAYOUT.gene_ids[0] == "speed"
+    assert ANIMAL_LAYOUT.gene_ids[0] == "size"
     with pytest.raises(KeyError):
         ANIMAL_LAYOUT.gene("nope")
 

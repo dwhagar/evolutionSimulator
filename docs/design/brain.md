@@ -390,9 +390,9 @@ Anything the owner answers differently is a change to one constant or one table 
 | Inputs 18 to 20 | `sense_channels.py`, `sensing.py`, `traits.py`, `world/senses.py` | `SENSE.9`. Three more rows in the table: `pain` (body: health lost since the last decision as a share of 20% of maximum health, capped at 1; `AnimalTraits.pain`, cleared when the brain decides, so damage taken between decisions is not lost), `daylight` (world, marked `ambient` so it does not count as sensing something, which keeps the blind wander fallback working) and `relative_size` (`log2(mass ratio) / 2` of the nearer of the nearest prey and threat, from -1 to 1; exact by sight, noisy by hearing; `Neighbour.mass` and `sense(..., mass=)` carry the masses). `BasicSenses` fills in both world inputs. |
 | `AnimalTraits.brain`, `.brain_upkeep`, `.think(percepts)` | `traits.py` | The hookup. The brain is built from the genome at birth; `think` adds the animal's own state to the percepts, runs the brain and returns the decision; pass an `rng` to enable the wander fallback. |
 
-**Genome.** `ANIMAL_LAYOUT` is now 1,000 digits at layout version 5: the 92 body digits (the prototype's 65, with
+**Genome.** `ANIMAL_LAYOUT` is now 1,000 digits (layout version 6 since `DNA.15`, which regrouped the body genes into clusters): the 92 body digits (the prototype's 65, with
 the five reproduction genes of `REPRO.5` and `REPRO.8` in place of `fertility`, and the 16 digits of the four operating genes
-after `sex_strategy`), then the 908 brain digits. The body genes are read by the trait table as before; the brain is read only by
+after the reproduction cluster), then the 908 brain digits. The body genes are read by the trait table as before; the brain is read only by
 `Brain`, so `TraitSet.unread_genes()` does not list it.
 
 **Brain layout.** The 454 numbers are grouped per slot so a neuron's wiring travels together: for each of the

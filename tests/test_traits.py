@@ -1,6 +1,7 @@
 import random
 
 import pytest
+from genome_support import dna_from_v5
 
 from evolution_simulator import traits as traits_module
 from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
@@ -404,11 +405,21 @@ def test_the_chance_of_conceiving_rises_with_both_fertilities():
     assert chance("333", "000") == pytest.approx(0.60, abs=0.04)
 
 
+BIG_AND_QUICK = {"size": "3333", "recovery": "333"}  # modifiers that raise the litter capacity
+
+
 def test_litter_size_and_gestation_come_from_the_bearers_fertility():
-    for digits, litter, days in (("000", 1, 2.0), ("333", 8, 20.0), ("222", 6, 2 + 18 * 42 / 63)):
+    # With size and recovery at zero the litter capacity is 0.6 of the fertility gene (DNA.15); big
+    # and quick-healing bearers carry the full litter.
+    for digits, genes, litter, days in (
+        ("000", {}, 1, 2.0),
+        ("333", {}, 5, 20.0),
+        ("222", {}, 4, 2 + 18 * 42 / 63),
+        ("333", BIG_AND_QUICK, 8, 20.0),
+    ):
         father, mother = (
             male(fertility="333" if digits == "000" else "000"),
-            female(fertility=digits),
+            female(fertility=digits, **genes),
         )
         assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.CONCEIVED
         assert mother.litter_size == litter == mother.pregnancy.litter
@@ -423,7 +434,7 @@ def test_the_litter_genomes_are_fixed_at_conception_from_both_parents():
 
 
 def test_a_pregnant_bearer_is_slower_hungrier_and_does_not_look_for_a_mate():
-    father, mother = male(), female(fertility="333", speed="3333")
+    father, mother = male(), female(fertility="333", speed="3333", **BIG_AND_QUICK)
     free = AnimalTraits(mother.dna)
     free_speed, free_basal = free.current_max_speed, free.basal_metabolism
     assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.CONCEIVED
@@ -435,7 +446,7 @@ def test_a_pregnant_bearer_is_slower_hungrier_and_does_not_look_for_a_mate():
     assert 100.0 - mother.current_energy == pytest.approx(
         free_basal * 1.5
     )  # +50% for a full litter
-    half = female(fertility="111")  # litter of 1 + round(0.333 * 7) = 3
+    half = female(fertility="111", **BIG_AND_QUICK)  # litter of 1 + round(0.333 * 1.4 * 7) = 4
     AnimalTraits.mate(male(), half, Roll(0.0))
     assert half.current_max_speed < AnimalTraits(half.dna).current_max_speed
 
@@ -910,9 +921,9 @@ def test_base_traits_hooks_are_noops_and_damage_kills():
 # genes and the brain are all zeros. An all-zero brain has every gate off, so slot 0 stays on as the
 # floor.
 _BODY = "3302332321121021200230232133200030321201111300230220212303212"
-_AT = ANIMAL_LAYOUT.gene("parenting").start
-PINNED_ANIMAL = animal_dna(
-    _BODY[:_AT] + "211" + "123" + "220" + "301" + "132" + _BODY[_AT:] + "0" * 16 + "0" * 908
+_AT = 56  # where the reproduction genes sat in layout version 5 (after the fourteen 4-digit genes)
+PINNED_ANIMAL = dna_from_v5(
+    _BODY[:_AT] + "211" + "123" + "220" + "301" + "132" + _BODY[_AT:] + "0" * 16, "0" * 908
 )  # 16: brain_gain, reaction_time, curiosity, learning_rate; 908: the brain
 PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122")
 
@@ -952,7 +963,8 @@ def test_pinned_reproduction_numbers():
     assert t.lifespan_ticks == pytest.approx(6360.381051326)
     assert t.mating_cooldown == pytest.approx(381.622863080)  # 6% of the lifespan
     assert t.cooldown_ticks == pytest.approx(315.569156812)
-    assert t.litter_size == 6
+    assert t.phenotype["litter_capacity"] == pytest.approx(0.797821351)
+    assert t.litter_size == 7  # 1 + round(0.798 * 7)
     assert t.gestation_ticks == pytest.approx(384.0)
     assert t.repair_upkeep == pytest.approx(0.016390619)
     assert t.readiness_upkeep == pytest.approx(0.020981254)
