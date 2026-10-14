@@ -13,7 +13,7 @@ Three pieces:
 * ``SEED_SLOTS`` and ``SEED_OUTPUT_BIASES``: the fitted weights, as levels of the genome's brain
   block (0 to 15 of 16, so they survive being written into DNA exactly). The table is made by
   ``scripts/fit_seed_brain.py``; rerun it when the inputs or the rule change.
-* ``seeded_dna``: a random animal genome with the seed written into the first 8 hidden slots (gates
+* ``seeded_dna``: a random animal genome with the seed written into the first ``SEED_HIDDEN`` (10) hidden slots (gates
   on, the rest of the slots off), the gain gene at the seed's gain and a little variation so founders are not
   clones.
 
@@ -32,7 +32,7 @@ from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, BRAIN_GENE
 from evolution_simulator.sense_channels import INPUT_CHANNELS, TARGETS
 
-SEED_HIDDEN = 8
+SEED_HIDDEN = 10
 """Hidden neurons the seed uses: the first slots of the genome's brain block."""
 
 # --- the reference rule -------------------------------------------------------
@@ -40,7 +40,7 @@ SEED_HIDDEN = 8
 WALK_SPEED: float = 0.6
 WALK_PULL: float = 2.0
 """Sensing food or a mate walks: speed rises by ``WALK_PULL`` per unit of closeness (plant and mate
-added) up to ``WALK_SPEED``, a ramp and not a step so a small network can hold it."""
+and prey added) up to ``WALK_SPEED``, a ramp and not a step so a small network can hold it."""
 SLOW_NEAR: float = 0.5
 """A plant close by slows the walk (by this much at contact), so the animal arrives instead of
 passing over the plant, which it can only eat by overlapping it."""
@@ -51,7 +51,7 @@ animal is running (above 0.8) from a closeness of 0.3 whatever else it senses.""
 SEEKING_ENERGY: float = 0.6
 """Energy fraction at which a ready animal starts looking for a mate (a typical drive gene)."""
 EAT_CLOSENESS: float = 0.5
-"""A plant this close is eaten."""
+"""A plant or prey this close is eaten or attacked."""
 REPULSION: float = 3.0
 """How hard a threat's bearing turns the animal away, against 1 for the pull of food or a mate."""
 
@@ -61,24 +61,29 @@ _INDEX = {name: i for i, name in enumerate(INPUT_NAMES)}
 def reference_rule(inputs: Sequence[float]) -> tuple[float, ...]:
     """The six outputs (turn, speed, eat, seek mating, alarm call, mating call) the seed imitates.
 
-    The old fixed rule (``AnimalTraits``' behaviour flags) cut down to what the world acts on and to
-    what a small network can hold: a bearing reads zero when nothing is sensed, so steering is a sum
-    of pulls (food, a mate) and a push away from a threat, with no priority list. A threat
-    close makes it run, sensing food or a mate makes it walk (both ramp up with closeness); a plant within reach is eaten; a
-    ready animal with enough energy is willing to mate. Calls stay off, and prey is ignored until the
-    world acts on attacking (``BRAIN.10``). The fed and hungry distinctions of the flags are left to
-    evolution.
+    The old fixed rule (the behaviour flags ``AnimalTraits`` used to set, retired in ``BRAIN.10``)
+    cut down to what the world acts on and to what a small network can hold: a bearing reads zero
+    when nothing is sensed, so steering is a sum of pulls (food, prey, a mate) and a push away from a
+    threat, with no priority list. A threat close makes it run, sensing food, prey or a mate makes it
+    walk (both ramp up with closeness); a plant or prey within reach is eaten or attacked (the world
+    takes the plant first); a ready animal with enough energy is willing to mate. Calls stay off:
+    when to call is left to evolution. The fed and hungry distinctions of the flags are left to
+    evolution too.
     """
-    pull = inputs[_INDEX["plant_direction"]] + inputs[_INDEX["mate_direction"]]
+    pull = (
+        inputs[_INDEX["plant_direction"]]
+        + inputs[_INDEX["prey_direction"]]
+        + inputs[_INDEX["mate_direction"]]
+    )
     push = REPULSION * inputs[_INDEX["threat_direction"]]
     turn = max(-1.0, min(1.0, pull - push))
     plant = inputs[_INDEX["plant_closeness"]]
-    walk = (
-        min(WALK_SPEED, WALK_PULL * (plant + inputs[_INDEX["mate_closeness"]])) - SLOW_NEAR * plant
-    )
+    prey = inputs[_INDEX["prey_closeness"]]
+    mate = inputs[_INDEX["mate_closeness"]]
+    walk = min(WALK_SPEED, WALK_PULL * (plant + prey + mate)) - SLOW_NEAR * plant
     run = max(0.0, min(1.0, RUN_SLOPE * inputs[_INDEX["threat_closeness"]] - RUN_OFFSET))
     speed = max(0.0, min(1.0, walk + run))
-    eat = 1.0 if inputs[_INDEX["plant_closeness"]] > EAT_CLOSENESS else 0.0
+    eat = 1.0 if max(plant, prey) > EAT_CLOSENESS else 0.0
     ready = inputs[_INDEX["ready_to_mate"]] > 0.5
     seek = 1.0 if ready and inputs[_INDEX["energy_ratio"]] >= SEEKING_ENERGY else 0.0
     return turn, speed, eat, seek, 0.0, 0.0
@@ -165,16 +170,18 @@ def level_value(level: int) -> float:
 # the levels of the six output biases. Written by scripts/fit_seed_brain.py.
 # fitted: begin
 SEED_SLOTS: tuple[tuple[int, ...], ...] = (
-    (3, 0, 2, 2, 8, 14, 12, 8, 8, 0, 8, 13, 8, 8, 8, 8, 8, 8, 5, 6, 8, 10, 8, 8, 8, 8, 8),
-    (7, 7, 8, 8, 8, 8, 15, 8, 8, 8, 4, 8, 13, 8, 7, 8, 8, 8, 8, 8, 8, 8, 11, 8, 8, 8, 8),
-    (7, 8, 8, 8, 8, 8, 5, 8, 8, 8, 15, 8, 8, 8, 8, 8, 8, 8, 6, 8, 8, 8, 15, 8, 8, 8, 8),
-    (4, 8, 8, 8, 8, 8, 14, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 11, 6, 8, 8),
+    (0, 0, 0, 2, 8, 8, 9, 13, 11, 2, 8, 10, 11, 10, 2, 11, 8, 8, 5, 4, 8, 10, 8, 10, 8, 8, 8),
+    (7, 7, 8, 8, 8, 8, 15, 8, 14, 8, 6, 8, 14, 8, 7, 8, 8, 8, 8, 8, 8, 8, 12, 10, 8, 8, 8),
+    (7, 8, 8, 8, 8, 8, 5, 8, 8, 8, 14, 8, 8, 8, 8, 8, 8, 8, 6, 8, 8, 8, 15, 8, 8, 8, 8),
+    (5, 7, 8, 8, 8, 8, 14, 8, 0, 6, 7, 8, 8, 8, 6, 7, 8, 8, 8, 8, 8, 8, 8, 11, 6, 8, 8),
     (4, 11, 8, 8, 15, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12, 8, 8),
     (3, 15, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 12, 8, 8),
-    (8, 6, 8, 8, 8, 5, 8, 8, 8, 15, 8, 5, 8, 8, 8, 8, 8, 8, 8, 8, 8, 3, 6, 8, 8, 8, 6),
-    (7, 8, 8, 8, 8, 8, 5, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 5, 8, 8, 8, 8),
+    (8, 6, 8, 8, 8, 5, 8, 5, 8, 15, 8, 5, 8, 8, 8, 8, 8, 8, 8, 8, 8, 2, 6, 8, 8, 8, 6),
+    (7, 8, 7, 8, 8, 8, 3, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 5, 8, 8, 8, 8),
+    (5, 8, 8, 8, 8, 8, 12, 8, 14, 6, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 14, 8, 8, 6),
+    (7, 8, 8, 8, 8, 8, 10, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 5, 8, 8, 8),
 )
-SEED_OUTPUT_BIASES: tuple[int, ...] = (11, 6, 8, 3, 0, 1)
+SEED_OUTPUT_BIASES: tuple[int, ...] = (11, 5, 8, 3, 0, 0)
 # fitted: end
 
 GATE_ON = LEVELS - 1
@@ -224,7 +231,7 @@ def seeded_dna(
     by the seed and the gain gene set to the seed's (2, what it was fitted at; evolution moves it
     later). ``variation`` is the expected number of weights or biases moved one level (0.27) up or
     down, so founders differ a little and still behave like the seed; 0 gives the seed exactly. Gates
-    are never touched, so every founder has the seed's eight neurons.
+    are never touched, so every founder has the seed's ten neurons.
     """
     if variation < 0.0:
         raise ValueError(f"Variation must be zero or more, got {variation}.")

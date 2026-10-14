@@ -211,11 +211,13 @@ neighbours, the world finds and classifies the neighbours.
 - **What can be heard and smelled.** Loudness is 0.1 for a still or sleeping animal and rises to 1
   at full speed. A plant makes no sound; its scent is its biomass over 100, capped at 1. Animals
   have full scent. A faint plant is therefore found by smell only close up.
-- **Calls.** With `WorldConfig.calls_enabled` (off by default), an awake animal whose last decision
-  called, and that has a call radius and the energy, pays `call_energy_cost` for each call and is
-  heard this tick (`World.calls`) by animals whose hearing reaches it. Off by default because a
-  call costs about seven times the basal rate and random founder brains call on most ticks, which
-  killed them before they could do anything else; `BRAIN.9` and `BRAIN.10` decide the real rule.
+- **Calls.** With `WorldConfig.calls_enabled` (on by default since `BRAIN.10`), an awake animal
+  whose last decision called, and that has a call radius (the encoder gene) and more energy than
+  the call costs, pays `call_energy_cost` for each call and is heard this tick (`World.calls`) by
+  animals whose hearing reaches it. A call costs about seven times the basal rate, so a brain that
+  calls on every tick starves itself and calling pays only for a brain that does it when it
+  matters. Seeded founders (`BRAIN.9`) do not call at all; calling is left to evolve. That is the
+  whole call rule: the brain decides, the world charges and delivers.
 - **Touch** sees the world's edge as well as other bodies (`World.edge_distance`).
 - **Size and light.** Each animal neighbour carries its mass and the step gets the viewer's mass,
   for the relative-size input (`SENSE.9`); the daylight input is the world's daylight.
@@ -248,8 +250,17 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   juveniles for 6% of their lifespan, and the founders `populate` creates are juveniles too, so a first
   generation cannot breed until it has lived about three weeks of simulated time; random founders still starve
   before then (`BRAIN.9`).
-- **Acting on the brain is partial.** Only turn, speed, eat and seek-mating are used. Attacking
-  prey, meat, calls and retiring the fixed rule are `BRAIN.10`. Animals do not eat each other yet.
+- **Acting on the brain** (`BRAIN.10`). Turn and speed move the animal. "Eat or attack" above 0.5
+  eats the plant the animal overlaps, or, if it overlaps none, bites the nearest animal it touches
+  that it counts as prey (`classify`: a meat eater at most 0.8 times its mass; code in
+  `world/combat.py`, constants in `AttackRules` on `WorldConfig`). A bite does
+  `damage` (30) × carnivore efficiency × √(attacker mass / prey mass), wakes a sleeper, and the
+  animal that lands the killing bite eats `meat_share` (half) of the victim's maximum energy
+  through `feed(..., is_meat=True)`, so its carnivore efficiency decides how much it gains.
+  Seek-mating and the two call outputs are acted on as described above. `AnimalTraits` keeps no
+  behaviour flags any more (no "wants food", "in fear" or "wants to attack"): the brain is the
+  only source of behaviour, and a body only offers `wants_mate` and `mating_energy_threshold` as
+  facts the brain's `ready_to_mate` and `energy_ratio` inputs show it.
 - **Sex.** One of each sex is needed (`DNA.9`), decided in `may_mate`. The reading of the sex digit (value
   modulo 2, with 2 and 3 changing the drive) is the default for question 1 on
   [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
