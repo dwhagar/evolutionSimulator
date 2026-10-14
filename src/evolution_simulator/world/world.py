@@ -37,6 +37,7 @@ from typing import TYPE_CHECKING
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import PLANT_LAYOUT, founder_animal_dna
 from evolution_simulator.learning import LearningRules, NightlyLearning
+from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import (
     REFERENCE_TICK_SECONDS,
@@ -332,13 +333,18 @@ class World:
         self.max_canopy = max(self.max_canopy, plant.radius)
         return plant
 
-    def populate(self, animals: int = 0, plants: int = 0) -> None:
-        """Add random organisms at random places (plants first, then animals). The animals are a first
-        generation: random genomes with the reproduction genes at their starting levels."""
+    def populate(self, animals: int = 0, plants: int = 0, seeded: bool = True) -> None:
+        """Add random organisms at random places (plants first, then animals).
+
+        The animals are a first generation: random bodies with the reproduction and sense genes at
+        their starting levels, and the seeded brain (``BRAIN.9``, slightly varied) unless ``seeded``
+        is False, which leaves the brains random: those mostly die before they breed.
+        """
         for _ in range(plants):
             self.add_plant(DNA.random(PLANT_LAYOUT, self.rng))
         for _ in range(animals):
-            self.add_animal(founder_animal_dna(self.rng))
+            founder = founder_animal_dna(self.rng)
+            self.add_animal(seeded_dna(self.rng, base=founder) if seeded else founder)
 
     # -------------------------------------------------------------------------
     # The step loop
