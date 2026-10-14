@@ -516,3 +516,60 @@ def test_the_app_takes_a_runs_folder():
 
     assert parse_args(["--runs-folder", "somewhere"]).runs_folder == "somewhere"
     assert parse_args([]).runs_folder is None
+
+
+# --- history and the charts ----------------------------------------------------------------
+
+
+def test_saving_records_with_the_recorder_the_backend_already_has(controller, manager):
+    manager.save_now()
+    assert manager.recorder is controller.backend.recorder
+    assert manager.current_run.history() is not None
+
+
+def test_a_resumed_run_brings_its_recorded_history_to_the_charts(
+    window, panel, controller, manager
+):
+    manager.save_now()
+    advance(controller, 3 * DAY_TICKS)
+    manager.save_now()
+    saved_days = manager.recorder.history().latest.day
+    advance(controller, DAY_TICKS)  # less than the autosave interval: not saved
+    charts = window.panels["charts"]
+    answer(panel)
+    assert panel.resume(manager.current_run.id)
+    assert controller.history is not None and controller.history.latest.day == saved_days
+    assert controller.backend.recorder is manager.recorder
+    assert charts._history is controller.history
+
+
+def test_a_resumed_run_with_no_history_clears_the_charts(window, panel, controller, manager, store):
+    advance(controller, 2 * DAY_TICKS)
+    assert controller.history is not None
+    run = store.create(make_world(seed=4), name="Fresh")
+    panel.refresh()
+    answer(panel)
+    assert panel.resume(run.id)
+    assert controller.history is None
+    assert window.panels["charts"]._history is None
+
+
+def test_the_history_window_uses_the_charts_panel(panel, controller, manager):
+    from evolution_simulator.viewer.panels.charts import ChartsPanel
+
+    manager.save_now()
+    advance(controller, 2 * DAY_TICKS)
+    manager.save_now()
+    window = panel.show_history(manager.current_run.id)
+    assert isinstance(window.chart, ChartsPanel)
+    window.close()
+
+
+def test_the_local_backend_takes_a_recorder_that_is_already_listening():
+    from evolution_simulator.history import Recorder
+
+    world = make_world()
+    recorder = Recorder(world)
+    backend = LocalBackend(Session(world), record=recorder)
+    assert backend.recorder is recorder
+    backend.close()

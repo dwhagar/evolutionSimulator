@@ -108,6 +108,8 @@ class RunManager(QObject):
         self.store = store if store is not None else RunStore()
         self.current_run: Run | None = None
         self.recorder: Recorder | None = None
+        self._own_recorder = False
+        """True when this manager made the recorder (the backend had none) and so closes it."""
         self.autosaver: Autosaver | None = None
         self._label = ""
         self._seen_written = 0
@@ -164,13 +166,18 @@ class RunManager(QObject):
                 "This simulation is not a real world in this program, so it cannot be saved."
             )
         if self.current_run is None:
-            recorder = Recorder(world)
+            recorder = getattr(self.controller.backend, "recorder", None)
+            made = recorder is None
+            if recorder is None:
+                recorder = Recorder(world)
             try:
                 run = self.store.create(world, name=name, recorder=recorder)
             except Exception:
-                recorder.close()
+                if made:
+                    recorder.close()
                 raise
             self.recorder = recorder
+            self._own_recorder = made
             self._adopt(run, world)
             info = run.checkpoints()[-1]
         else:
@@ -206,9 +213,10 @@ class RunManager(QObject):
             except Exception:  # leaving a run must not fail because the disk did
                 log.exception("The last checkpoint of %s could not be written", self.current_run)
         self._release()
-        if self.recorder is not None:
+        if self.recorder is not None and self._own_recorder:
             self.recorder.close()
         self.recorder = None
+        self._own_recorder = False
         self.current_run = None
 
     def detach(self) -> None:
@@ -230,8 +238,11 @@ class RunManager(QObject):
         previous = self.controller.backend
         same_run = self.current_run is not None and self.current_run.id == run_id
         self._stop_current(final_checkpoint=self.current_run is not None and not same_run)
-        self.recorder = resumed.recorder
-        backend = LocalBackend(Session(resumed.world))
+        backend = LocalBackend(
+            Session(resumed.world),
+            record=resumed.recorder if resumed.recorder is not None else True,
+        )
+        self.recorder = backend.recorder
         self.controller.replace_backend(backend)
         close = getattr(previous, "close", None)
         if close is not None:

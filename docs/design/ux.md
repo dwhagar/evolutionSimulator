@@ -427,18 +427,54 @@ are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
   screen gets a last checkpoint first; resuming the run on screen goes back to its saved state, and both that
   and a world that was never saved ask before anything is lost.
 - **History** is a window of its own per run (several can be open), read only: the facts, the charts, and the
-  checkpoint list with Resume from the selected one. The charts come from `panels/charts.py` when it has
-  `history_view(samples: HistorySamples) -> QWidget` (the hook for `UX.16`); until then a plain animals and
-  plants chart stands in. A run with no history samples yet says so.
+  checkpoint list with Resume from the selected one. The charts are the charts panel itself over one finished
+  history (`panels/charts.history_view(samples)`, a `ChartsPanel` with no controller); if that is missing or
+  fails, a plain animals and plants chart stands in. A run with no history samples yet says so.
 - **Shell hooks** added for this: `ViewerContext.add_menu_action(menu, action)` (File actions sit above Quit),
   `ViewerContext.set_run_label(text)` (status bar and title), `MainWindow.add_menu_action` and
   `set_run_label`, `ViewerController.replace_backend` and `backend_replaced`, and `--runs-folder DIR` on the
   command line. A screen that holds anything about the old run (a selected animal, a trail) should drop it on
-  `backend_replaced`.
+  `backend_replaced` (the charts panel does). `LocalBackend(session, record=recorder)` takes a recorder that is
+  already listening, which is how a resumed run keeps its history; `RunManager` saves with the backend's own
+  recorder, so there is one per world.
 - **Limits.** Saving and resuming work on a `LocalBackend` (the world is in the window's process), through
   `RunManager.local_world()`. Through the process host they wait for `UX.31` (the host creating the recorder,
   sending history and starting from `Run.resume`); that function is the one place to change. Listing, history,
   export and delete need no world and work with any backend.
+### As built: the charts (`UX.16`)
+
+`viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with five
+pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
+
+- **History reaches the screen through the backend.** `Batch.history` carries the recorder's
+  `HistorySamples` in the batch that follows each new sample (once per simulated day, not every
+  frame), `ViewerController` keeps it as `controller.history` and emits `history_received`, and a
+  panel built late starts from the latest. `LocalBackend` makes the `Recorder` itself (`record=False`
+  for none) and calls `observe()` on each poll, so the `FakeSimulation`, which has no step listener,
+  is sampled once per poll (a long update gives one coarser sample). **UX.7's client has to carry
+  the history in its batches** the same way (a `HistorySamples` or its `to_dict`, once per sample),
+  and **UX.10** will load a saved history into the same signal.
+- **Tabs.** Population (animals, plants, corpses); Births and deaths (animals or plants, with the
+  deaths split by cause, only the causes that happened); Condition (average energy, health, age and
+  diet, and the shares asleep, pregnant and ready to mate); Traits and genes (any recorded statistic
+  of the animals or the plants: its mean, a band of one standard deviation kept inside the range
+  seen, and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
+  a gene as shares of the population, with a slider over the days that have one, which follows the
+  newest unless the user scrubbed back).
+- **Axis.** Simulated days, and years once the newest sample is two years in; flows are per day on
+  every tier. Mouse wheel zooms and drag pans, right-click is pyqtgraph's menu (it also exports an
+  image), and "Reset view" fits the data again.
+- **Differences from the first sketch.** The band is the mean plus or minus one deviation, not the
+  10th to 90th percentile, because the recorder keeps the mean, deviation, lowest and highest and not
+  percentiles. The number of lineages is not charted (the recorder does not count them; a separate
+  item if wanted). Stat names are made readable by `pretty_stat`; the display-name catalogue
+  (UX.29) can replace it.
+- **Drawing.** Redraws are throttled (200 ms) and only the tab in view is drawn, and only while the
+  panel is visible, so a fast-forward costs the charts almost nothing. Colours are the Okabe and Ito
+  colour-blind-safe set, one fixed colour per death cause, and the plots take the window's own
+  background and text colours.
+- **Tests.** `tests/test_charts.py`: the helpers, the history path (backend, controller), and every
+  tab against a real ten-day world history and made-up ones, offscreen.
 
 ## Speed and what the window shows
 
