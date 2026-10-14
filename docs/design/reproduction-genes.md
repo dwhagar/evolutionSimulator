@@ -243,7 +243,7 @@ take both.
 | `REPAIR_COST` | 0.20, exponent 2 | basal metabolism |
 | `REPAIR_BIRTH_SURCHARGE` | 1.0 | cost per birth |
 | `REPAIR_INTERVAL_STRETCH` | 0.5 | `interval_ticks` |
-| `PLANT_LIFESPAN_TICKS` | to set with question 4 | `seeding_interval` |
+| `PLANT_LIFESPAN_TICKS` | to set with question 10 | `seeding_interval` |
 
 ## Questions for the owner
 
