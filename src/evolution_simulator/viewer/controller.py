@@ -45,6 +45,11 @@ class ViewerController(QObject):
     """Text for a command the backend refused; nothing was changed."""
     backend_failed = Signal(str)
     """The backend raised while being polled; polling has stopped."""
+    backend_crashed = Signal(str)
+    """The simulation, running in another process, failed; the text is its traceback. Polling has
+    stopped; ``restart()`` puts a fresh simulation in its place."""
+    backend_ready = Signal()
+    """A simulation in another process has finished starting (``starting`` is false from here)."""
     backend_replaced = Signal(object)
     """A different run now sits behind the controller (``replace_backend``, e.g. a resumed run).
     The cached ``frame``, ``detail`` and ``plants`` were cleared first; a panel drops anything it
@@ -92,6 +97,23 @@ class ViewerController(QObject):
             self._timer.start()
         self.poll()
 
+    @property
+    def starting(self) -> bool:
+        """The backend is a simulation in another process that has not come up yet."""
+        return bool(getattr(self.backend, "starting", False))
+
+    def restart(self) -> bool:
+        """Put a fresh simulation where a failed one was, when the backend can make one
+        (``restarted()``: from the run's newest checkpoint if it was saved, else from the start).
+        ``False`` if it cannot."""
+        old = self.backend
+        make = getattr(old, "restarted", None)
+        if make is None:
+            return False
+        self.replace_backend(make())
+        old.close()  # type: ignore[attr-defined]
+        return True
+
     def send(self, command: Command) -> bool:
         """Hand a command to the backend; ``False`` (and ``command_failed``) if it was refused."""
         try:
@@ -110,6 +132,10 @@ class ViewerController(QObject):
             self._timer.stop()
             self.backend_failed.emit(f"{type(error).__name__}: {error}")
             return
+        if batch.ready:
+            self.backend_ready.emit()
+        for text in batch.rejected:
+            self.command_failed.emit(text)
         for event in batch.events:
             if isinstance(event, StatusChanged):
                 self._set_status(event.status)
@@ -130,6 +156,9 @@ class ViewerController(QObject):
         if batch.history is not None:
             self.history = batch.history
             self.history_received.emit(batch.history)
+        if batch.crash is not None:
+            self._timer.stop()
+            self.backend_crashed.emit(batch.crash)
 
     def _set_status(self, status: Status) -> None:
         if status != self.status:

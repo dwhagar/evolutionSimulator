@@ -29,3 +29,26 @@ class _FailingSimulation(FakeSimulation):
         if self.tick + 1 >= self._fail_at:
             raise ValueError(f"the simulation broke at tick {self._fail_at}")
         return super().step()
+
+
+class TickCounter:
+    """A big made-up world that writes its tick into shared memory, so a test can see the
+    simulation move without reading from the pipe. Frames of this world are about 390 KB, more than
+    a pipe holds."""
+
+    def __init__(self, value) -> None:
+        self.value = value
+
+    def __call__(self):
+        return _CountingSimulation(self.value)
+
+
+class _CountingSimulation(FakeSimulation):
+    def __init__(self, value) -> None:
+        super().__init__(3000, 12000, seed=1)
+        self._value = value
+
+    def step(self):
+        report = super().step()
+        self._value.value = self.tick
+        return report

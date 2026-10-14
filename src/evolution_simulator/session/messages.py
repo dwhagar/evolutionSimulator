@@ -3,7 +3,7 @@
 Everything here is a plain value (frozen dataclasses of numbers, strings, bytes and the frames and
 details of ``snapshot`` and ``world.views``) so it pickles over a ``multiprocessing`` pipe today and
 could go over a socket tomorrow. Viewer to simulation: a ``Command`` of ``commands.py`` or one of
-``Ack``, ``SetFrameRate``, ``RequestPlants``, ``RequestHistory``, ``SaveNow`` and ``Shutdown`` below. Simulation to viewer: a
+``Ack``, ``SetFrameRate``, ``RequestPlants``, ``RequestHistory``, ``SaveNow``, ``StartRun`` and ``Shutdown`` below. Simulation to viewer: a
 ``Frame``, an ``AnimalDetail`` or one of the messages below.
 """
 
@@ -49,15 +49,36 @@ class RequestHistory:
 
 @dataclass(frozen=True, slots=True)
 class SaveNow:
-    """Write a checkpoint of the attached run now (UX.31). Refused when no run is attached."""
+    """Write a checkpoint of the attached run now (UX.31). Refused when no run is attached.
+    ``token`` comes back as ``RunNotice.answers`` so the sender can tell the answer from older
+    notices."""
+
+    token: int = 0
+
+
+@dataclass(frozen=True, slots=True)
+class StartRun:
+    """Make sure the world is saved into a run, and checkpoint it now: with none attached, start a
+    new run in the run store at ``root`` (the default runs folder when ``None``), named ``name``
+    (after its seed when ``None``) and autosave from then on; with one, just checkpoint it. Answered
+    with a ``RunNotice`` whose ``answers`` is ``token``; refused for a made-up world."""
+
+    root: str | None = None
+    name: str | None = None
+    token: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class Shutdown:
-    """Stop cleanly (the attached run, if any, gets a last checkpoint)."""
+    """Stop cleanly. The attached run, if any, gets a last checkpoint unless ``save`` is false (a
+    viewer that is about to go back to an earlier checkpoint of the same run)."""
+
+    save: bool = True
 
 
-Request = Command | Ack | SetFrameRate | RequestPlants | RequestHistory | SaveNow | Shutdown
+Request = (
+    Command | Ack | SetFrameRate | RequestPlants | RequestHistory | SaveNow | StartRun | Shutdown
+)
 
 # --- simulation to viewer -----------------------------------------------------------------------
 
@@ -108,6 +129,8 @@ class RunNotice:
     """Checkpoints this host has written since it started."""
     resumed_from: str | None = None
     """The checkpoint the simulation was restored from, when it was resumed."""
+    answers: int = 0
+    """The ``token`` of the newest ``SaveNow`` or ``StartRun`` the host has carried out."""
 
 
 @dataclass(frozen=True, slots=True)

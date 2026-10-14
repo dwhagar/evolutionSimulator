@@ -516,6 +516,46 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
   `tests/test_history_mirror.py` (the mirror equals the recorder through every tier, including the last
   one's merging).
 
+### As built: the window over the process host (`UX.33`)
+
+- **`ProcessBackend`** (`viewer/process_backend.py`, no Qt) is the `Backend` over a `SimClient`
+  (a `ProcessClient` unless given one). `--world` now uses it, so the window answers however fast the
+  simulation runs; `--in-process` keeps the old in-process world for debugging, `--process` puts the
+  made-up world in a process too, and the default (the made-up world) and the tests still use
+  `LocalBackend`.
+- **Starting.** `starting` is true until the host's `Ready`; the status bar says "Starting the
+  simulation", `ViewerController.starting` and `backend_ready` follow it, and commands sent meanwhile wait
+  in the pipe. `Batch` gained `rejected` (text of commands the host refused, which the controller emits as
+  `command_failed`), `crash` and `ready`.
+- **A failed simulation.** `Batch.crash` carries the traceback once; the controller stops polling and emits
+  `backend_crashed`; the window disables the play controls and opens a warning with the traceback under
+  Details and two choices. **Restart** calls `controller.restart()`, which asks the backend for
+  `restarted()`: a new process on `ResumeSpec` of the run's newest checkpoint if the world was saved into a
+  run, else on the original recipe. There is no "save" after a crash (the process is gone); what the
+  run's autosave kept is what Restart brings back.
+- **Saving and resuming.** `RunManager` works with a hosted world too (`hosted()`): `save_now` sends
+  `StartRun(root, name, token)` (new request: start a run if the world is not in one, else checkpoint it
+  now; `SaveNow` and `StartRun` carry a `token` that comes back as `RunNotice.answers`, so an answer cannot
+  be mistaken for an older notice) and waits for it; the host autosaves. `Shutdown` gained `save` (the
+  first word wins). The setup screen's flow works as it did in process: `detach`, `NewRun` (the host gives
+  the old run its last checkpoint and starts a run for the new world in the same store when the old one
+  was saved), then `save_now`. `resume` checks the checkpoint reads in the viewer's process (so a bad one
+  changes nothing), stops the old simulation process first (with a last checkpoint, unless it is the run
+  being gone back into) and starts a new one on `ResumeSpec`. The cost is that a resumed world is loaded
+  twice. `RunManager.detach` only affects a local world; closing a hosted backend is what gives its run
+  the last checkpoint.
+- **The pipe never stops the world.** A pipe holds only a few KB on Windows (8 KB buffers) and about
+  200 KB on Linux, and `Connection.send` does not return until the viewer has read the message. Reproduced
+  on Linux: with a world whose frames are 390 KB and a viewer that never reads, the host froze in the
+  `Ready` message and the tick stayed at 0. `run_host` now hands every message to a sender thread
+  (`_Sender`), so the loop goes on ticking; what can wait is bounded by `max_in_flight`. When the process
+  ends it gives the viewer one second (`FLUSH_SECONDS`) to read the last messages, and closing the client
+  still ends it. The test is `test_a_viewer_that_never_reads_cannot_stop_the_simulation`; the Windows
+  check (a real hung viewer, 74 KB frames, 8 KB buffers) is still worth doing once on a real machine.
+- **Tests.** `tests/test_process_backend.py` (no Qt), `tests/test_viewer_process.py` (controller, window,
+  the crash dialog and restart, `RunManager` saving and resuming a hosted world), and the pipe test in
+  `tests/test_process_client.py`.
+
 ### As built: the Windows package (`UX.19`)
 
 - **Files.** `packaging/entry.py` is the program PyInstaller freezes; `packaging/evolutionSimulator.spec`

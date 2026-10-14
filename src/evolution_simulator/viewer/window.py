@@ -83,6 +83,8 @@ class MainWindow(QMainWindow):
         self.docks: dict[str, QDockWidget] = {}
         self.panels: dict[str, QWidget] = {}
         self._speed_actions: dict[str, QAction] = {}
+        self.crash_box: QMessageBox | None = None
+        """The dialog shown when the simulation process fails, while it is open."""
 
         self.setWindowTitle(APP_NAME if run_label is None else f"{APP_NAME} - {run_label}")
         self.resize(*DEFAULT_SIZE)
@@ -107,6 +109,7 @@ class MainWindow(QMainWindow):
         controller.command_failed.connect(lambda text: self.statusBar().showMessage(text, 8000))
         controller.backend_failed.connect(self._on_backend_failed)
         controller.backend_replaced.connect(self._on_backend_replaced)
+        controller.backend_crashed.connect(self._on_backend_crashed)
         self._on_status(controller.status)
         if controller.frame is not None:
             self._on_frame(controller.frame)
@@ -121,7 +124,12 @@ class MainWindow(QMainWindow):
         for label in self.status_labels.values():
             bar.addPermanentWidget(label)
         self.status_labels["run"].setText(self.run_label or "")
-        self.status_labels["clock"].setText("Waiting for the simulation")
+        self.status_labels["clock"].setText(self._waiting_text())
+
+    def _waiting_text(self) -> str:
+        return (
+            "Starting the simulation" if self.controller.starting else "Waiting for the simulation"
+        )
 
     def _action(
         self, name: str, text: str, slot, shortcut: str | QKeySequence.StandardKey | None = None
@@ -286,8 +294,34 @@ class MainWindow(QMainWindow):
             self.actions[name].setEnabled(True)
         self._on_status(self.controller.status)
         labels = self.status_labels
-        labels["clock"].setText("Waiting for the simulation")
+        labels["clock"].setText(self._waiting_text())
         labels["counts"].setText("")
+
+    def _on_backend_crashed(self, report: str) -> None:
+        """The simulation process failed: say so, with the traceback a click away, and offer a
+        fresh start (from the run's newest checkpoint when it was saved into a run)."""
+        self.statusBar().showMessage("The simulation stopped unexpectedly.")
+        for name in ("play_pause", "step", *(f"speed_{s}" for s in self._speed_actions)):
+            self.actions[name].setEnabled(False)
+        box = QMessageBox(self)
+        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
+        box.setIcon(QMessageBox.Icon.Warning)
+        box.setWindowTitle(APP_NAME)
+        box.setText("The simulation stopped unexpectedly.")
+        box.setInformativeText(
+            "Restart carries on from the newest saved checkpoint of the run if it was saved, "
+            "and otherwise starts the same world again."
+        )
+        box.setDetailedText(report)
+        restart = box.addButton("Restart", QMessageBox.ButtonRole.AcceptRole)
+        box.addButton("Leave it stopped", QMessageBox.ButtonRole.RejectRole)
+        box.finished.connect(lambda _code: self._after_crash_choice(box, restart))
+        self.crash_box = box
+        box.open()
+
+    def _after_crash_choice(self, box: QMessageBox, restart) -> None:
+        if box.clickedButton() is restart and not self.controller.restart():
+            self.statusBar().showMessage("This simulation cannot be restarted.")
 
     def _on_backend_failed(self, text: str) -> None:
         self.statusBar().showMessage(f"The simulation stopped: {text}")

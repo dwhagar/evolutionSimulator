@@ -6,10 +6,12 @@ after that, and autosaves from then on), brings a saved run back (``resume`` swa
 behind the controller), and answers what the run list and the history view need (``list_runs``,
 ``history``, ``space_warning``, ``export_csv``, ``delete``). Screens never touch the store.
 
-Saving and resuming need the world itself, so for now they work on a ``LocalBackend``, whose session
-is in this process (``local_world``). A backend that lives in another process (UX.7) cannot be saved
-from here until the host carries a run (UX.31); ``local_world`` is the one place that changes then.
-Listing, history, deleting and exporting need no world and work with any backend.
+Saving and resuming need the world itself. On a ``LocalBackend`` the session is in this process
+(``local_world``) and the manager checkpoints it and autosaves it. On a ``ProcessBackend`` (UX.33) the
+world is in the simulation process, which keeps the run itself (UX.31): the manager asks it to start a
+run or to save (``hosted``), reads the run from the store, and starts a new simulation process on
+``ResumeSpec`` to resume. Listing, history, deleting and exporting need no world and work with any
+backend.
 
 One manager belongs to a controller: ``RunManager.install(controller, store)`` before the window is
 built (the app does this for ``--runs-folder``), and ``RunManager.for_controller(controller)`` from a
@@ -36,9 +38,10 @@ from evolution_simulator.runs import (
     RunStore,
     RunSummary,
 )
-from evolution_simulator.session import Session
+from evolution_simulator.session import ResumeSpec, Session
 from evolution_simulator.viewer.backend import LocalBackend
 from evolution_simulator.viewer.controller import ViewerController
+from evolution_simulator.viewer.process_backend import ProcessBackend
 from evolution_simulator.world import World
 
 log = logging.getLogger(__name__)
@@ -140,26 +143,43 @@ class RunManager(QObject):
         world = getattr(session, "simulation", None)
         return world if isinstance(world, World) else None
 
+    def hosted(self) -> ProcessBackend | None:
+        """The backend, when it runs a real world in its own process (which keeps the run)."""
+        backend = self.controller.backend
+        if isinstance(backend, ProcessBackend) and backend.saveable:
+            return backend
+        return None
+
     @property
     def can_save(self) -> bool:
+        hosted = self.hosted()
+        if hosted is not None:
+            return hosted.crashed is None
         return self.local_world() is not None
 
     @property
     def unsaved_progress(self) -> bool:
         """The world on screen has ticks that no saved run holds."""
-        world = self.local_world()
-        if world is None:
-            return False
+        if self.hosted() is not None:
+            frame = self.controller.frame
+            tick = 0 if frame is None else frame.tick
+        else:
+            world = self.local_world()
+            if world is None:
+                return False
+            tick = world.tick
         if self.current_run is None:
-            return world.tick > 0
-        newest = self.current_run.summary.tick
-        return world.tick > newest
+            return tick > 0
+        return tick > self.current_run.summary.tick
 
     # ---- saving ------------------------------------------------------------------------------
 
     def save_now(self, name: str | None = None) -> CheckpointInfo:
         """Checkpoint the world on screen. The first save starts a run (named ``name``, else after
         its seed) with a recorder and autosave; later saves add a checkpoint to the same run."""
+        hosted = self.hosted()
+        if hosted is not None:
+            return self._save_hosted(hosted, name)
         world = self.local_world()
         if world is None:
             raise RunError(
@@ -186,6 +206,21 @@ class RunManager(QObject):
         self._after_change()
         warning = self.store.space_warning()
         self.message.emit(f"Saved {self.current_run.name}" + (f". {warning}" if warning else ""))  # type: ignore[union-attr]
+        return info
+
+    def _save_hosted(self, hosted: ProcessBackend, name: str | None) -> CheckpointInfo:
+        """Ask the simulation process to start a run or checkpoint it, and wait for its answer. The
+        process autosaves from then on."""
+        notice = hosted.save_now(self.store.root, name)
+        run = self.store.open(notice.run_id)
+        self._release()
+        self.current_run = run
+        self._seen_written = notice.saved
+        self._timer.start()
+        info = run.checkpoints()[-1]
+        self._after_change()
+        warning = self.store.space_warning()
+        self.message.emit(f"Saved {run.name}" + (f". {warning}" if warning else ""))
         return info
 
     def _adopt(self, run: Run, world: World) -> None:
@@ -237,6 +272,8 @@ class RunManager(QObject):
         resumed = run.resume(checkpoint)  # raises before anything on screen is touched
         previous = self.controller.backend
         same_run = self.current_run is not None and self.current_run.id == run_id
+        if isinstance(previous, ProcessBackend):
+            return self._resume_hosted(previous, run, resumed.checkpoint.name, checkpoint, same_run)
         self._stop_current(final_checkpoint=self.current_run is not None and not same_run)
         backend = LocalBackend(
             Session(resumed.world),
@@ -250,6 +287,29 @@ class RunManager(QObject):
         self._adopt(run, resumed.world)
         self._after_change()
         self.message.emit(f"Resumed {run.name} from {resumed.checkpoint.name}")
+        return run
+
+    def _resume_hosted(
+        self,
+        previous: ProcessBackend,
+        run: Run,
+        checkpoint_name: str,
+        checkpoint: str | None,
+        same_run: bool,
+    ) -> Run:
+        """Resume in a new simulation process. The old one is stopped first (with a last checkpoint
+        of its run, unless it is the run being gone back into) so two never write one folder."""
+        self._release()
+        self.current_run = None
+        previous.close(save=not same_run)
+        backend = ProcessBackend(ResumeSpec(str(self.store.root), run.id, checkpoint))
+        self.recorder = None
+        self.controller.replace_backend(backend)
+        self.current_run = run
+        self._seen_written = 0
+        self._timer.start()
+        self._after_change()
+        self.message.emit(f"Resumed {run.name} from {checkpoint_name}")
         return run
 
     # ---- the run list ------------------------------------------------------------------------
@@ -302,6 +362,11 @@ class RunManager(QObject):
         """Notice an autosave and bring the label ("saved 2 min ago") up to date."""
         if self.autosaver is not None and self.autosaver.written != self._seen_written:
             self._seen_written = self.autosaver.written
+            self.changed.emit()
+        hosted = self.hosted()
+        notice = None if hosted is None else hosted.run_notice
+        if notice is not None and notice.saved != self._seen_written:
+            self._seen_written = notice.saved
             self.changed.emit()
         self._set_label()
 
