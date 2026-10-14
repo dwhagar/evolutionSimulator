@@ -19,10 +19,9 @@ Done:
 - Traits as data, with DNA reading genes by ID, `TRAIT.4` and `DNA.10` ([#31](https://github.com/dwhagar/evolutionSimulator/pull/31)).
 - The interaction document, `DOCS.5` ([#32](https://github.com/dwhagar/evolutionSimulator/pull/32)).
 - The animal brain and its gene blocks, `BRAIN.2`, `DNA.11`, `DNA.12` ([#34](https://github.com/dwhagar/evolutionSimulator/pull/34)).
-- Gene-following crossover, `DNA.7` ([#48](https://github.com/dwhagar/evolutionSimulator/pull/48)); behaviour genes bending what the brain perceives, `BRAIN.14` ([#47](https://github.com/dwhagar/evolutionSimulator/pull/47)); a decision interval, `BRAIN.11` ([#50](https://github.com/dwhagar/evolutionSimulator/pull/50)); mutation that favours low digits, `DNA.8` ([#58](https://github.com/dwhagar/evolutionSimulator/pull/58)).
+- Gene-following crossover, `DNA.7` ([#48](https://github.com/dwhagar/evolutionSimulator/pull/48)); behaviour genes bending what the brain perceives, `BRAIN.14` ([#47](https://github.com/dwhagar/evolutionSimulator/pull/47)); a decision interval, `BRAIN.11` ([#50](https://github.com/dwhagar/evolutionSimulator/pull/50)); diploid genomes, `DNA.13` ([#63](https://github.com/dwhagar/evolutionSimulator/pull/63)); mutation that favours low digits, `DNA.8` ([#58](https://github.com/dwhagar/evolutionSimulator/pull/58)).
 
 Still to build, now that the owner has answered the open questions:
-- Diploid genomes with dominance, `DNA.13`.
 - Plants asexual, slower to mutate and longer lived, `REPRO.3`; animal mate choice by genetic closeness, `REPRO.4`.
 - The three reproduction genes replacing `fertility`, `REPRO.5`, built together with longevity traded against reproduction, `TRAIT.6` (design note done, `REPRO.6`, [#49](https://github.com/dwhagar/evolutionSimulator/pull/49)).
 - Prototype quirk fixes, `TRAIT.5`; and one constants config, `TRAIT.3`.
