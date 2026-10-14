@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `DNA.8`: Mutation favours low digits (`position_bias`, default 0.5, plants 0.75) with a separate `locality` setting for how random a change is (default fully random) and per-gene biases from `TraitDef.mutation_step`. [#58](https://github.com/dwhagar/evolutionSimulator/pull/58)
 - `REPRO.6`: Design note on the reproduction genes (caregiving, reproduction interval, reproductive drive) and the longevity trade-off (`docs/design/reproduction-genes.md`); owner questions 7 to 11 added to [#36](https://github.com/dwhagar/evolutionSimulator/issues/36). The build is `REPRO.5` and `TRAIT.6`. [#49](https://github.com/dwhagar/evolutionSimulator/pull/49)
 - `BRAIN.11`: Decision interval: the brain runs every n-th `think` (`decision_interval`, default 1) and its energy cost per tick is divided by n. [#50](https://github.com/dwhagar/evolutionSimulator/pull/50)
 - `DNA.7`: Crossover now defaults to `DNA.crossover_linked`: a few cut points that follow whole genes and brain neurons, with `gene_fidelity` and `mean_cuts` settings. [#48](https://github.com/dwhagar/evolutionSimulator/pull/48)
