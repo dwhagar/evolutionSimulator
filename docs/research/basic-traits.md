@@ -173,7 +173,7 @@ Filed as GitHub issues so they can be answered there. They are the points where 
 - [#10 World model: grid or continuous space, and what is one time step?](https://github.com/dwhagar/evolutionSimulator/issues/10)
 - [#11 How should aging and lifespan work (and are climate traits in scope)?](https://github.com/dwhagar/evolutionSimulator/issues/11)
 
-Until they are answered, the recommendation in each issue is the working assumption (the world model in #10 has none, so assume continuous 2D with a fixed tick): fixed trait set, allometric coupling, plants only, no behavior genes, hard lifespan cap, no climate traits.
+The prototypes uploaded later (`dna.py`, `trait.py`) already answer most of these implicitly. Section 9 lists what they imply; the recommendations in the issues are superseded by that where they differ, pending confirmation on each issue.
 
 ## 8. Further reading
 
@@ -186,3 +186,50 @@ Until they are answered, the recommendation in each issue is the working assumpt
 - Stearns, S. C. (1992). *The Evolution of Life Histories.*
 - Garland, T. (1983). The relation between maximal running speed and body mass in terrestrial mammals.
 - Taylor, C. R., Heglund, N. C., Maloiy, G. M. O. (1982). Energetics and mechanics of terrestrial locomotion.
+
+## 9. Review of the prototypes (`dna.py`, `trait.py`)
+
+Prototype files uploaded to the Research 2 thread. They were read as-is and not run. This section compares them with the research above.
+
+### 9.1 What the prototypes imply for the open questions
+
+| Issue | What the prototype does | Working assumption |
+|---|---|---|
+| [#6](https://github.com/dwhagar/evolutionSimulator/issues/6) fixed or open-ended traits | Fixed genome: 65 digits for animals, 24 for plants, 4 digits per trait. | Fixed set. |
+| [#7](https://github.com/dwhagar/evolutionSimulator/issues/7) scaling or free costs | Mixed. Basal metabolism uses `mass^0.75` (Kleiber) for animals, `mass^0.5` for plants; the other couplings (speed divided by size, sensing cost quadratic, gut cost for generalists) are hand-written costs. | Mixed, with the constants gathered in one config. |
+| [#8](https://github.com/dwhagar/evolutionSimulator/issues/8) predators and diet | Plants and animals both exist; animals have separate herbivore and carnivore efficiency genes, with a cross-penalty when both are high. | Predation is in from the start. |
+| [#9](https://github.com/dwhagar/evolutionSimulator/issues/9) behavior | Behavior is scalar genes (aggression, fear) feeding a fixed fight-or-flight rule plus hunger, crowding and size modifiers. No brain. | Behavior genes on a fixed rule. |
+| [#10](https://github.com/dwhagar/evolutionSimulator/issues/10) world | Not defined. Sight range 10 to 60, hearing 15 to 85, smell 20 to 100, plant dispersal 10 to 70 suggest a continuous 2D space of a few hundred units across. | Continuous 2D; confirm. |
+| [#11](https://github.com/dwhagar/evolutionSimulator/issues/11) aging, climate | Damage accumulates every tick and vitality falls with it, which degrades speed, sight, hearing and feeding. A `somatic_maint` gene slows the wear, so longevity is evolvable. No climate traits. | Gradual senescence with an evolvable repair gene; no climate. |
+
+### 9.2 How it maps to the proposed trait set
+
+| Research trait | In the prototype |
+|---|---|
+| `size` | `size` gene; `mass = 1 + 3*size`, damage capacity `100*(1 + size)`, max energy `100*(1 + 2*size)`. |
+| pace of life / lifespan | `somatic_maint`, which both lengthens life and costs upkeep. With the constants as written, the implied lifespan runs from about 1,300 ticks (small, no repair) to 12,000 (large, full repair). |
+| `speed_factor` | `speed`, divided by `1 + 0.8*size`. |
+| `sense_range`, field of view | `sight_range` and `sight_fov`, with effective range shrinking as the field widens (the trade-off in section 3.3). Hearing, smell, touch, taste added. |
+| sensing cost | `0.08` times the sum of squared sense genes, as proposed. |
+| `diet_preference`, `attack` | `herbivore_eff`, `carnivore_eff`, `aggression`. No armor or defense gene. |
+| `reserve_capacity` | None. Energy storage is tied to size. |
+| `maturity_threshold`, `offspring_investment` | None. Mating costs a fixed share of max energy (25 or 45 percent by sex type) and `dna.fertility` is decoded but never read in `trait.py`. |
+
+Beyond the research: acoustic signalling (`encoder_fidelity`), sex strategies, toxicity and taste for plants.
+
+### 9.3 Observations worth settling before Foundations 1
+
+These are things I would fix or decide when the code becomes real, not criticisms of the prototype.
+
+1. **Crossover and mutation work on single digits, but genes are four-digit numbers.** Each gene is a big-endian base-4 number, so the first digit is worth 64/255 of the range. A per-digit uniform crossover mixes digits from both parents inside one gene, so the child's value can land far from both parents (parents at 0.0 and 1.0 can produce 0.75). A point mutation in the first digit moves the value by a quarter to three quarters of the range, and the `mod 4` wraps around from 3 to 0. Options: crossover at gene boundaries (whole genes inherited), use a Gray code so adjacent values differ by one digit, or accept it as deliberate. This overlaps with Research 1.
+2. **Sex is a single inherited digit.** It comes from a random parent and can mutate, so nothing keeps the sexes balanced. In a small population one sex can drift out and the population dies out. Assigning sex at birth (or a simple sex-chromosome rule) avoids that.
+3. **Randomness is global.** `dna.py` and `inspect_food` use the `random` module directly, so runs cannot be seeded or reproduced and tests will be flaky. Passing a `random.Random` instance in is a small change that pays off.
+4. **Unused gene: `fertility`.** It occupies four digits and has no effect. Either wire it to offspring count or investment, or drop it.
+5. **Energy can go negative at mating.** `consume_mating_cost` subtracts a share of max energy without checking that the animal has it. The organism only dies on the next metabolism tick. Probably want a precondition in `flag_wants_mate` (it does check energy ratio, so it may be fine in practice).
+6. **Aging is cheap to evolve.** Repair costs `0.12*somatic_maint` per tick against a wear reduction of up to 4.5 times, so selection will push `somatic_maint` to the maximum unless reproduction or another cost punishes long life. A cost that scales with the value, or a reproductive penalty for repair, is the usual fix (the disposable soma idea).
+7. **Plants have no senescence.** They die only from damage or starvation. Fine for a first version, noted so it is deliberate.
+8. **Structure.** Both files use a flat import (`from dna import ...`); in the package they will become `evolution_simulator.dna` and `.traits`. `typing.Optional`, `List` and `Tuple` can be the built-in forms on Python 3.12.
+
+### 9.4 Suggestion for the trait object
+
+The prototype repeats the same two steps for every trait: a gene slice, then a hand-written formula in `__init__`. The trait record described in section 6 (name, range, scale, default, mutation step) would let the DNA class derive the slice offsets and the normalized accessors from one table instead of 16 hand-written properties, and make the cost constants easy to find. That would be the first job for Foundations 1.
