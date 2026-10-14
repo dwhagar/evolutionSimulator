@@ -4,9 +4,13 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-14: data storage is SQLite
+
+The owner decided that data storage is SQLite, not a database server. The Python standard library `sqlite3` is used, so the core stays dependency-free. Plan: one `run.sqlite` file per run holding the manifest, the checkpoints (still the JSON world save, compressed), the history tiers appended as they are taken, and later the species and lineage tables. `STORE.1` is the design note, `STORE.2` the build; `UX.32`, `SPECIES.2`, `UX.35` and `UX.40` wait for it so the recorder format changes once.
+
 ## 2026-10-14: request for species graphs
 
-The owner asked for population graphs of plants and animals and, as lines diverge, separate population graphs for the most divergent species of each kind. The totals exist already (charts, Population tab, `UX.16`). The per-species graphs need a working definition of a species (a cluster of close genomes that stays separated), tracked by the history recorder: `SPECIES.1` tracker, `SPECIES.2` recording, `UX.41` charts. How clear a gap counts ([#206](https://github.com/dwhagar/evolutionSimulator/issues/206), `SPECIES.3`) and how many lines to show ([#207](https://github.com/dwhagar/evolutionSimulator/issues/207), `SPECIES.4`) are open with defaults.
+The owner asked for population graphs of plants and animals and, as lines diverge, separate population graphs for the most divergent species of each kind. The totals exist already (charts, Population tab, `UX.16`). The per-species graphs need a working definition of a species (a cluster of close genomes that stays separated), tracked by the history recorder: `SPECIES.1` tracker, `SPECIES.2` recording, `UX.41` charts. The owner confirmed the defaults on the same day: a clear gap counts ([#206](https://github.com/dwhagar/evolutionSimulator/issues/206), `SPECIES.3`: centres more than twice the spread apart, never under 4% of the digits) and the top 5 lines per kind, ranked by distance from the founding genome ([#207](https://github.com/dwhagar/evolutionSimulator/issues/207), `SPECIES.4`).
 
 ## 2026-10-14: owner taps on the decision cards
 
