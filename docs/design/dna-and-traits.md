@@ -132,7 +132,12 @@ Behaviour is unchanged except where noted:
    constructor's implicit random fill, and the sequence is now required to construct.
 4. **Extras:** `distance`, value equality and hash, `to_dict` / `dna_from_dict`, `crossover_one_point`,
    `crossover_by_gene`, and a single `reproduce` entry point.
-5. **Python 3.12 typing** (`X | None`, built-in generics) and ruff clean.
+5. **Start-of-life state and the mating cost (`TRAIT.5`).** An animal's drive flags are set in
+   `__init__` (the prototype left them unset until the first tick), a plant's vitality starts at its
+   seedling health (0.5, the prototype had 1.0 until the first tick), and `consume_mating_cost` cannot push
+   energy below zero. The last one is a guard, not a rule: whether an animal that cannot pay should be
+   allowed to mate at all is a decision for the cost design in `TRAIT.6` and `REPRO.5`.
+6. **Python 3.12 typing** (`X | None`, built-in generics) and ruff clean.
 
 ## Decisions taken from the prototype
 
@@ -169,11 +174,7 @@ Flagged by the research threads; not changed without the owner's call.
   but 0.24 per plant. Both are now readable as expected changes per child: `layout.default_mutations`
   holds them per segment and any call can set them with `mutations_per_segment` (`DNA.8`). The defaults
   are unchanged; whether plants should mutate more slowly is `REPRO.3`.
-- **Animal drive flags start unset** until the first tick, because `__init__` never calls
-  `_update_needs_and_drives()`.
 - **`somatic_maint` is cheap and cuts wear up to 4.5 times**, so selection will push it to the maximum
   unless something penalises long life.
-- **Plant vitality starts at 1.0** although a seedling's health starts at half of its maximum; the
-  first tick's growth uses 1.0 and it is refreshed at the end of that tick.
 - **Constants are inline.** Moving the tuning numbers into a config object is listed in
   [TODO.md](../../TODO.md).

@@ -165,13 +165,18 @@ def test_an_animal_that_decides_to_eat_grazes_a_plant_in_reach():
     assert animal.traits.current_energy > 10.0
 
 
+# A seedling starts at half vitality (TRAIT.5), so an ungrazed plant drifts down by about 0.1 in a
+# tick; grazing takes about 5.
+NOT_GRAZED = 99.0
+
+
 def test_an_animal_does_not_graze_a_plant_out_of_reach_or_when_it_does_not_eat():
     world = make()
     far = world.add_plant(plant_dna(**BIG_PLANT), Vec.of(520, 500))
     far.traits.current_biomass = 100.0
     hungry = world.add_animal(animal_dna(brain={**STILL, **EATER}), HERE, heading=0.0)
     world.step()
-    assert far.traits.current_biomass >= 100.0
+    assert far.traits.current_biomass >= NOT_GRAZED
     assert hungry.is_alive
 
     world = make()
@@ -179,7 +184,7 @@ def test_an_animal_does_not_graze_a_plant_out_of_reach_or_when_it_does_not_eat()
     close.traits.current_biomass = 100.0
     world.add_animal(animal_dna(brain={**STILL, "eat": -2.0}), HERE, heading=0.0)
     world.step()
-    assert close.traits.current_biomass >= 100.0
+    assert close.traits.current_biomass >= NOT_GRAZED
 
 
 def test_a_plant_that_is_eaten_down_dies_and_is_removed():
