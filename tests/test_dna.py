@@ -31,7 +31,7 @@ def rng(seed: int = 1) -> random.Random:
 
 def test_layout_lengths_match_prototype():
     assert ANIMAL_LAYOUT.length == 466  # 70 body digits plus a 396-digit brain
-    assert PLANT_LAYOUT.length == 24
+    assert PLANT_LAYOUT.length == 30
     assert TINY.length == 5
 
 
@@ -130,7 +130,7 @@ def test_equality_and_hash():
     assert tiny("01230") == tiny("01230")
     assert hash(tiny("01230")) == hash(tiny("01230"))
     assert tiny("01230") != tiny("01231")
-    assert tiny("00000") != plant("0" * 24)
+    assert tiny("00000") != plant("0" * 30)
     assert len({tiny("01230"), tiny("01230"), tiny("11230")}) == 2
 
 
@@ -204,7 +204,7 @@ def test_distance():
     assert a.distance(tiny("11111")) == 1.0
     assert a.distance(tiny("01230")) == tiny("01230").distance(a)
     with pytest.raises(TypeError):
-        a.distance(plant("0" * 24))
+        a.distance(plant("0" * 30))
 
 
 def test_dict_round_trip_through_json():
@@ -232,7 +232,7 @@ def test_from_dict_checks_layout_and_version():
 
 
 def test_from_string():
-    assert DNA.from_string(PLANT_LAYOUT, "0" * 24) == plant("0" * 24)
+    assert DNA.from_string(PLANT_LAYOUT, "0" * 30) == plant("0" * 30)
 
 
 # --- mutation ---------------------------------------------------------------
@@ -343,7 +343,7 @@ def test_gene_crossover_mixes_both_parents():
 
 
 def test_crossover_rejects_mismatched_species():
-    a, p = animal("0" * N), plant("0" * 24)
+    a, p = animal("0" * N), plant("0" * 30)
     for op in (a.crossover, a.crossover_one_point, a.crossover_by_gene):
         with pytest.raises(TypeError):
             op(p, rng())

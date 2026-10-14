@@ -10,8 +10,8 @@ world yet. The two small calculations in [Does the trade-off work?](#does-the-tr
 a toy model, with the model stated.
 
 > **Built.** `REPRO.5` and `TRAIT.6` were built together as written in [What to build](#what-to-build); the
-> numbers are the note's. Differences: the protective effect of caregiving (needs `SENSE.1`) and the plant
-> genes (`REPRO.3`) are not built, the constants are named module constants in `traits.py` until `TRAIT.3`
+> numbers are the note's. Differences: the protective effect of caregiving (needs `SENSE.1`) is not built (the plant genes
+> are, see [Plants](#plants-repro3) below and in [dna-and-traits.md](dna-and-traits.md#plants-repro3)), the constants are named module constants in `traits.py` until `TRAIT.3`
 > moves them into the config object, and the readiness upkeep and `interval_ticks` use the note's formulas
 > with `interval_ticks` rounded to whole ticks. A newborn is a juvenile for one interval, so the founders a
 > world creates cannot breed until that has passed. See
@@ -47,7 +47,7 @@ a toy model, with the model stated.
 | Wants to mate | `_update_needs_and_drives` | energy ratio at least `0.35 + 0.35 * vitality`, cooldown over, not afraid |
 | Repair cost | `AnimalTraits.__init__` | `0.12 * somatic_maint` per tick, in basal metabolism |
 | Wear | `update_metabolism_and_aging` | `0.075 / (1 + 3.5 * somatic_maint)` per tick; death when accumulated damage reaches `max_damage_capacity` (`100 * (1 + size)`) |
-| Seeds | `PlantTraits.consume_reproduction_cost` | 35% of current biomass, fixed |
+| Seeds | `PlantTraits.consume_reproduction_cost` (now `launch_seeds`, `REPRO.3`) | 35% of current biomass, fixed |
 
 Lifespan is `max_damage_capacity / wear` ticks. Computed from the formulas above: 1,333 ticks (size 0,
 no repair) up to 12,000 ticks (size 1, full repair), which at one second per tick is 22 minutes to 3.3
@@ -202,6 +202,10 @@ optimum for both genes, not a runaway to a corner.
 
 ## Plants (REPRO.3)
 
+> **Built.** The table below was built as written: `PLANT_LAYOUT.version = 2`, `seed_provision` and
+> `seeding_interval` genes, a plant lifespan constant of 25,000 ticks, plant mutation at 0.005 per digit.
+> See [dna-and-traits.md](dna-and-traits.md#plants-repro3).
+
 Plants are asexual, mutate slower and live longer, and have no brain, so:
 
 | Animal gene | Plant equivalent |
@@ -256,7 +260,7 @@ take both.
 | `REPAIR_COST` | 0.20, exponent 2 | basal metabolism |
 | `REPAIR_BIRTH_SURCHARGE` | 1.0 | cost per birth |
 | `REPAIR_INTERVAL_STRETCH` | 0.5 | `interval_ticks` |
-| `PLANT_LIFESPAN_TICKS` | to set with question 10 | `seeding_interval` |
+| `PLANT_LIFESPAN_TICKS` | 25,000 (built, placeholder until `TRAIT.8`) | plant death age, `seeding_interval` |
 
 ## Questions for the owner
 

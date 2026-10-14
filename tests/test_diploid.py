@@ -289,7 +289,9 @@ def test_loading_checks_the_layout_version_and_the_shape():
 
 
 def test_traits_express_a_diploid_genome():
-    genome = DiploidDNA(DNA(PLANT_LAYOUT, "0" * 24), DNA(PLANT_LAYOUT, "3" * 24))
+    genome = DiploidDNA(
+        DNA(PLANT_LAYOUT, "0" * PLANT_LAYOUT.length), DNA(PLANT_LAYOUT, "3" * PLANT_LAYOUT.length)
+    )
     values = PLANT_TRAITS.express(genome)
     assert values["max_biomass"] == pytest.approx(110.0)  # midway between 20 and 200
 

@@ -9,7 +9,7 @@ Written 2026-10-14 by the Foundations 1 thread.
 | --- | --- |
 | `dna.py` | `DNA` (immutable genome), `GenomeLayout`, `GeneSpec` and `BlockSpec` (the gene table); knows gene IDs only |
 | `diploid.py` | `DiploidDNA` (two `DNA` strands read through a `DominanceModel`), `DominanceModel`, `CODOMINANT` |
-| `layouts.py` | `ANIMAL_LAYOUT` (466 digits: 70 body, 396 brain) and `PLANT_LAYOUT` (24 digits) as plain data, and `dna_from_dict` |
+| `layouts.py` | `ANIMAL_LAYOUT` (466 digits: 70 body, 396 brain) and `PLANT_LAYOUT` (30 digits) as plain data, and `dna_from_dict` |
 | `brain.py`, `brain_adapter.py` | The `Brain` network and the world-side inputs and outputs; see [brain.md](brain.md) |
 | `trait_defs.py` | `TraitDef` and `TraitSet`: what each trait reads from DNA, its range, scale and mutation step; `ANIMAL_TRAITS`, `PLANT_TRAITS` |
 | `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits`: runtime organism state and the formulas built on the traits; `AnimalTraits` also builds the animal's `Brain` |
@@ -50,7 +50,7 @@ All take an injected `random.Random` and return a new genome; a parent is never 
 
 | Method | Behaviour |
 | --- | --- |
-| `mutated(rng, rate=None, mutations_per_segment=None, position_bias=None, locality=None, gene_biases=None)` | A changed digit moves to another digit. **How many** change: with `rate`, every digit changes with that probability whatever its segment; with `mutations_per_segment={"brain": 1.0}`, each named segment gets that expected number of changed digits per child; with neither, the layout's `default_mutations` apply (0.01 per digit for the plant and the animal body, 1.0 per child for the animal brain). The two cannot be combined. **Which** digits (`DNA.8`, [#15](https://github.com/dwhagar/evolutionSimulator/issues/15) option B): inside each value, every more significant digit is `position_bias` times as likely to change as the one below it (default 0.5, plants 0.75; 1.0 is the old even spread), so most mutations are small nudges and a few are big jumps. The total number of changes does not depend on it. `gene_biases={"size": 0.3}` sets it per gene, for example from `TraitSet.position_biases()`. **What** it becomes ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)): with chance `locality` (default 0.0, fully random) it moves to a neighbouring digit (+-1), otherwise to one of the other three digits with equal chance. |
+| `mutated(rng, rate=None, mutations_per_segment=None, position_bias=None, locality=None, gene_biases=None)` | A changed digit moves to another digit. **How many** change: with `rate`, every digit changes with that probability whatever its segment; with `mutations_per_segment={"brain": 1.0}`, each named segment gets that expected number of changed digits per child; with neither, the layout's `default_mutations` apply (0.01 per digit for the animal body, 0.005 per digit for the plant, 1.0 per child for the animal brain). The two cannot be combined. **Which** digits (`DNA.8`, [#15](https://github.com/dwhagar/evolutionSimulator/issues/15) option B): inside each value, every more significant digit is `position_bias` times as likely to change as the one below it (default 0.5, plants 0.75; 1.0 is the old even spread), so most mutations are small nudges and a few are big jumps. The total number of changes does not depend on it. `gene_biases={"size": 0.3}` sets it per gene, for example from `TraitSet.position_biases()`. **What** it becomes ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)): with chance `locality` (default 0.0, fully random) it moves to a neighbouring digit (+-1), otherwise to one of the other three digits with equal chance. |
 | `crossover_linked(partner, rng, mean_cuts=1.0, gene_fidelity=0.9)` | **The default** (`DNA.7`). A few cut points, starting from a random parent and switching parent at each cut, so neighbouring genes travel together. `mean_cuts` is the expected number of cuts (a value below 1 is the chance of one cut). `gene_fidelity` is how closely a cut follows the gene table: 1.0 always cuts between whole genes (a brain neuron stays whole), 0.0 always cuts at a random digit inside the unit, and the default 0.9 is mostly between genes with the occasional odd cut inside one. |
 | `crossover(partner, rng)` | Uniform per-digit crossover (the prototype's operator); no longer the default. |
 | `crossover_one_point(partner, rng)` | Front of this genome, back of the partner, one random cut. |
@@ -63,7 +63,7 @@ The prototype's `+` operator is gone because it cannot take an RNG or a rate. Mi
 (different layouts) raises `TypeError`.
 
 The mutation rate is **per digit** by default, as the DNA research note recommends, so the expected number of
-changes per child scales with genome length: about 0.70 for the animal body and 0.24 for a plant. That would
+changes per child scales with genome length: about 0.70 for the animal body and 0.15 for a plant (the plant layout uses half the animal rate, `REPRO.3`). That would
 give the 396-digit brain about 4 changes per child on its own, so the animal layout sets the brain's default as
 **expected changes per segment** instead (1.0 per child). The defaults live on the layout
 (`GenomeLayout(..., segment_mutations={...})`), and every call can override them, so the owner's answers to
@@ -152,14 +152,35 @@ replace it (animal layout version 3, 466 digits).
   (it was `0.35 + 0.35 * vitality`). During a cooldown a possible mate does not show up in the brain's
   inputs and the animal does not call for one.
 - **Not built.** The protective effect of `caregiving` on aggression and fear needs a "young nearby" sense
-  (`SENSE.1`). Plant seeds and `seed_provision` are `REPRO.3`.
+  (`SENSE.1`). Plant seeds are in [Plants](#plants-repro3).
 - **Constants.** `traits.py` holds them as named module constants (`REPAIR_COST`, `REPAIR_BIRTH_SURCHARGE`,
   `REPAIR_INTERVAL_STRETCH`, `READINESS_UPKEEP`, `DRIVE_UPKEEP`, `DRIVE_THRESHOLD_*`, `DRIVE_BOLDNESS`), named
   as in the design note's table so `TRAIT.3` can move them into the config object. The gene ranges are in
   `trait_defs.py` (`CARE_FRACTION_RANGE`, `INTERVAL_FRACTION_RANGE`).
 - **In the world.** `World` builds the child's traits, calls `give_birth`, and puts the child in only if it
-  returned `True`; a seed starts with an equal share of the biomass its parent spent
-  (`PlantTraits.set_starting_biomass`). `WorldConfig.min_mating_energy_ratio` is gone.
+  returned `True`; a seed starts with the biomass its parent paid for it
+  (`PlantTraits.launch_seeds`). `WorldConfig.min_mating_energy_ratio` is gone.
+
+## Plants (REPRO.3)
+
+Plants are asexual, mutate slower and live longer than animals. `PLANT_LAYOUT` is version 2 and 30 digits: the
+six old genes plus `seed_provision` (3 digits) and `seeding_interval` (3 digits).
+
+- **Asexual.** A seed's genome is `dna.reproduce(None, rng)`: a clone with the layout's default mutations,
+  which for plants are 0.005 per digit (0.15 changed digits per seed, half the animal body's per-digit rate).
+- **Lives longer.** A plant dies when its age reaches `PLANT_LIFESPAN_TICKS` (25,000, five times the longest
+  animal). It is a placeholder constant until `TRAIT.8`, which may turn it into a gene.
+- **Pays for seeds.** `seed_provision` (3% to 40% of the seed's own full biomass, log scale) is what each
+  seed starts with. The 35% seed budget (`SEED_BUDGET_SHARE`) is spent on as many seeds as it pays for, up to
+  `seed_clutch`, so `seed_capacity = min(seed_clutch, budget / (provision * max_biomass))`. If the seeds
+  came out bigger than the budget (a mutated `max_biomass`), `launch_seeds` scales every seed down together.
+- **Waits between bursts.** `seeding_interval` (the `seeding_fraction` trait, `INTERVAL_FRACTION_RANGE`) is a
+  share of the lifespan. A seedling is a juvenile for one interval, and after each burst the cooldown starts
+  again. A plant seeds when it has reached 85% of its full size, its vitality is above 0.4, the cooldown is over
+  and the budget pays for at least one seed.
+- **Not built.** Plants have no behaviour, so there is no plant drive gene. The balance is untested: with
+  plants now taking a share of a 25,000 tick life to mature, food will be scarcer than in the prototype
+  until the world is tuned (`WORLD`/`TRAIT.3`).
 
 ## Changes from the prototype
 
@@ -194,7 +215,7 @@ way and is easy to change.
 | #3 ploidy | Diploid, haploid option | Both: `DNA` is haploid, `DiploidDNA` is diploid (`DNA.13`, owner chose diploid) | See [Diploid genomes](#diploid-genomes); traits read through the `Genome` protocol and did not change |
 | #4 reproduction | Both modes, no sexes | Both modes, plus a `sex_strategy` digit that shifts temperament (it no longer changes the mating cost, which now comes from the genes) | The digit is read in one place in `AnimalTraits.__init__` |
 | #5 length | Fixed | Fixed | Gene IDs are not reserved yet; layout position is the identity |
-| #6 trait set | Fixed | Fixed (16 animal genes plus the brain block, 6 plant genes) | Add a `GeneSpec` row to the layout and a `TraitDef` row that reads it |
+| #6 trait set | Fixed | Fixed (16 animal genes plus the brain block, 8 plant genes) | Add a `GeneSpec` row to the layout and a `TraitDef` row that reads it |
 | #8 diet | Plants only | Herbivore and carnivore efficiency genes, so predation is in | |
 | #9 behaviour | No behaviour genes | `aggression` and `fear` are genes feeding a fixed fight-or-flight rule | |
 
@@ -213,10 +234,10 @@ Flagged by the research threads; not changed without the owner's call.
   uniform operator is still there as `DNA.crossover`.
 - **Sex is an inherited digit with no balancing.** A small population can lose one sex. Assigning it at
   birth is a change to `reproduce`.
-- **Mutation rate is per digit for the body and plants**, so the same 0.01 gives 0.65 changes per animal body
-  but 0.24 per plant. Both are now readable as expected changes per child: `layout.default_mutations`
-  holds them per segment and any call can set them with `mutations_per_segment` (`DNA.8`). The defaults
-  are unchanged; whether plants should mutate more slowly is `REPRO.3`.
+- **Mutation rate is per digit for the body and plants**, so the same 0.01 would give 0.65 changes per animal body
+  but 0.30 per plant. Both are now readable as expected changes per child: `layout.default_mutations`
+  holds them per segment and any call can set them with `mutations_per_segment` (`DNA.8`). The plant default is now 0.005 per digit
+  (0.15 per child) as `REPRO.3` asked.
 - **`somatic_maint` still cuts wear up to 4.5 times**, but it now competes with reproduction (`TRAIT.6`), so
   selection should not push it to the maximum. That rests on the design note's toy model, not on the
   simulator, which has no stable ecology yet.

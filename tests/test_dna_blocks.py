@@ -122,7 +122,7 @@ def test_animal_layout_has_the_brain_after_the_body():
 
 
 def test_plant_layout_has_one_body_segment_and_no_blocks():
-    assert dict(PLANT_LAYOUT.segments) == {"body": (0, 24)}
+    assert dict(PLANT_LAYOUT.segments) == {"body": (0, 30)}
     assert all(gene.block is None for gene in PLANT_LAYOUT.genes)
 
 
@@ -148,7 +148,7 @@ def test_segments_must_be_consecutive_and_named():
 def test_layout_mutation_defaults():
     assert ANIMAL_LAYOUT.default_mutations["body"] == pytest.approx(0.70)
     assert ANIMAL_LAYOUT.default_mutations["brain"] == 1.0
-    assert PLANT_LAYOUT.default_mutations["body"] == pytest.approx(0.24)  # 0.01 per digit
+    assert PLANT_LAYOUT.default_mutations["body"] == pytest.approx(0.15)  # 0.005 per digit
     assert BLOCKY.default_mutations["brain"] == 2.0
     assert BLOCKY.default_mutations["body"] == pytest.approx(0.02)  # unlisted: 0.01 per digit
     with pytest.raises(ValueError):
@@ -230,12 +230,12 @@ def test_default_animal_mutation_does_not_let_the_brain_swamp_the_body():
     # per-digit 0.01 everywhere would have given about 3.96 brain changes per child
 
 
-def test_plant_default_is_still_one_percent_per_digit():
+def test_plant_default_is_half_a_percent_per_digit():
     dna = DNA.random(PLANT_LAYOUT, rng(1))
     r = rng(2)
     trials = 2000
     changed = sum(round(dna.mutated(r).distance(dna) * dna.length) for _ in range(trials))
-    assert changed / trials == pytest.approx(0.24, abs=0.05)
+    assert changed / trials == pytest.approx(0.15, abs=0.04)
 
 
 def test_mutations_per_segment_set_the_expected_count_of_each_segment():

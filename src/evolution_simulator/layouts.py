@@ -26,6 +26,9 @@ BRAIN_GENE = BlockSpec(
 )
 """The brain's 198 weights and biases, two digits each (396 digits), one group per hidden neuron."""
 
+PLANT_MUTATION_PER_DIGIT: float = 0.005
+"""Chance a plant digit changes per child: half the animal body's 0.01, so plants evolve slower."""
+
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
     version=3,
@@ -64,7 +67,7 @@ ANIMAL_LAYOUT = GenomeLayout(
 
 PLANT_LAYOUT = GenomeLayout(
     name="plant",
-    version=1,
+    version=2,
     specs=(
         GeneSpec("max_biomass"),
         GeneSpec("growth_rate"),
@@ -72,8 +75,13 @@ PLANT_LAYOUT = GenomeLayout(
         GeneSpec("dispersal_radius"),
         GeneSpec("seed_clutch"),
         GeneSpec("root_reach"),
+        # reproduction (REPRO.3): energy per seed and the gap between seed bursts
+        GeneSpec("seed_provision", length=3),
+        GeneSpec("seeding_interval", length=3),
     ),
-    # Plants evolve slowly, so keep big jumps likelier than the animals' default of 0.5.
+    # Plants mutate more slowly than animals: half the animals' 0.01 per digit. They evolve slowly,
+    # so the changes they do get keep big jumps likelier than the animals' position bias of 0.5.
+    segment_mutations={"body": PLANT_MUTATION_PER_DIGIT * 30},
     position_bias=0.75,
 )
 

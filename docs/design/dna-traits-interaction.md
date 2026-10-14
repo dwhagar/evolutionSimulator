@@ -174,5 +174,5 @@ These wait on the owner's answers or on other tasks and are tracked in [TODO.md]
   use it is decided when the world creates the first generation.
 - The reproduction genes are built (`REPRO.5`, `TRAIT.6`): `fertility` is gone, and `caregiving`, `repro_interval` and
   `repro_drive` replace it, so every body gene is read by a trait and `TraitSet.unread_genes()` is empty (see
-  [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity)). Still to build: the protective effect of
-  caregiving (needs the `SENSE.1` "young nearby" sense) and the plant seed genes (`REPRO.3`).
+  [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity)). The plant seed genes are built too (`REPRO.3`, plant layout v2). Still to build: the protective effect of
+  caregiving (needs the `SENSE.1` "young nearby" sense).
