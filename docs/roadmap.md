@@ -30,7 +30,7 @@ Still to build, now that the owner has answered the open questions:
 
 Not yet given a version; the owner sets milestones.
 - The world: built (`WORLD.2` to `WORLD.4`, [#53](https://github.com/dwhagar/evolutionSimulator/pull/53)): bounds, time scales, a spatial index, stand-in senses and the step loop. To come: the day-night cycle (`WORLD.5`), per-second physics for fast speeds (`WORLD.7`, waits on the owner's answer about time scales, question 8 on [#36](https://github.com/dwhagar/evolutionSimulator/issues/36)), plant balance (`WORLD.8`) and speed (`WORLD.9`, `WORLD.13`).
-- Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`.
+- Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`; the sense genes (field of vision, acuity) are built (`SENSE.16`, [#103](https://github.com/dwhagar/evolutionSimulator/pull/103)).
 - The brain acting and learning: design notes for a shape that evolves and for nightly learning are done (`BRAIN.13`, `BRAIN.15`, [#60](https://github.com/dwhagar/evolutionSimulator/pull/60)); the builds are `BRAIN.23` and `BRAIN.24`, then acting on the decisions, `BRAIN.10`.
 
 ## Later
