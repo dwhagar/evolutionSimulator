@@ -9,6 +9,7 @@ Body positions match the original prototype digit for digit; the brain block fol
 
 from __future__ import annotations
 
+import random
 from collections.abc import Mapping
 from typing import Any
 
@@ -32,7 +33,7 @@ PLANT_MUTATION_PER_DIGIT: float = 0.005
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=4,
+    version=5,
     specs=(
         # body
         GeneSpec("speed"),
@@ -51,10 +52,13 @@ ANIMAL_LAYOUT = GenomeLayout(
         GeneSpec("carnivore_eff"),
         GeneSpec("aggression"),
         GeneSpec("fear"),
-        # reproduction (REPRO.5): energy per offspring, the gap between births, the urge to mate
-        GeneSpec("caregiving", length=3),
-        GeneSpec("repro_interval", length=3),
+        # reproduction (REPRO.8): how much each parent gives a newborn, the gap between matings,
+        # the urge to mate, litter size and gestation, and how fast the body heals
+        GeneSpec("parenting", length=3),
+        GeneSpec("repro_cooldown", length=3),
         GeneSpec("repro_drive", length=3),
+        GeneSpec("fertility", length=3),
+        GeneSpec("recovery", length=3),
         GeneSpec("encoder_fidelity"),
         # one digit read as a category
         GeneSpec("sex_strategy", length=1),
@@ -66,9 +70,9 @@ ANIMAL_LAYOUT = GenomeLayout(
         # the brain: read by the Brain object, not by the trait table
         BRAIN_GENE,
     ),
-    # The body keeps the prototype's 0.01 per digit (0.86 changes per child over its 86 digits). The
+    # The body keeps the prototype's 0.01 per digit (0.92 changes per child over its 92 digits). The
     # brain is about one change per child however long it is, about 0.0011 per brain digit.
-    segment_mutations={"body": 0.01 * 86, "brain": 1.0},
+    segment_mutations={"body": 0.01 * 92, "brain": 1.0},
 )
 
 PLANT_LAYOUT = GenomeLayout(
@@ -93,6 +97,25 @@ PLANT_LAYOUT = GenomeLayout(
 
 LAYOUTS: tuple[GenomeLayout, ...] = (ANIMAL_LAYOUT, PLANT_LAYOUT)
 """Every known layout, for restoring saved genomes."""
+
+
+FOUNDER_LEVELS: Mapping[str, float] = {
+    "fertility": 0.75,
+    "parenting": 0.0,
+    "repro_drive": 0.5,
+    "repro_cooldown": 0.5,
+    "recovery": 0.5,
+}
+"""Where the reproduction genes start in a first generation (``REPRO.7``): large litters, no
+parenting, and the middle of the range for the rest. Evolution moves them from there."""
+
+
+def founder_animal_dna(rng: random.Random) -> DNA:
+    """A random animal genome with the reproduction genes set to ``FOUNDER_LEVELS``."""
+    dna = DNA.random(ANIMAL_LAYOUT, rng)
+    for gene_id, level in FOUNDER_LEVELS.items():
+        dna = dna.with_value(gene_id, level)
+    return dna
 
 
 def dna_from_dict(data: Mapping[str, Any]) -> DNA:

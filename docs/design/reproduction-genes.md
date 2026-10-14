@@ -9,6 +9,17 @@ revision replaces it in place and follows the answers logged in [decisions.md](.
 The numbers are starting values to tune, not measurements of the running simulator. The small model in
 [Does the trade-off work?](#does-the-trade-off-work) is a toy, with its assumptions stated.
 
+> **Built (animals).** `REPRO.8` built everything for animals in this note on top of
+> [#74](https://github.com/dwhagar/evolutionSimulator/pull/74): the four genes and the sex digit, `recovery`
+> (`TRAIT.7`), pregnancies, absolute-day durations and per-hour charging, with the constants named as in the
+> table at the end. Animal layout version 5, 472 digits. Differences from the note: the pregnancy list is
+> kept on the bearers, not in a separate world list; the protective effect of `parenting` and the "own young"
+> channel wait for `SENSE.14`; a father who has died pays nothing and gives nothing at the birth; the
+> costs of drive (wear, upkeep) follow the gene, while the threshold, boldness and brain input follow the
+> sex-modified drive. The plant genes are `REPRO.3` and `TRAIT.8` (the seed genes are built, the longevity gene
+> is not). See [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity) and the
+> [long-run check](#long-run-check) below.
+
 ## Summary
 
 - **Four reproduction genes plus the sex digit** (the owner's three, and parenting as its own gene, the
@@ -341,6 +352,47 @@ change.
 | `PLANT_LONGEVITY_SEEDS` | seed budget `0.35 * (1 - 0.4 * g)` | seeds |
 | `SEED_FRACTION_RANGE` | 0.05 to 0.50 | `seed_provision` |
 | `SEEDING_DAYS` | 2 to 60, log | `seeding_interval` |
+
+## Long-run check
+
+`scripts/reproduction_check.py` (`REPRO.8`) runs the real `AnimalTraits` (upkeep, wear, healing, matings,
+pregnancies and paid births, one hour per tick) in a chemostat: 80 founders, a fixed 45 biomass per tick
+shared by everyone alive (3 at most each), a 5% chance per tick that a willing pair meets, a 0.2% chance
+per tick of an injury of 5 to 40 health, and a newborn that cannot eat for its first 18 hours. It has no
+space, plants or brains. The world cannot yet host this check: random founders still starve before they
+breed (`BRAIN.9`) and the plants' soil is not tuned, so a full-world run waits for that. A gene "piles up at
+an end" when its population mean over the last fifth of the run is within 0.08 of 0 or 1.
+
+Three runs of 60,000 ticks (about 7 years), founders at the levels in `FOUNDER_LEVELS`:
+
+| Run | `fertility` | `repro_cooldown` | `repro_drive` | `recovery` | `parenting` | `somatic_maint` | Population |
+|---|---|---|---|---|---|---|---|
+| seed 1, defaults | 0.75 to 0.23 | 0.51 | 0.52 | 0.51 to 0.26 | 0.00 to 0.04 | 0.48 to 0.05 | 129 |
+| seed 2, defaults | 0.75 to 0.44 | 0.51 to 0.58 | 0.51 | 0.51 to 0.26 | 0.00 to 0.01 | 0.44 to 0.10 | 163 |
+| seed 1, injury 0.01, newborn fast 30 h | 0.75 to 0.22 | 0.51 | 0.52 | 0.51 | 0.00 to 0.01 | 0.48 to 0.22 | 95 |
+
+What it shows:
+
+- **The main risk did not happen.** `fertility` and a short `repro_cooldown` do not run to the top. Crowding
+  makes each extra young animal cost the others food, so fertility falls (to 0.2 to 0.45) and the cooldown
+  stays in the middle or drifts longer. The toy model's runaway needed a world without crowding.
+- **`somatic_maint` falls, then holds** at 0.05 to 0.2, where its upkeep (0.20 times the square) balances
+  the wear it removes. Heavy injury keeps it higher (0.22).
+- **`repro_drive` stays near the middle.** With no real mate scarcity its wear and upkeep cancel against
+  the matings it buys.
+- **`recovery` drifts down to about 0.26** when injuries are mild (it costs 0.10 times the square in
+  upkeep) and holds at 0.51 when they are frequent (0.01 per tick). It is not at an end in either case.
+- **`parenting` stays at the bottom (the script reports it as "at an end")** and is the one open item.
+  Founders start at 0, and the chemostat gives a newborn little to lose: it has a short fast and no
+  predators, no cold, no distance to cover. Without that cost to lack of parental energy, the gene has
+  nothing to pay for. The design starts parenting at 0 on purpose, so that evolution has to find the
+  benefit. This check cannot show whether it does; it needs predation, newborn vulnerability and the
+  parent staying near its young (`SENSE.14`).
+
+So the result is: nothing runs to the top, and the one gene at the bottom is there because the chemostat
+only stands in for the pressures that should hold it up. Repeat the check in the world once populations
+survive, and read `parenting`, `recovery` and `repro_drive` first. To explore, change the pressures:
+`python scripts/reproduction_check.py [ticks] [seed] [injury_chance] [newborn_fast_ticks]`.
 
 ## Questions for the owner
 

@@ -30,7 +30,7 @@ def rng(seed: int = 1) -> random.Random:
 
 
 def test_layout_lengths_match_prototype():
-    assert ANIMAL_LAYOUT.length == 994  # 86 body digits plus a 908-digit brain
+    assert ANIMAL_LAYOUT.length == 1000  # 92 body digits plus a 908-digit brain
     assert PLANT_LAYOUT.length == 30
     assert TINY.length == 5
 
@@ -51,14 +51,16 @@ def test_animal_gene_positions_match_prototype():
 
     assert span(ANIMAL_LAYOUT, "speed") == (0, 4)
     assert span(ANIMAL_LAYOUT, "size") == (8, 12)
-    assert span(ANIMAL_LAYOUT, "caregiving") == (56, 59)
-    assert span(ANIMAL_LAYOUT, "repro_interval") == (59, 62)
+    assert span(ANIMAL_LAYOUT, "parenting") == (56, 59)
+    assert span(ANIMAL_LAYOUT, "repro_cooldown") == (59, 62)
     assert span(ANIMAL_LAYOUT, "repro_drive") == (62, 65)
-    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (65, 69)
-    assert span(ANIMAL_LAYOUT, "sex_strategy") == (69, 70)
-    assert span(ANIMAL_LAYOUT, "brain_gain") == (70, 74)  # the operating genes follow the body
-    assert span(ANIMAL_LAYOUT, "learning_rate") == (82, 86)
-    assert span(ANIMAL_LAYOUT, "brain") == (86, 994)
+    assert span(ANIMAL_LAYOUT, "fertility") == (65, 68)
+    assert span(ANIMAL_LAYOUT, "recovery") == (68, 71)
+    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (71, 75)
+    assert span(ANIMAL_LAYOUT, "sex_strategy") == (75, 76)
+    assert span(ANIMAL_LAYOUT, "brain_gain") == (76, 80)  # the operating genes follow the body
+    assert span(ANIMAL_LAYOUT, "learning_rate") == (88, 92)
+    assert span(ANIMAL_LAYOUT, "brain") == (92, 1000)
     assert span(PLANT_LAYOUT, "root_reach") == (20, 24)
 
 
@@ -112,7 +114,7 @@ def test_random_is_seeded_and_valid():
     a = DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a == DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a != DNA.random(ANIMAL_LAYOUT, rng(8))
-    assert a.length == len(a) == 994
+    assert a.length == len(a) == 1000
     assert a.layout is ANIMAL_LAYOUT
     assert set(a.sequence) <= {0, 1, 2, 3}
 
@@ -386,3 +388,30 @@ def test_zero_mutation_asexual_child_equals_parent():
     for seed in range(10):
         dna = DNA.random(PLANT_LAYOUT, rng(seed))
         assert dna.reproduce(None, rng(seed), 0.0) == dna
+
+
+# --- setting a gene by value ---------------------------------------------------
+
+
+def test_with_value_sets_the_digits_nearest_a_value():
+    base = DNA.random(ANIMAL_LAYOUT, rng(2))
+    for gene_id, length in (("fertility", 3), ("size", 4)):
+        for value in (0.0, 0.25, 0.5, 0.75, 1.0):
+            changed = base.with_value(gene_id, value)
+            assert abs(changed.value(gene_id) - value) <= 0.5 / (4**length - 1) + 1e-12
+    assert base.with_value("fertility", 0.0).slice_of("fertility") == (0, 0, 0)
+    assert base.with_value("fertility", 1.0).slice_of("fertility") == (3, 3, 3)
+    assert base.with_value("fertility", 7.0) == base.with_value("fertility", 1.0)  # clamped
+    other = base.with_value("fertility", 0.5)
+    assert other.slice_of("size") == base.slice_of("size")  # nothing else changed
+    assert other.with_value("fertility", other.value("fertility")) == other
+
+
+def test_founders_start_with_large_litters_and_no_parenting():
+    from evolution_simulator.layouts import FOUNDER_LEVELS, founder_animal_dna
+
+    dna = founder_animal_dna(rng(5))
+    for gene_id, level in FOUNDER_LEVELS.items():
+        assert abs(dna.value(gene_id) - level) <= 0.5 / 63
+    assert dna.value("parenting") == 0.0
+    assert dna != founder_animal_dna(rng(6))  # the rest of the genome is random

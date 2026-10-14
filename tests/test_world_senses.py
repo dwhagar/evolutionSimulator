@@ -20,7 +20,7 @@ from evolution_simulator.sensing import (
     sense,
 )
 from evolution_simulator.traits import AnimalTraits
-from evolution_simulator.world import DayCycle, Vec, World, WorldConfig, WorldSenses
+from evolution_simulator.world import Bounds, DayCycle, Vec, World, WorldConfig, WorldSenses
 from evolution_simulator.world.senses import (
     classify,
     loudness,
@@ -349,7 +349,9 @@ def test_searching_only_nearby_gives_the_same_answer_as_looking_at_everything():
 
 
 def test_perceiving_changes_nothing_but_the_random_stream():
-    world = World(WorldConfig(seed=3))
+    world = World(
+        WorldConfig(seed=3, bounds=Bounds((120, 120)))
+    )  # crowded, so everyone senses someone
     world.populate(animals=10, plants=40)
     before = world.state_digest()
     stream = world.rng.getstate()

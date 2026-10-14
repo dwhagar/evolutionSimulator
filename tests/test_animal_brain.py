@@ -24,7 +24,10 @@ from evolution_simulator.traits import (
     PlantTraits,
 )
 
-BODY = ("0123" * 18)[:70]
+OLD_BODY = ("0123" * 18)[:70]
+BODY = (
+    OLD_BODY[:65] + "000000" + OLD_BODY[65:]
+)  # fertility and recovery at zero, the rest as before
 OPERATING = (
     "0" * 16
 )  # brain_gain, reaction_time, curiosity, learning_rate: gain 0.5, think every tick

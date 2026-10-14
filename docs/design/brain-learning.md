@@ -177,7 +177,7 @@ keeps for fitness. The traits code already tracks the right quantities.
 | --- | --- | --- |
 | Energy gained | Rise in `current_energy / max_energy` over the next few ticks | Food found and eaten is the basic good |
 | Health lost | Fall in `current_health / max_damage_capacity` | Being attacked, poisoned or injured is the basic bad |
-| Mating achieved | A mating (`AnimalTraits.give_birth` returned true) | The reward that evolution itself selects for |
+| Mating achieved | A mating (`AnimalTraits.mate` returned `CONCEIVED` or `MISSED`) | The reward that evolution itself selects for |
 | Safety | Threat closeness input falling after a threat was sensed | Learning to get away |
 | Nothing happened | Zero | Doing nothing earns nothing |
 

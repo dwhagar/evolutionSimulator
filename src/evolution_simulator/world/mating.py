@@ -2,8 +2,8 @@
 
 Two rules, each in one function so they can change without touching the step loop:
 
-* ``may_mate`` says whether two animals can have a child at all. Today any two animals with the same
-  kind of genome may. The sex rule (``DNA.9``: is one of each needed?) belongs here.
+* ``may_mate`` says whether two animals can have a child at all: the same kind of genome and one of
+  each sex (``DNA.9``: the sex digit modulo 2, 0 impregnates and 1 bears).
 * ``choose_mate`` picks among the willing animals within reach: the one whose genome is closest
   (``distance``). The closest genome is the same species or the nearest relative, so animals prefer
   their own kind. Cross-breeding between distant genomes is allowed but is the last choice: it
@@ -22,7 +22,11 @@ def may_mate(a: Animal, b: Animal) -> bool:
     if a is b:
         return False
     genome_a, genome_b = a.traits.dna, b.traits.dna
-    return genome_a.layout == genome_b.layout and genome_a.ploidy == genome_b.ploidy
+    return (
+        genome_a.layout == genome_b.layout
+        and genome_a.ploidy == genome_b.ploidy
+        and a.traits.sex != b.traits.sex
+    )
 
 
 def mate_rank(chooser: Animal, candidate: Animal) -> tuple[float, float, int]:

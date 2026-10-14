@@ -390,8 +390,8 @@ Anything the owner answers differently is a change to one constant or one table 
 | Inputs 18 to 20 | `sense_channels.py`, `sensing.py`, `traits.py`, `world/senses.py` | `SENSE.9`. Three more rows in the table: `pain` (body: health lost since the last decision as a share of 20% of maximum health, capped at 1; `AnimalTraits.pain`, cleared when the brain decides, so damage taken between decisions is not lost), `daylight` (world, marked `ambient` so it does not count as sensing something, which keeps the blind wander fallback working) and `relative_size` (`log2(mass ratio) / 2` of the nearer of the nearest prey and threat, from -1 to 1; exact by sight, noisy by hearing; `Neighbour.mass` and `sense(..., mass=)` carry the masses). `BasicSenses` fills in both world inputs. |
 | `AnimalTraits.brain`, `.brain_upkeep`, `.think(percepts)` | `traits.py` | The hookup. The brain is built from the genome at birth; `think` adds the animal's own state to the percepts, runs the brain and returns the decision; pass an `rng` to enable the wander fallback. |
 
-**Genome.** `ANIMAL_LAYOUT` is now 994 digits at layout version 4: the 86 body digits (the prototype's 65, with
-the three reproduction genes of `REPRO.5` in place of `fertility`, and the 16 digits of the four operating genes
+**Genome.** `ANIMAL_LAYOUT` is now 1,000 digits at layout version 5: the 92 body digits (the prototype's 65, with
+the five reproduction genes of `REPRO.5` and `REPRO.8` in place of `fertility`, and the 16 digits of the four operating genes
 after `sex_strategy`), then the 908 brain digits. The body genes are read by the trait table as before; the brain is read only by
 `Brain`, so `TraitSet.unread_genes()` does not list it.
 
@@ -400,8 +400,8 @@ after `sex_strategy`), then the 908 brain digits. The body genes are read by the
 biases. (A realized `Brain` of the same family uses the same order without the gates: 27 numbers per neuron.) Crossover by unit takes whole neurons, with their outgoing weights, from either parent,
 which is the "per-neuron block" recommendation under [Storing the brain in the DNA](#storing-the-brain-in-the-dna).
 
-**Mutation.** `ANIMAL_LAYOUT` sets about 0.86 expected changes per child for the body (the prototype's 0.01 per
-digit, unchanged, over its 86 digits) and 1.0 for the brain (about 0.0011 per brain digit), so the brain's 908
+**Mutation.** `ANIMAL_LAYOUT` sets about 0.92 expected changes per child for the body (the prototype's 0.01 per
+digit, unchanged, over its 92 digits) and 1.0 for the brain (about 0.0011 per brain digit), so the brain's 908
 digits do not take over the mutation count (0.01 per digit would have given about 9 changes in the brain alone). Both numbers
 are data on the layout and can be overridden per call. The first-digit-dominates problem
 ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)) is not addressed: it needs the owner's call

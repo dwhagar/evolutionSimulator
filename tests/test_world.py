@@ -3,7 +3,14 @@
 import math
 
 import pytest
-from world_support import animal_dna, grown, plant_dna
+from world_support import (
+    animal_dna,
+    breeding_pair,
+    grown,
+    hourly_world,
+    lover_dna,
+    plant_dna,
+)
 
 from evolution_simulator.world import Bounds, TimeScale, Vec, World, WorldConfig
 
@@ -211,97 +218,176 @@ def test_a_plant_that_is_eaten_down_dies_and_is_removed():
 # --- reproduction -------------------------------------------------------------
 
 
-def test_two_willing_animals_close_together_have_a_child():
-    world = make()
-    a = world.add_animal(animal_dna(brain={**STILL, **LOVER}), HERE, heading=0.0)
-    b = world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(501, 500), heading=0.0)
-    grown(a, b)
+def conceived(world, **genes):
+    """A grown father and mother side by side, mated by one step; returns (father, mother)."""
+    father, mother = breeding_pair(world, **genes)
     report = world.step()
-    assert report.animal_births == 1
-    assert len(world.animals) == 3
-    child = world.animals[-1]
-    assert child.parents == (a.id, b.id)
-    assert child.traits.dna.layout == a.traits.dna.layout
-    assert world.bounds.contains(child.position)
-    assert a.traits.mating_cooldown > 0 and b.traits.mating_cooldown > 0
+    assert report.animal_births == 0  # a litter takes its gestation to arrive
+    assert mother.traits.is_pregnant and mother.partner == father.id
+    return father, mother
 
 
-def test_a_newborn_starts_with_the_energy_its_parents_gave_it():
-    world = make()
-    a = world.add_animal(animal_dna(brain={**STILL, **LOVER}), HERE, heading=0.0)
-    b = world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(501, 500), heading=0.0)
-    grown(a, b)
-    before = a.traits.current_energy + b.traits.current_energy
+def due(world, mother):
+    """Bring the birth forward and make sure the parents can afford it."""
+    mother.traits.pregnancy.remaining = 0.0
+    for animal in world.animals:
+        animal.traits.current_energy = animal.traits.max_energy
+
+
+def test_a_willing_pair_conceives_and_the_litter_arrives_after_the_gestation(sure_conception):
+    world = hourly_world()
+    father, mother = conceived(world)
+    litter = mother.traits.pregnancy.litter
+    assert len(world.animals) == 2
+    assert father.traits.mating_cooldown > 0  # the mother's cooldown starts at the birth
+    due(world, mother)
+    report = world.step()
+    assert report.animal_births == litter == len(world.animals) - 2
+    for child in world.animals[2:]:
+        assert child.parents == (father.id, mother.id)
+        assert child.traits.dna.layout == mother.traits.dna.layout
+        assert world.bounds.contains(child.position)
+        assert child.position.distance_to(mother.position) <= world.config.birth_scatter + 1e-9
+    assert not mother.traits.is_pregnant and mother.partner is None
+    assert mother.traits.mating_cooldown > 0  # her cooldown starts at the birth
+
+
+def test_the_gestation_runs_on_the_reference_clock_not_the_tick_count(sure_conception):
+    hourly = hourly_world()
+    _, slow = conceived(hourly)
+    daily = hourly_world(time_scale=TimeScale(seconds_per_tick=24 * 3600.0))
+    _, quick = conceived(daily)
+    assert hourly.dt == 1.0 and daily.dt == 24.0
+    assert quick.traits.pregnancy.remaining == slow.traits.pregnancy.remaining  # same litter
+    start = slow.traits.pregnancy.remaining
+    hourly.step()
+    daily.step()
+    assert start - slow.traits.pregnancy.remaining == pytest.approx(1.0)
+    assert start - quick.traits.pregnancy.remaining == pytest.approx(24.0)
+
+
+def test_newborns_start_with_the_energy_their_parents_gave_them(sure_conception):
+    world = hourly_world()
+    father, mother = conceived(world)
+    due(world, mother)
+    before = father.traits.current_energy + mother.traits.current_energy
     world.step()
-    child = world.animals[-1]
-    paid = before - (a.traits.current_energy + b.traits.current_energy)
-    # Both parents paid more than the newborn received (the repair surcharge is lost), and the
-    # newborn got the mean care fraction of its own energy store.
-    care = 0.5 * (a.traits.phenotype["care_fraction"] + b.traits.phenotype["care_fraction"])
-    assert child.traits.current_energy == pytest.approx(care * child.traits.max_energy)
-    assert paid > care * child.traits.max_energy
+    children = world.animals[2:]
+    care = 0.5 * (
+        father.traits.phenotype["care_fraction"] + mother.traits.phenotype["care_fraction"]
+    )
+    gave = sum(c.traits.current_energy for c in children)
+    for child in children:
+        assert child.traits.current_energy == pytest.approx(care * child.traits.max_energy)
+    paid = before - (father.traits.current_energy + mother.traits.current_energy)
+    assert paid > gave  # the repair surcharge is lost
 
 
-def test_parents_do_not_mate_again_while_recovering():
-    world = make()
-    pair = [
-        world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
-        for x in (500, 501)
-    ]
-    grown(*pair)
-    first = world.step()
-    second = world.step()
-    assert first.animal_births == 1
-    assert second.animal_births == 0
+def test_nobody_mates_again_during_a_cooldown_or_a_pregnancy(sure_conception):
+    world = hourly_world()
+    _, mother = conceived(world)
+    pregnancy = mother.traits.pregnancy
+    assert world.step().animal_births == 0
+    assert mother.traits.pregnancy is pregnancy
 
 
-def test_juveniles_far_apart_or_unable_to_pay_do_not_mate():
-    world = make()
+def test_juveniles_far_apart_or_unable_to_pay_the_effort_do_not_mate(sure_conception):
+    world = hourly_world()
     young = [
-        world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
-        for x in (500, 501)
+        world.add_animal(lover_dna(sex), Vec.of(500 + sex, 500), heading=0.0) for sex in (0, 1)
     ]
-    assert world.step().animal_births == 0  # both are still juveniles
+    world.step()
+    assert not any(a.traits.is_pregnant for a in young)  # both are still juveniles
     assert all(a.traits.mating_cooldown > 0 for a in young)
 
-    world = make()
-    far = [
-        world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
-        for x in (500, 520)
-    ]
-    grown(*far)
-    assert world.step().animal_births == 0
+    world = hourly_world()
+    father, mother = breeding_pair(world, gap=20.0)
+    world.step()
+    assert not mother.traits.is_pregnant  # out of reach
 
-    world = make()
-    pair = [
-        world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
-        for x in (500, 501)
-    ]
+    world = hourly_world()
+    father, mother = breeding_pair(world)
+    father.traits.current_energy = 1.0
+    world.step()
+    assert not mother.traits.is_pregnant
+    assert mother.traits.mating_cooldown == 0  # nobody was charged for a mating that did not happen
+
+
+def test_two_animals_of_the_same_sex_do_not_mate(sure_conception):
+    world = hourly_world()
+    pair = [world.add_animal(lover_dna(0), Vec.of(x, 500), heading=0.0) for x in (500, 501)]
     grown(*pair)
-    pair[0].traits.current_energy = 1.0
-    energy = pair[1].traits.current_energy
-    assert world.step().animal_births == 0  # one cannot pay, so nobody is charged
-    assert energy - 1.0 < pair[1].traits.current_energy < energy  # only a tick of living
-    assert pair[1].traits.mating_cooldown == 0
+    world.step()
+    assert not any(a.traits.is_pregnant for a in pair)
+    assert all(a.traits.mating_cooldown == 0 for a in pair)
 
 
-def test_an_animal_that_does_not_seek_a_mate_is_left_alone():
-    world = make()
-    world.add_animal(animal_dna(brain={**STILL, "mate": -2.0}), HERE, heading=0.0)
-    world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(501, 500), heading=0.0)
-    assert world.step().animal_births == 0
-
-
-def test_the_animal_cap_stops_births():
-    world = make(max_animals=2)
-    grown(
-        *[
-            world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
-            for x in (500, 501)
-        ]
+def test_an_animal_that_does_not_seek_a_mate_is_left_alone(sure_conception):
+    world = hourly_world()
+    cold = world.add_animal(
+        animal_dna(brain={**STILL, "mate": -2.0}, sex_strategy="0"), HERE, heading=0.0
     )
+    keen = world.add_animal(lover_dna(1), Vec.of(501, 500), heading=0.0)
+    grown(cold, keen)
+    world.step()
+    assert not keen.traits.is_pregnant
+
+
+def test_the_animal_cap_limits_the_litter_and_it_pays_only_for_those_born(sure_conception):
+    world = hourly_world(max_animals=3)
+    _, mother = conceived(world, fertility="333")  # a litter of 8
+    assert mother.traits.pregnancy.litter == 8
+    due(world, mother)
+    assert world.step().animal_births == 1
+    assert len(world.animals) == 3
+    assert not mother.traits.is_pregnant
+
+
+def test_a_birth_waits_until_both_parents_can_pay(sure_conception):
+    world = hourly_world()
+    father, mother = conceived(world, parenting="000")
+    due(world, mother)
+    father.traits.current_energy = 1.0
     assert world.step().animal_births == 0
-    assert len(world.animals) == 2
+    assert mother.traits.is_pregnant  # she keeps carrying the litter
+    father.traits.current_energy = father.traits.max_energy
+    assert world.step().animal_births > 0
+
+
+def test_a_father_who_has_died_pays_nothing(sure_conception):
+    world = hourly_world()
+    father, mother = conceived(world, parenting="000")
+    due(world, mother)
+    father.traits.apply_damage(1e9)
+    report = world.step()
+    assert report.animal_deaths == 1
+    assert report.animal_births > 0
+    child = world.animals[-1]
+    assert child.parents == (father.id, mother.id)
+    assert child.traits.current_energy == pytest.approx(
+        0.5 * 0.1 * child.traits.max_energy
+    )  # her half
+
+
+def test_a_mother_who_dies_loses_the_litter(sure_conception):
+    world = hourly_world()
+    _, mother = conceived(world)
+    due(world, mother)
+    mother.traits.apply_damage(1e9)
+    assert world.step().animal_births == 0
+    assert len(world.animals) == 1
+
+
+def test_a_first_generation_starts_with_large_litters_and_no_parenting():
+    world = make(seed=4)
+    world.populate(animals=12)
+    for animal in world.animals:
+        traits = animal.traits
+        assert traits.phenotype["fertility"] == pytest.approx(0.75, abs=0.02)
+        assert traits.phenotype["care_fraction"] == pytest.approx(0.10)
+        assert traits.litter_size == 6
+        assert traits.phenotype["repro_drive"] == pytest.approx(0.5, abs=0.02)
+        assert traits.phenotype["recovery"] == pytest.approx(0.5, abs=0.02)
 
 
 def ready_plant(world, position, **genes):

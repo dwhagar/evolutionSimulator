@@ -46,15 +46,24 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 2. In id order each awake animal ages and burns energy (`update_metabolism_and_aging`, with the brain's
    speed output as the movement ratio), turns, moves and, if the brain says "eat" and a plant is
    within reach, grazes it.
-3. Animals whose brain says "seek mating" and that are off cooldown pair off in id order, each with
-   the willing animal within `mating_reach` (3 units) whose genome is closest (see
-   [Mate choice](#mate-choice)). Each pair has one child (`DNA.reproduce`, default
-   crossover) placed near the parents' midpoint, and `AnimalTraits.give_birth` charges the parents
-   and sets the child's energy; if either parent cannot pay, nobody is charged and there is no child.
+3. Animals whose brain says "seek mating" and that can mate (off cooldown, not pregnant) pair off in id
+   order, each with the willing animal of the other sex within `mating_reach` (3 units) whose genome is
+   closest (see [Mate choice](#mate-choice)). `AnimalTraits.mate` charges the mating effort and, if it
+   takes (chance from both fertilities), makes the bearer pregnant with a litter whose genomes
+   (`DNA.reproduce`, default crossover) are fixed now. Then, in id order, each bearer whose gestation
+   is up gives birth with `AnimalTraits.give_birth`: both parents pay for the litter and the young
+   appear within `birth_scatter` of the bearer, as far as the animal cap allows. If a parent cannot
+   pay, nobody is charged and she keeps carrying them.
 4. Plants grow in id order; a ready plant drops up to `seed_capacity` seeds within its dispersal radius
    and pays each one its `seed_provision` of its own full size. Seeds are mutated clones of the parent
    (`REPRO.3`); a plant seeds only after its cooldown is over and at most `seed_capacity` seeds at once.
 5. The dead are removed and the tick counter goes up by one.
+
+Aging, energy burn, healing, the mating cooldown and the pregnancy run per **reference tick** (an hour of
+simulated time) and are scaled by `World.dt = seconds_per_tick / 3600`; movement, grazing and plant growth
+are per tick. A one-hour tick (`TimeScale(seconds_per_tick=3600)`) is what the numbers were set for; the
+world's default is still a one-second tick until `WORLD.7` switches it, so a default world burns energy
+3,600 times slower than its movement suggests.
 
 Movement: the `turn` output turns the animal by up to `base_turn_rate` radians (a positive turn goes
 right, the same side as a positive direction input, so turning toward a thing and seeing it move to
@@ -192,8 +201,8 @@ The sensing step is imported inside `perceive` because `sensing` itself imports 
 ## Mate choice
 
 `REPRO.4`. Two functions in `world/mating.py` decide everything about pairing, so the step loop does not.
-`may_mate(a, b)` says whether two animals can have a child at all: today, any two with the same layout and
-the same ploidy. The sex rule (`DNA.9`) belongs there. `choose_mate(a, candidates)` picks the preferred
+`may_mate(a, b)` says whether two animals can have a child at all: the same layout, the same ploidy and one
+of each sex (`DNA.9`: the sex digit modulo 2, 0 impregnates and 1 bears). `choose_mate(a, candidates)` picks the preferred
 one among the willing animals in reach: the smallest genetic `distance` (the fraction of differing digits;
 for diploid genomes the closer pairing of strands), then the nearer animal, then the lower id.
 
@@ -204,15 +213,20 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
 
 ## Placeholders and limits
 
-- **Births are paid for (`REPRO.5`).** A child starts with the mean `care_fraction` of its parents
-  times its own energy store, which the parents pay for between them (plus the repair surcharge, which
-  is lost), and a seed starts with the biomass its parent paid for it (`seed_provision`). Newborns are
-  juveniles: they cannot breed until they are as old as their birth interval. The founders that
-  `populate` creates are juveniles too.
+- **Births are paid for (`REPRO.5`, `REPRO.8`).** A bearer carries a litter for her gestation; at the
+  birth each parent pays for it by its own `parenting` gene and each young starts with the mean (a dead father
+  pays nothing). A seed starts with the biomass its parent paid for it (`seed_provision`). Newborns are
+  juveniles for 6% of their lifespan, and the founders `populate` creates are juveniles too, so a first
+  generation cannot breed until it has lived about three weeks of simulated time; random founders still starve
+  before then (`BRAIN.9`).
 - **Acting on the brain is partial.** Only turn, speed, eat and seek-mating are used. Attacking
   prey, meat, calls and retiring the fixed rule are `BRAIN.10`. Animals do not eat each other yet.
-- **Sex.** Any two willing animals with the same kind of genome may mate; whether one of each sex is
-  needed is `DNA.9` and goes in `may_mate` ([Mate choice](#mate-choice)).
+- **Sex.** One of each sex is needed (`DNA.9`), decided in `may_mate`. The reading of the sex digit (value
+  modulo 2, with 2 and 3 changing the drive) is the default for question 1 on
+  [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
+- **Time.** See the reference tick above. Movement, grazing and plant growth are not scaled by `dt` yet
+  (`WORLD.7`), and the sleep and day numbers are in seconds, so a world with a one-hour tick needs a day
+  cycle of `24 * 3600` seconds or longer.
 - **Sleep** energy numbers and the 600-second day are guesses to calibrate (`SENSE.13`, `TRAIT.3`).
 - **Population caps** (1000 animals, 5000 plants) are a safety net so a run cannot grow without limit; plants now stay under theirs on their own.
 - **Speed** (`WORLD.9`). Measured with `cProfile` on 300 animals and 3000 plants: the first version took
