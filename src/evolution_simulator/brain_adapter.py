@@ -77,6 +77,41 @@ class Percepts:
         return self == Percepts()
 
 
+TEMPERAMENT_STRENGTH: float = 0.6
+"""How far temperament bends perception: 0 ignores it; at 0.6 an extreme gene scales a closeness
+input by 0.4 (at 0) or 1.6 (at 1) and a middling gene (0.5) leaves it alone."""
+
+
+@dataclass(frozen=True)
+class Temperament:
+    """The inherited behaviour genes, as the brain's adapter sees them (``BRAIN.14``).
+
+    Behaviour comes from genetic factors as well as the network. These values bend what the brain
+    perceives rather than adding brain inputs, so the brain's shape (and the genome that stores it)
+    does not change when senses or behaviour genes do. Each runs from 0 to 1 and 0.5 is neutral.
+
+    - ``aggression`` scales how close prey looks: bold animals are drawn to it harder.
+    - ``fear`` scales how close a threat looks: timid animals react to it sooner and harder.
+
+    The reproduction genes planned in ``REPRO.5`` (drive to reproduce and so on) are added as more
+    fields here, each bending the input it concerns.
+    """
+
+    aggression: float = 0.5
+    fear: float = 0.5
+
+    def __post_init__(self) -> None:
+        for name in ("aggression", "fear"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and 0.0 <= value <= 1.0):
+                raise ValueError(f"Temperament {name} must be between 0 and 1, got {value}.")
+
+    @staticmethod
+    def factor(gene: float) -> float:
+        """The multiplier a gene value puts on the input it concerns."""
+        return 1.0 + TEMPERAMENT_STRENGTH * (2.0 * gene - 1.0)
+
+
 @dataclass(frozen=True)
 class BrainDecision:
     """The brain's six outputs: ``turn`` from -1 to 1, the rest from 0 to 1."""
@@ -195,9 +230,17 @@ def build_inputs(
     vitality: float,
     ready_to_mate: bool,
     percepts: Percepts,
+    temperament: Temperament | None = None,
 ) -> tuple[float, ...]:
-    """The 17 brain inputs, in ``INPUT_NAMES`` order, each clamped to its range."""
+    """The 17 brain inputs, in ``INPUT_NAMES`` order, each clamped to its range.
+
+    ``temperament`` (neutral if left out) scales the prey and threat closeness inputs; a thing that
+    is not sensed (closeness 0) stays unsensed.
+    """
     p = percepts
+    t = temperament if temperament is not None else Temperament()
+    prey_closeness = _scaled(p.prey_closeness, 0.0, 1.0, "prey_closeness")
+    threat_closeness = _scaled(p.threat_closeness, 0.0, 1.0, "threat_closeness")
     return (
         _scaled(energy_ratio, 0.0, 1.0, "energy_ratio"),
         _scaled(health_ratio, 0.0, 1.0, "health_ratio"),
@@ -206,9 +249,9 @@ def build_inputs(
         _scaled(p.plant_direction, -1.0, 1.0, "plant_direction"),
         _scaled(p.plant_closeness, 0.0, 1.0, "plant_closeness"),
         _scaled(p.prey_direction, -1.0, 1.0, "prey_direction"),
-        _scaled(p.prey_closeness, 0.0, 1.0, "prey_closeness"),
+        min(1.0, prey_closeness * Temperament.factor(t.aggression)),
         _scaled(p.threat_direction, -1.0, 1.0, "threat_direction"),
-        _scaled(p.threat_closeness, 0.0, 1.0, "threat_closeness"),
+        min(1.0, threat_closeness * Temperament.factor(t.fear)),
         _scaled(p.mate_direction, -1.0, 1.0, "mate_direction"),
         _scaled(p.mate_closeness, 0.0, 1.0, "mate_closeness"),
         1.0 if p.touching else 0.0,

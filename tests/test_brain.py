@@ -10,6 +10,7 @@ from evolution_simulator.brain_adapter import (
     OUTPUT_NAMES,
     BrainDecision,
     Percepts,
+    Temperament,
     build_inputs,
     decode_outputs,
 )
@@ -247,3 +248,49 @@ def test_decision_names_outputs_and_thresholds_actions():
     assert ACTION_THRESHOLD == 0.5
     with pytest.raises(ValueError):
         decode_outputs((0.0,) * 5)
+
+
+# --- temperament (BRAIN.14) ---------------------------------------------------
+
+
+def test_a_neutral_temperament_changes_nothing():
+    percepts = Percepts(prey_closeness=0.4, threat_closeness=0.6, plant_closeness=0.3)
+    plain = build_inputs(0.5, 0.5, 0.5, True, percepts)
+    assert build_inputs(0.5, 0.5, 0.5, True, percepts, Temperament()) == plain
+    assert build_inputs(0.5, 0.5, 0.5, True, percepts, Temperament(0.5, 0.5)) == plain
+
+
+def test_fear_scales_only_the_threat_closeness_and_aggression_only_the_prey_closeness():
+    percepts = Percepts(prey_closeness=0.4, threat_closeness=0.4, plant_closeness=0.4)
+
+    def named(t: Temperament) -> dict[str, float]:
+        return dict(zip(INPUT_NAMES, build_inputs(0.5, 0.5, 0.5, True, percepts, t)))
+
+    timid = named(Temperament(aggression=0.5, fear=1.0))
+    assert timid["threat_closeness"] == pytest.approx(0.4 * 1.6)
+    assert timid["prey_closeness"] == pytest.approx(0.4)
+    assert timid["plant_closeness"] == pytest.approx(0.4)
+    fierce = named(Temperament(aggression=1.0, fear=0.5))
+    assert fierce["prey_closeness"] == pytest.approx(0.4 * 1.6)
+    assert fierce["threat_closeness"] == pytest.approx(0.4)
+    meek = named(Temperament(aggression=0.0, fear=0.0))
+    assert meek["prey_closeness"] == pytest.approx(0.4 * 0.4)
+    assert meek["threat_closeness"] == pytest.approx(0.4 * 0.4)
+
+
+def test_temperament_is_monotonic_stays_in_range_and_cannot_invent_a_sense():
+    percepts = Percepts(threat_closeness=0.7)
+    seen = [
+        build_inputs(0.5, 0.5, 0.5, True, percepts, Temperament(fear=f / 10))[9] for f in range(11)
+    ]
+    assert seen == sorted(seen) and seen[-1] == 1.0  # 0.7 * 1.6 is clamped to 1
+    nothing = build_inputs(0.5, 0.5, 0.5, True, Percepts(), Temperament(1.0, 1.0))
+    assert nothing[4:] == (0.0,) * 13
+
+
+def test_temperament_values_are_validated():
+    for bad in (-0.1, 1.1, math.nan):
+        with pytest.raises(ValueError):
+            Temperament(aggression=bad)
+        with pytest.raises(ValueError):
+            Temperament(fear=bad)
