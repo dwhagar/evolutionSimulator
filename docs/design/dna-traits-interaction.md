@@ -90,7 +90,9 @@ layout and every name is unique, and `TraitSet.express(dna)` returns a dictionar
 refuses a genome with a different layout. It can also be given a **cost table**, which cost term (upkeep of
 repair, a birth, wear) is driven by which traits; `TraitSet.explain(name)` returns a trait's genes, weights,
 clusters, the other traits reading the same genes and the costs it drives, and `unpaid_genes()` lists genes
-whose traits drive no cost, so the "no free lunch" gaps are visible. The formulas stay in `traits.py`.
+whose traits drive no cost and that nobody has recorded a reason for (`free`, a gene-to-reason table), so the
+"no free lunch" gaps are visible. The formulas stay in `traits.py`. Since `TRAIT.9` the list is empty: every
+gene pays, or is in `free` with its reason (see [dna-and-traits.md](dna-and-traits.md#what-every-gene-costs)).
 
 Two patterns fall out of the table with no extra code:
 

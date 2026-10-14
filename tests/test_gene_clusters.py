@@ -353,21 +353,33 @@ def test_the_cost_table_names_real_traits():
         TraitSet("bad", PLANT_LAYOUT, [TraitDef("t", ("toxicity",))], costs={"c": ("nope",)})
 
 
-def test_the_genes_the_cost_table_leaves_free_are_a_known_short_list():
-    # What pays for these is not in traits.py yet (TRAIT.9 will decide). A new
-    # gene that lands here without a cost should be a deliberate choice.
-    assert ANIMAL_TRAITS.unpaid_genes() == (
-        "speed",
-        "agility",
-        "aggression",
-        "fear",
-        "sex_strategy",
-        "brain_gain",
-        "curiosity",
-        "learning_rate",
-    )
+def test_every_gene_pays_a_cost_or_has_a_recorded_reason_not_to():
+    # TRAIT.9: a new gene that pays nothing and says why not fails here, so a free gene is a
+    # decision and not an oversight.
+    assert ANIMAL_TRAITS.unpaid_genes() == ()
+    assert set(ANIMAL_TRAITS.free) == {"brain_gain", "curiosity"}
+    assert all(len(reason) > 40 for reason in ANIMAL_TRAITS.free.values())
+
+
+def test_a_free_gene_must_be_a_real_gene_with_a_reason():
+    with pytest.raises(ValueError, match="not in layout"):
+        TraitSet("bad", PLANT_LAYOUT, [TraitDef("t", ("toxicity",))], free={"nope": "because"})
+    with pytest.raises(ValueError, match="needs a reason"):
+        TraitSet("bad", PLANT_LAYOUT, [TraitDef("t", ("toxicity",))], free={"toxicity": " "})
+
+
+def test_the_genes_that_were_free_now_have_a_cost_term():
+    for gene, term in {
+        "speed": "movement burn",
+        "agility": "agility upkeep",
+        "aggression": "temperament upkeep",
+        "fear": "temperament upkeep",
+        "sex_strategy": "drive upkeep and wear",
+        "learning_rate": "learning upkeep",
+    }.items():
+        assert term in ANIMAL_TRAITS.explain(gene).costs
 
 
 def test_every_reproduction_gene_is_paid_for():
     paid = set(ANIMAL_LAYOUT.clusters["reproduction"]) - set(ANIMAL_TRAITS.unpaid_genes())
-    assert paid == {"repro_drive", "repro_cooldown", "fertility", "parenting"}
+    assert paid == {"repro_drive", "repro_cooldown", "fertility", "parenting", "sex_strategy"}

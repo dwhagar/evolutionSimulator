@@ -246,6 +246,16 @@ class AnimalTraits(BaseTraits):
             + rules.brain.connection_cost * self.brain.active_connections()
         ) / (self.decision_interval * dt)
         life, repro, recovery = rules.life, rules.reproduction, rules.recovery
+        # The sex digit: its value modulo 2 is the sex (0 impregnates, 1 bears), and digits 2 and 3
+        # raise or lower the effective drive (REPRO.8), which is what the drive costs in upkeep and
+        # wear (TRAIT.9), so those digits pay for it. The behavioural offsets further down are the
+        # prototype's and are kept as they were.
+        self.sex_type: int = int(t["sex_strategy"])
+        self.sex: int = self.sex_type % 2
+        self.drive_modifier: float = dict(repro.sex_drive_modifier).get(self.sex_type, 0.0)
+        self.effective_drive: float = min(
+            1.0, max(0.0, t["repro_drive"] * (1.0 + self.drive_modifier))
+        )
         self.repair_upkeep: float = life.repair_cost * (
             t["somatic_maint"] ** life.repair_cost_exponent
         )
@@ -253,12 +263,17 @@ class AnimalTraits(BaseTraits):
             (repro.readiness_reference_days / t["cooldown_days"]) ** repro.readiness_exponent
         )
         self.drive_upkeep: float = repro.drive_upkeep * (
-            t["repro_drive"] ** repro.drive_upkeep_exponent
+            self.effective_drive**repro.drive_upkeep_exponent
         )
         self.fertility_upkeep: float = repro.fertility_upkeep * (
             t["fertility"] ** repro.fertility_upkeep_exponent
         )
         self.recovery_upkeep: float = recovery.upkeep * (t["recovery"] ** recovery.upkeep_exponent)
+        self.agility_upkeep: float = body.agility_cost * (t["agility"] ** 2)
+        self.temperament_upkeep: float = body.temperament_cost * (
+            t["aggression"] ** 2 + t["fear"] ** 2
+        )
+        self.learning_upkeep: float = rules.brain.learning_cost * t["learning_rate"]
         self.basal_metabolism = (
             (body.basal_scale * (self.mass**body.basal_exponent))
             + self.repair_upkeep
@@ -266,6 +281,9 @@ class AnimalTraits(BaseTraits):
             + self.drive_upkeep
             + self.fertility_upkeep
             + self.recovery_upkeep
+            + self.agility_upkeep
+            + self.temperament_upkeep
+            + self.learning_upkeep
             + sensory_overhead
             + self.gut_maintenance
             + self.brain_upkeep
@@ -275,15 +293,6 @@ class AnimalTraits(BaseTraits):
         self.call_radius: float = t["call_radius"]
         self.call_energy_cost: float = t["call_energy_cost"]
 
-        # The sex digit: its value modulo 2 is the sex (0 impregnates, 1 bears), and digits 2 and 3
-        # raise or lower the effective drive (REPRO.8). The behavioural offsets below are the
-        # prototype's and are kept as they were.
-        self.sex_type: int = int(t["sex_strategy"])
-        self.sex: int = self.sex_type % 2
-        self.drive_modifier: float = dict(repro.sex_drive_modifier).get(self.sex_type, 0.0)
-        self.effective_drive: float = min(
-            1.0, max(0.0, t["repro_drive"] * (1.0 + self.drive_modifier))
-        )
         behaviour = rules.behaviour
         self.base_fear_weight: float = t["fear"]
         self.base_aggression: float = t["aggression"]
@@ -328,7 +337,7 @@ class AnimalTraits(BaseTraits):
         """Damage added per reference tick: the base wear, quicker with a strong urge to mate, slowed
         by repair (``somatic_maint``)."""
         life = self.rules.life
-        drive = 1.0 + (life.drive_wear * self.phenotype["repro_drive"])
+        drive = 1.0 + (life.drive_wear * self.effective_drive)
         return (
             life.wear_base
             * drive
@@ -437,7 +446,9 @@ class AnimalTraits(BaseTraits):
 
         # Kinetic movement burn
         repro = self.rules.reproduction
-        kinetic_burn = (movement_speed_ratio**2) * (self.rules.body.kinetic_burn * self.mass) * dt
+        body = self.rules.body
+        speed = movement_speed_ratio * self.current_max_speed
+        kinetic_burn = ((speed / body.speed_reference) ** 2) * (body.kinetic_burn * self.mass) * dt
         upkeep = self.basal_metabolism
         if self.pregnancy is not None:
             upkeep *= 1.0 + (repro.gestation_upkeep * self.pregnancy.litter / repro.litter_max)

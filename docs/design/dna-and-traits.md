@@ -196,6 +196,36 @@ into clusters, with the five reproduction genes next to each other: layout versi
 - **Long-run check.** `scripts/reproduction_check.py` runs the real traits in a small food-limited ecology and
   reports where the genes settle; see [reproduction-genes.md](reproduction-genes.md#long-run-check).
 
+## What every gene costs (TRAIT.9)
+
+`DNA.15`'s cost table showed eight genes that paid nothing, so selection would push the useful ones to the top.
+Each now pays, or has a recorded reason not to (`TraitSet.free`, a gene-to-reason table; `unpaid_genes()` is empty and a
+test keeps it so). All the numbers are in the rules tree ([trait-config.md](trait-config.md)) and are placeholders to tune.
+
+| Gene | Cost | How it works | Top of the range |
+| --- | --- | --- | --- |
+| `speed` | `body.speed_reference`, `body.kinetic_burn` | Moving burns `kinetic_burn * mass * (speed / speed_reference) ** 2` per reference tick, with `speed` the distance moved per tick (it was `ratio ** 2`, whatever the gene). A fast animal pays more per hour, and twice as much per unit of distance for twice the speed. `speed_reference` 3.5 is an average animal (speed 0.5, size 0.5), so its burn is as before. | A fast small body (speed 8 per tick) burns 5 times the reference when it runs flat out |
+| `agility` | `body.agility_cost` 0.06 | Reflex upkeep, `0.06 * agility ** 2` in the basal metabolism. | 0.06 (14% of a basal 0.43) |
+| `aggression`, `fear` | `body.temperament_cost` 0.04 | Upkeep `0.04 * (aggression ** 2 + fear ** 2)`. A placeholder: neither has a price of its own until fights and flights cost something (`BRAIN.10`). They already trade against each other and, for fear, against mating (an afraid animal does not look for a mate). | 0.04 each (9%) |
+| `sex_strategy` | the drive costs | The drive's upkeep and wear now use the effective drive (the gene times 1.25 for digit 2, 0.75 for digit 3), so digit 2 finds mates earlier and pays for it in life and upkeep, and digit 3 is the reverse. Digits 0 and 1 are the two sexes and cost the same. | digit 2 at drive 1: 1.25 effective, 56% more upkeep and 24% more wear |
+| `learning_rate` | `brain.learning_cost` 0.004 | Plasticity upkeep, `0.004 * learning_rate` per reference tick (0 to 2), paid by every animal whatever the world's learning switch. | 0.008 (2%) |
+| `brain_gain` | none, recorded | A scale on the weights, which evolve too: any gain can be matched by the weights, so selection has no direction to push it. | |
+| `curiosity` | none, recorded | Pays for itself: it nudges every output at random, so the animal moves, eats and mates less reliably, and a noisy speed burns more than a steady one because the burn is convex. | |
+
+**Effect.** An average animal's basal metabolism rises by about 4% (0.4227 to 0.4409 for the all-ones reference) and its
+movement burn is unchanged at average speed; a fast animal moving fast burns several times as much, a slow one a
+fraction.
+
+**Long-run check.** `scripts/reproduction_check.py ... traits` runs the chemostat with stand-ins for what the genes buy
+(half-speed foraging every tick; food shared in proportion to `1 + 0.5 speed + 0.2 agility + 0.3 aggression`; fear
+halving injuries at the top). Three seeds, 12,000 ticks, population about 80: with the costs off, `speed` ends at 0.63,
+0.84 and 0.84; with them on, 0.24 to 0.28, so the speed cost holds the gene low where it was running up. `agility`,
+`aggression`, `fear` and `learning_rate` move between about 0.1 and 0.9 from seed to seed (drift in a population this
+size), `aggression` mostly high because the stand-in benefit is generous (30% of the food share at the top against 9%
+upkeep), and none stays pinned at 0 or 1 across seeds. The stand-in benefits are guesses, so this shows that the costs
+bite, not where the genes will settle: recheck once fights and flights exist (`BRAIN.10`) and in the real world
+(`REPRO.9`).
+
 ## Plants (REPRO.3 and TRAIT.8)
 
 Plants are asexual and mutate slower than animals. `PLANT_LAYOUT` is version 3 and 33 digits: the six old
@@ -280,5 +310,5 @@ Flagged by the research threads; not changed without the owner's call.
 - **`somatic_maint` still cuts wear up to 4.5 times**, but it now competes with reproduction (`TRAIT.6`), so
   selection should not push it to the maximum. That rests on the design note's toy model, not on the
   simulator, which has no stable ecology yet.
-- **Constants are inline.** Moving the tuning numbers into a config object is listed in
-  [TODO.md](../../TODO.md).
+- **Constants** are no longer inline: they are in the rules tree of `config.py` (`TRAIT.3`,
+  [trait-config.md](trait-config.md)).

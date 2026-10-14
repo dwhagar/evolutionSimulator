@@ -85,7 +85,10 @@ What a body is, costs to keep and does as it wears down (animals).
 | `basal_scale` | `0.18` |  |
 | `basal_exponent` | `0.75` | Upkeep of the body itself is `scale * mass ** exponent` (Kleiber's law). |
 | `gut_cost` | `0.06` | Upkeep of the gut: `gut_cost * (herbivore_eff ** 2 + carnivore_eff ** 2)`. |
-| `kinetic_burn` | `0.35` | Energy per tick moving at full speed per unit of mass, times the speed ratio squared. |
+| `kinetic_burn` | `0.35` | Energy per reference tick per unit of mass for an animal moving at `speed_reference`; the burn goes with the square of the speed actually moved, so a fast animal pays more per hour and more than twice as much per unit of distance moved at twice the speed (`TRAIT.9`). |
+| `speed_reference` | `3.5` | Distance per reference tick of an average animal (speed gene 0.5, size 0.5) at full speed. |
+| `agility_cost` | `0.06` | Upkeep of quick reflexes: `agility_cost * agility ** 2` per reference tick (`TRAIT.9`). |
+| `temperament_cost` | `0.04` | Upkeep of a strong temperament: `temperament_cost * (aggression ** 2 + fear ** 2)`. A placeholder until fighting and fleeing cost something of their own (`BRAIN.10`) (`TRAIT.9`). |
 | `speed_floor` | `0.3` | Top speed at no vitality is this share of the base speed (the rest scales with vitality). |
 | `sense_floor` | `0.4` | Sight and hearing at no vitality are this share of their ranges. |
 | `health_floor` | `0.35` | Physical condition at no health is this share of vitality (the rest scales with health). |
@@ -121,6 +124,7 @@ What thinking costs and how often it happens.
 | `connection_cost` | `0.0001` | Per active connection, a weight whose absolute value is above `dead_zone`. |
 | `dead_zone` | `0.5` | A weight at or below this is off, for cost and in `Brain.decide` (`BRAIN.21`): at 0.5 a quarter of random weights are off. |
 | `interrupt_pain` | `0.05` | Pain at or above this cuts the decision interval short (`BRAIN.22`). |
+| `learning_cost` | `0.004` | Upkeep of plasticity: `learning_cost * learning_rate` per reference tick, paid by every animal whatever the world's learning switch says (`TRAIT.9`). |
 | `pain_full_fraction` | `0.2` | Losing this fraction of maximum health since the last decision reads as full pain. |
 
 ### `life` (`LifeRules`)
@@ -155,6 +159,10 @@ Drive, readiness, mating, pregnancy and birth (animals).
 | `drive_boldness` | `0.3` | While a mate is in view, fear is multiplied by `1 - boldness * effective drive`. |
 | `sex_drive_modifier` | `((2, 0.25), (3, -0.25))` | The sex digit's second job, as (digit, change) pairs: digit 2 raises the effective drive by 25%, digit 3 lowers it. The sex itself is the digit modulo 2: 0 impregnates, 1 bears. |
 | `maturity_share` | `0.06` | An animal (or plant) can first breed at this share of its expected lifespan. |
+| `young_dependence` | `0.06` | Young depend on a parent for `parenting * young_dependence` of the parent's expected lifespan after birth; a parent senses them as "own young" while they do (`SENSE.14`). |
+| `young_protection` | `0.5` |  |
+| `young_fearlessness` | `0.4` | A parent that sees its dependent young and a threat fights harder and flees less: aggression rises by `parenting * young_protection` and fear falls by `parenting * young_fearlessness` (as fractions of their values). |
+| `similarity_unrelated` | `0.75` | The share of digits that differ between two unrelated random genomes; a possible mate whose genome differs by this much or more has similarity 0 (`SENSE.14`). |
 | `mating_effort` | `0.03` | Share of its store each partner spends on a mating, whether or not it takes. |
 | `conception_base` | `0.3` |  |
 | `conception_slope` | `0.6` | A mating takes with chance `base + slope * mean fertility of the two`. |
