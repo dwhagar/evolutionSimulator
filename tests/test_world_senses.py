@@ -6,7 +6,7 @@ from dataclasses import replace
 from types import SimpleNamespace
 
 import pytest
-from world_support import animal_dna, plant_dna
+from world_support import animal_dna, plant_dna, world_config
 
 from evolution_simulator.brain_adapter import Percepts
 from evolution_simulator.dna import DNA
@@ -270,13 +270,13 @@ def test_the_wall_is_felt_like_anything_else_in_contact():
 
 
 def test_the_dark_shortens_sight_and_sleep_closes_the_eyes():
-    day = World(WorldConfig(day_cycle=SHORT_DAY))
+    day = World(world_config(day_cycle=SHORT_DAY))
     me = day.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
     day.add_plant(plant_dna(), Vec.of(520, 500))
     noon = seen_by(day, me).plant_closeness
     assert noon > 0.0
 
-    night = World(WorldConfig(day_cycle=SHORT_DAY))
+    night = World(world_config(day_cycle=SHORT_DAY))
     for _ in range(50):  # midnight
         night.tick += 1
     owl = night.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
@@ -344,7 +344,7 @@ def brute_force(world, animal, rules, rng):
 
 def test_searching_only_nearby_gives_the_same_answer_as_looking_at_everything():
     rules = SensingRules()
-    world = World(WorldConfig(seed=11, day_cycle=SHORT_DAY))
+    world = World(world_config(seed=11, day_cycle=SHORT_DAY))
     world.populate(animals=40, plants=300)
     world.run(60)  # night, some asleep, everyone somewhere new
     senses = WorldSenses(rules)
@@ -383,7 +383,7 @@ def add_caller(world):
 
 
 def calling_world(**config):
-    world = World(WorldConfig(calls_enabled=True, **config))
+    world = World(world_config(calls_enabled=True, **config))
     caller = add_caller(world)
     listener = world.add_animal(animal_dna(**EARS), Vec.of(515, 500), heading=0.0)
     return world, caller, listener
@@ -429,7 +429,7 @@ def test_a_caller_without_the_energy_stays_quiet():
 
 def night_with_alarm(listener_at, ticks=3):
     """A listener asleep at night, then a wakeful caller turns up and calls."""
-    world = World(WorldConfig(calls_enabled=True, day_cycle=SHORT_DAY))
+    world = World(world_config(calls_enabled=True, day_cycle=SHORT_DAY))
     listener = world.add_animal(animal_dna(brain={}, **EARS), HERE, heading=0.0)
     world.run(34)  # into the night
     assert listener.asleep
@@ -481,7 +481,7 @@ def test_the_world_senses_only_when_the_brain_will_look():
             return super().perceive(world, animal)
 
     senses = Counting()
-    world = World(WorldConfig(day_cycle=None).with_rules(learning=None), senses=senses)
+    world = World(world_config(day_cycle=None).with_rules(learning=None), senses=senses)
     animal = world.add_animal(animal_dna(brain={}), HERE, heading=0.0)
     animal.traits.decision_interval = 3
     world.run(9)
@@ -601,7 +601,7 @@ def test_the_wall_is_out_of_sight_for_a_blind_animal_unless_it_touches():
 
 
 def test_the_clock_follows_the_day_and_is_blank_without_one():
-    world = World(WorldConfig(day_cycle=SHORT_DAY))
+    world = World(world_config(day_cycle=SHORT_DAY))
     me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
     for _ in range(3):
         seen = seen_by(world, me)
@@ -609,13 +609,13 @@ def test_the_clock_follows_the_day_and_is_blank_without_one():
         assert seen.clock_sin == pytest.approx(math.sin(math.tau * phase))
         assert seen.clock_cos == pytest.approx(math.cos(math.tau * phase))
         world.run(7)
-    bare = World(WorldConfig(day_cycle=None))
+    bare = World(world_config(day_cycle=None))
     me = bare.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
     assert (seen_by(bare, me).clock_sin, seen_by(bare, me).clock_cos) == (0.0, 0.0)
 
 
 def test_tiredness_builds_while_awake_and_clears_in_sleep():
-    world = World(WorldConfig(day_cycle=SHORT_DAY, calls_enabled=False))
+    world = World(world_config(day_cycle=SHORT_DAY, calls_enabled=False))
     me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
     assert me.traits.tiredness == 0.0
     world.run(10)
@@ -626,7 +626,7 @@ def test_tiredness_builds_while_awake_and_clears_in_sleep():
     me.asleep = True
     world.run(1)
     assert me.traits.tiredness == 0.0
-    bare = World(WorldConfig(day_cycle=None))
+    bare = World(world_config(day_cycle=None))
     other = bare.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
     bare.run(10)
     assert other.traits.tiredness == 0.0

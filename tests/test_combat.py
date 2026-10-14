@@ -1,9 +1,9 @@
 """Attacks and meat (BRAIN.10)."""
 
 import pytest
-from world_support import animal_dna, plant_dna
+from world_support import animal_dna, plant_dna, world_config
 
-from evolution_simulator.world import AttackRules, Vec, World, WorldConfig
+from evolution_simulator.world import AttackRules, Vec, World
 
 HERE = Vec.of(500, 500)
 STILL = {"speed": -2.0}
@@ -14,7 +14,7 @@ SMALL, MEDIUM, LARGE = "0000", "1111", "3333"
 def make(**config):
     config.setdefault("day_cycle", None)
     config.setdefault("calls_enabled", False)
-    return World(WorldConfig(**config))
+    return World(world_config(**config))
 
 
 def hunter(world, at=HERE, **genes):

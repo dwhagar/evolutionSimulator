@@ -13,7 +13,7 @@ from persistence_support import (
     rich_world,
     what_the_scenario_covers,
 )
-from world_support import animal_dna, hourly_world, plant_dna
+from world_support import animal_dna, hourly_world, plant_dna, world_config
 
 from evolution_simulator.diploid import DiploidDNA
 from evolution_simulator.layouts import LAYOUTS, founder_animal_dna, founder_plant_dna
@@ -153,7 +153,7 @@ def test_an_empty_world_round_trips_with_its_random_stream():
 
 
 def test_a_config_with_nothing_switched_on_round_trips():
-    config = WorldConfig(
+    config = world_config(
         seed=4,
         bounds=Bounds((80.0, 90.0)),
         day_cycle=None,
@@ -176,10 +176,13 @@ def test_a_changed_config_and_its_rules_round_trip():
     config = replace(
         base,
         seed=9,
-        day_cycle=DayCycle(length_seconds=36000.0, night_below=0.4),
         graze_amount=7.5,
-        traits=replace(base.traits, body=replace(base.traits.body, energy_capacity=150.0)),
-        plants=replace(base.plants, capacity=0.02),
+        traits=replace(
+            base.traits,
+            body=replace(base.traits.body, energy_capacity=150.0),
+            day_cycle=DayCycle(length_seconds=36000.0, night_below=0.4),
+            plant_limits=replace(base.plants, capacity=0.02),
+        ),
     )
     restored = world_from_dict(world_to_dict(World(config)))
     assert restored.config == config
@@ -199,7 +202,7 @@ def test_diploid_animals_and_plants_with_no_animals_round_trip():
 
 
 def test_a_noise_free_world_keeps_its_senses_settings():
-    world = World(WorldConfig(seed=2, day_cycle=None), senses=WorldSenses(noisy=False))
+    world = World(world_config(seed=2, day_cycle=None), senses=WorldSenses(noisy=False))
     world.populate(animals=6, plants=30)
     world.run(10)
     restored = world_from_dict(world_to_dict(world))
@@ -213,7 +216,7 @@ def test_other_senses_have_to_be_passed_again():
         def perceive(self, world, animal):
             return WorldSenses(noisy=False).perceive(world, animal)
 
-    world = World(WorldConfig(seed=2, day_cycle=None), senses=Blind())
+    world = World(world_config(seed=2, day_cycle=None), senses=Blind())
     world.populate(animals=3, plants=10)
     data = world_to_dict(world)
     with pytest.raises(SaveFormatError, match="senses"):
@@ -380,6 +383,24 @@ def test_a_format_2_save_has_its_sleep_rules_moved_into_the_trait_rules():
     restored = world_from_dict(old)
     assert_same_world(restored, world)
     assert restored.config.sleep == world.config.sleep
+
+
+def test_a_format_3_save_has_its_day_time_and_plant_settings_moved_into_the_trait_rules():
+    world = rich_world_at(10)
+    old = world_to_dict(world)
+    config = old["world"]["config"]
+    traits = config["traits"]
+    config["day_cycle"] = traits.pop("day_cycle")  # where format 3 kept them
+    config["plants"] = traits.pop("plant_limits")
+    time = traits["time"]
+    config["time_scale"] = {
+        "seconds_per_tick": time.pop("seconds_per_tick"),
+        "speed": time.pop("speed"),
+    }
+    old["format_version"] = 3
+    restored = world_from_dict(old)
+    assert_same_world(restored, world)
+    assert restored.config == world.config
 
 
 def test_an_older_format_with_no_migration_is_refused(monkeypatch):

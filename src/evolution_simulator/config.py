@@ -11,8 +11,9 @@ arrives. ``DEFAULT_RULES`` is what everything uses unless it is given another.
   rules can sit side by side and a test can change one number: ``replace(rules.life, wear_base=0.05)``
   and ``replace(DEFAULT_RULES, life=...)`` give a new tree without touching the default.
 * ``WorldConfig.traits`` holds the rules for a run. The settings of the world that used to sit
-  beside it are moving into the tree (``TRAIT.10``): ``learning`` and ``sleep`` are there now, and
-  ``day_cycle``, ``time_scale`` and the plants' soil and shade limits follow. ``WorldConfig`` reads
+  beside it are moving into the tree (``TRAIT.10``): ``learning``, ``sleep``, ``day_cycle``, the
+  tick length and speed (``time``) and the plants' soil and shade limits (``plant_limits``) are all
+  there now. ``WorldConfig`` reads
   them from the tree, so a run has one source of tuning constants.
 * What is **not** here: the ranges of the traits (how far a gene stretches a trait, such as
   ``SIGHT_REACH`` or ``COOLDOWN_DAYS_RANGE``), which are the trait table's data (``trait_defs.py``);
@@ -40,6 +41,17 @@ class TimeRules:
     """Simulated seconds in one reference tick. The world's ``dt`` is its tick length over this."""
     ticks_per_day: float = 24.0
     """Reference ticks in a simulated day."""
+    seconds_per_tick: float = 3600.0
+    """Simulated seconds in one tick of this run (``TRAIT.10``; was ``TimeScale``). A tick of the
+    reference length gives the world a ``dt`` of 1."""
+    speed: float = 1.0
+    """Simulated seconds that pass for each real second; how fast a viewer asks the run to go."""
+
+    def __post_init__(self) -> None:
+        for name in ("reference_tick_seconds", "ticks_per_day", "seconds_per_tick", "speed"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be a positive finite number, got {value}.")
 
 
 @dataclass(frozen=True)
@@ -410,6 +422,80 @@ class SleepRules:
 
 
 @dataclass(frozen=True)
+class DayCycle:
+    """One day of light and dark (``WORLD.5``, ``TraitRules.day_cycle``); the module docstring of
+    ``world/daycycle.py`` describes the curve."""
+
+    length_seconds: float = 24.0 * 3600.0
+    start_phase: float = 0.5
+    night_below: float = 0.3
+
+    def __post_init__(self) -> None:
+        if not (math.isfinite(self.length_seconds) and self.length_seconds > 0.0):
+            raise ValueError(f"length_seconds must be positive, got {self.length_seconds}.")
+        if not (math.isfinite(self.start_phase) and 0.0 <= self.start_phase < 1.0):
+            raise ValueError(f"start_phase must be from 0 up to 1, got {self.start_phase}.")
+        if not 0.0 <= self.night_below <= 1.0:
+            raise ValueError(f"night_below must be between 0 and 1, got {self.night_below}.")
+
+    def phase(self, simulated_seconds: float) -> float:
+        """Fraction of the day gone, from 0 up to 1 (0 is midnight, 0.5 noon)."""
+        return (self.start_phase + simulated_seconds / self.length_seconds) % 1.0
+
+    def daylight(self, simulated_seconds: float) -> float:
+        """Light from 0 (midnight) to 1 (noon)."""
+        return 0.5 - 0.5 * math.cos(math.tau * self.phase(simulated_seconds))
+
+    def is_night(self, simulated_seconds: float) -> bool:
+        return self.daylight(simulated_seconds) < self.night_below
+
+    def day_number(self, simulated_seconds: float) -> int:
+        """Whole midnights passed since the start, counting from 0."""
+        return math.floor(self.start_phase + simulated_seconds / self.length_seconds)
+
+    @property
+    def night_fraction(self) -> float:
+        """The share of each day that counts as night."""
+        return math.acos(1.0 - 2.0 * self.night_below) / math.pi
+
+
+@dataclass(frozen=True)
+class PlantRules:
+    """How neighbouring plants limit each other's growth (WORLD.8, ``TraitRules.plant_limits``).
+
+    **Soil.** Within ``neighbourhood`` units of a plant, the plants (itself included) hold some
+    biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the plant
+    keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice starvation,
+    at or above capacity). This is a logistic limit, and what keeps a population from running to
+    the cap however fast the plants grow. It is the same for every plant on purpose: if root
+    reach set the neighbourhood, evolution would shrink roots to dodge it.
+
+    **Light.** Each heavier neighbour whose canopy covers the plant adds ``1 - distance / canopy
+    radius`` to its shade load, and the plant keeps ``1 / (1 + shade_strength * load)`` of the
+    light, so tall plants shade seedlings.
+
+    The effects are refreshed for one in every ``refresh_interval`` plants each tick, because
+    plants do not move and the loads change slowly.
+    """
+
+    neighbourhood: float = 25.0
+    capacity: float = 0.015
+    """Biomass per unit of ground that the soil can feed."""
+    shade_strength: float = 1.0
+    refresh_interval: int = 10
+
+    def __post_init__(self) -> None:
+        if not (math.isfinite(self.neighbourhood) and self.neighbourhood > 0.0):
+            raise ValueError(f"neighbourhood must be positive, got {self.neighbourhood}.")
+        if not (math.isfinite(self.capacity) and self.capacity > 0.0):
+            raise ValueError(f"capacity must be positive, got {self.capacity}.")
+        if not (math.isfinite(self.shade_strength) and self.shade_strength >= 0.0):
+            raise ValueError(f"shade_strength must be zero or more, got {self.shade_strength}.")
+        if self.refresh_interval < 1:
+            raise ValueError("refresh_interval must be at least 1.")
+
+
+@dataclass(frozen=True)
 class TraitRules:
     """All the organism constants of a run."""
 
@@ -423,6 +509,10 @@ class TraitRules:
     plant: PlantTraitRules = field(default_factory=PlantTraitRules)
     organs: OrganRules = field(default_factory=OrganRules)
     sensing: SensingRules = field(default_factory=SensingRules)
+    day_cycle: DayCycle | None = field(default_factory=DayCycle)
+    """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
+    plant_limits: PlantRules = field(default_factory=PlantRules)
+    """How crowded soil and shade limit plant growth (``WORLD.8``)."""
     sleep: SleepRules = field(default_factory=SleepRules)
     """Who sleeps at night and what sleep does (``WORLD.5``, ``TRAIT.10``)."""
     learning: LearningRules | None = field(default_factory=LearningRules)

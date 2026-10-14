@@ -3,6 +3,7 @@
 import random
 
 import pytest
+from world_support import world_config
 
 from evolution_simulator.brain import Brain, BrainShape
 from evolution_simulator.brain_adapter import Percepts
@@ -348,7 +349,7 @@ def test_damage_and_matings_are_counted_over_a_life():
 
 def world_with_animals(seed=5, count=8, **rules):
     world = World(
-        WorldConfig(seed=seed, day_cycle=DayCycle(length_seconds=100.0 * 3600.0)).with_rules(
+        world_config(seed=seed, day_cycle=DayCycle(length_seconds=100.0 * 3600.0)).with_rules(
             **rules
         )
     )

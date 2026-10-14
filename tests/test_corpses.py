@@ -1,9 +1,9 @@
 """Corpses: meat that rots, is smelled and is eaten (WORLD.12)."""
 
 import pytest
-from world_support import animal_dna
+from world_support import animal_dna, world_config
 
-from evolution_simulator.world import CorpseRules, Vec, World, WorldConfig
+from evolution_simulator.world import CorpseRules, Vec, World
 
 HERE = Vec.of(500, 500)
 STILL = {"speed": -2.0}
@@ -14,7 +14,7 @@ SMALL, MEDIUM = "0000", "1111"
 def make(**config):
     config.setdefault("day_cycle", None)
     config.setdefault("calls_enabled", False)
-    return World(WorldConfig(**config))
+    return World(world_config(**config))
 
 
 def kill(world, animal):

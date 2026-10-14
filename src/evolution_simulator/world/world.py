@@ -36,7 +36,9 @@ from dataclasses import dataclass, field, replace
 
 from evolution_simulator.config import (
     DEFAULT_RULES,
+    DayCycle,
     LearningRules,
+    PlantRules,
     SensingRules,
     SleepRules,
     TraitRules,
@@ -51,7 +53,6 @@ from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
 from evolution_simulator.world.corpses import Corpse, CorpseRules
-from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.events import Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
@@ -82,47 +83,10 @@ INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
 
 
 @dataclass(frozen=True)
-class PlantRules:
-    """How neighbouring plants limit each other's growth (WORLD.8).
-
-    **Soil.** Within ``neighbourhood`` units of a plant, the plants (itself included) hold some
-    biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the plant
-    keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice starvation,
-    at or above capacity). This is a logistic limit, and what keeps a population from running to
-    the cap however fast the plants grow. It is the same for every plant on purpose: if root
-    reach set the neighbourhood, evolution would shrink roots to dodge it.
-
-    **Light.** Each heavier neighbour whose canopy covers the plant adds ``1 - distance / canopy
-    radius`` to its shade load, and the plant keeps ``1 / (1 + shade_strength * load)`` of the
-    light, so tall plants shade seedlings.
-
-    The effects are refreshed for one in every ``refresh_interval`` plants each tick, because
-    plants do not move and the loads change slowly.
-    """
-
-    neighbourhood: float = 25.0
-    capacity: float = 0.015
-    """Biomass per unit of ground that the soil can feed."""
-    shade_strength: float = 1.0
-    refresh_interval: int = 10
-
-    def __post_init__(self) -> None:
-        if not (math.isfinite(self.neighbourhood) and self.neighbourhood > 0.0):
-            raise ValueError(f"neighbourhood must be positive, got {self.neighbourhood}.")
-        if not (math.isfinite(self.capacity) and self.capacity > 0.0):
-            raise ValueError(f"capacity must be positive, got {self.capacity}.")
-        if not (math.isfinite(self.shade_strength) and self.shade_strength >= 0.0):
-            raise ValueError(f"shade_strength must be zero or more, got {self.shade_strength}.")
-        if self.refresh_interval < 1:
-            raise ValueError("refresh_interval must be at least 1.")
-
-
-@dataclass(frozen=True)
 class WorldConfig:
     """Everything that defines a run besides the organisms put into it."""
 
     bounds: Bounds = field(default_factory=Bounds)
-    time_scale: TimeScale = field(default_factory=TimeScale)
     seed: int = 0
     graze_amount: float = 5.0
     """Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer
@@ -131,8 +95,6 @@ class WorldConfig:
     """Two animals mate only if their centres are this close or closer."""
     birth_scatter: float = 1.0
     """A litter appears within this distance of its mother."""
-    day_cycle: DayCycle | None = field(default_factory=DayCycle)
-    """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     attack: AttackRules = field(default_factory=AttackRules)
     """Bites (``BRAIN.10``)."""
     corpses: CorpseRules = field(default_factory=CorpseRules)
@@ -142,7 +104,6 @@ class WorldConfig:
     A call is made only by an animal with a call radius (the encoder gene) that can afford it,
     so a brain that calls on every tick starves itself; seeded founders do not call at all and
     calling has to be evolved. Turn it off to study a silent world."""
-    plants: PlantRules = field(default_factory=PlantRules)
     traits: TraitRules = DEFAULT_RULES
     """The tuning constants of the organisms' formulas (``TRAIT.3``): body, behaviour, brain costs,
     reproduction, recovery, plants and sense costs."""
@@ -154,6 +115,23 @@ class WorldConfig:
     def sensing(self) -> SensingRules:
         """The constants of the sensing step: light and sleep factors, weak smell, noise."""
         return self.traits.sensing
+
+    @property
+    def time_scale(self) -> TimeScale:
+        """The tick length and speed of the run: ``traits.time`` as a ``TimeScale``."""
+        time = self.traits.time
+        return TimeScale(seconds_per_tick=time.seconds_per_tick, speed=time.speed)
+
+    @property
+    def day_cycle(self) -> DayCycle | None:
+        """Light and night over simulated time; ``None`` means permanent full daylight and no
+        sleep. Part of the trait rules."""
+        return self.traits.day_cycle
+
+    @property
+    def plants(self) -> PlantRules:
+        """How crowded soil and shade limit plant growth. Part of the trait rules."""
+        return self.traits.plant_limits
 
     @property
     def sleep(self) -> SleepRules:
@@ -168,8 +146,19 @@ class WorldConfig:
 
     def with_rules(self, **sections: object) -> WorldConfig:
         """This config with some sections of its trait rules replaced, e.g.
-        ``config.with_rules(learning=None)``."""
-        return replace(self, traits=replace(self.traits, **sections))
+        ``config.with_rules(learning=None)``. Sections that already equal the given value are
+        left alone, so a change that changes nothing returns the same config."""
+        changes = {k: v for k, v in sections.items() if getattr(self.traits, k) != v}
+        if not changes:
+            return self
+        return replace(self, traits=replace(self.traits, **changes))
+
+    def with_time_scale(self, time_scale: TimeScale) -> WorldConfig:
+        """This config with the tick length and speed of ``time_scale``."""
+        time = replace(
+            self.traits.time, seconds_per_tick=time_scale.seconds_per_tick, speed=time_scale.speed
+        )
+        return self.with_rules(time=time)
 
     def __post_init__(self) -> None:
         for name in ("graze_amount", "mating_reach", "birth_scatter"):

@@ -3,13 +3,13 @@
 import random
 
 from test_animal_brain import counted
-from world_support import animal_dna
+from world_support import animal_dna, world_config
 
 from evolution_simulator.brain_adapter import Percepts
 from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import PLANT_LAYOUT
-from evolution_simulator.world import Vec, World, WorldConfig
+from evolution_simulator.world import Vec, World
 
 INTERRUPT_PAIN = DEFAULT_RULES.brain.interrupt_pain
 QUIET = Percepts(plant_direction=0.2, plant_closeness=0.5)
@@ -119,7 +119,7 @@ def test_every_tick_thinkers_are_unaffected():
 
 
 def make_world(**genes):
-    world = World(WorldConfig(seed=3, day_cycle=None))
+    world = World(world_config(seed=3, day_cycle=None))
     dna = animal_dna(**genes)
     animal = world.add_animal(dna, Vec.of(500, 500), heading=0.0)
     return world, animal

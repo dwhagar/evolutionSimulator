@@ -64,7 +64,7 @@ from evolution_simulator.world.world import World, WorldConfig
 
 FORMAT = "evolution-simulator-world"
 """The document type, so a file of something else is refused with a clear message."""
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 """The layout of the document. Bump it when the layout changes and add a migration if old saves can
 still be read."""
 
@@ -85,9 +85,28 @@ def _sleep_into_the_trait_rules(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _day_time_and_plants_into_the_trait_rules(data: dict[str, Any]) -> dict[str, Any]:
+    """Version 3 to 4 (``TRAIT.10``): ``config.day_cycle``, ``config.plants`` and
+    ``config.time_scale`` became ``config.traits.day_cycle``, ``.plant_limits`` and the
+    ``seconds_per_tick`` and ``speed`` of ``config.traits.time``."""
+    config = data["world"]["config"]
+    traits = config.setdefault("traits", {})
+    if "day_cycle" in config:
+        traits["day_cycle"] = config.pop("day_cycle")
+    if "plants" in config:
+        traits["plant_limits"] = config.pop("plants")
+    if "time_scale" in config:
+        scale = config.pop("time_scale")
+        traits.setdefault("time", {}).update(
+            seconds_per_tick=scale["seconds_per_tick"], speed=scale["speed"]
+        )
+    return data
+
+
 _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     1: _learning_into_the_trait_rules,
     2: _sleep_into_the_trait_rules,
+    3: _day_time_and_plants_into_the_trait_rules,
 }
 """``{n: f}``: ``f`` takes a document of version ``n`` and returns it as version ``n + 1``."""
 

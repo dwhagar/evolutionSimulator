@@ -1,11 +1,11 @@
 """The decision interval and the learning window follow simulated time (WORLD.16)."""
 
 import pytest
-from world_support import animal_dna
+from world_support import animal_dna, world_config
 
 from evolution_simulator.learning import Learner, LearningRules
 from evolution_simulator.traits import AnimalTraits
-from evolution_simulator.world import TimeScale, Vec, World, WorldConfig
+from evolution_simulator.world import TimeScale, Vec, World
 
 SLOW, FAST = "0000", "3333"
 
@@ -53,7 +53,7 @@ def test_the_reward_window_is_in_hours_too():
 
 def test_the_world_hands_its_tick_to_its_animals():
     for seconds in (60.0, 3600.0):
-        world = World(WorldConfig(time_scale=TimeScale(seconds_per_tick=seconds), day_cycle=None))
+        world = World(world_config(time_scale=TimeScale(seconds_per_tick=seconds), day_cycle=None))
         animal = world.add_animal(animal_dna(reaction_time=FAST), Vec.of(500, 500), heading=0.0)
         assert animal.traits.dt == pytest.approx(seconds / 3600.0)
         assert animal.traits.decision_interval == round(4 * 3600.0 / seconds)
