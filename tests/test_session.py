@@ -9,6 +9,7 @@ import pickle
 import pytest
 from world_support import animal_dna
 
+from evolution_simulator.brain_adapter import INPUT_NAMES
 from evolution_simulator.session import (
     ANIMAL_COLUMNS,
     FRAME_FORMAT,
@@ -376,7 +377,7 @@ def test_the_trace_shows_in_the_detail_once_the_brain_has_run():
     detail = session.update().detail
     if detail is not None and detail.alive:
         assert detail.brain is not None
-        assert len(detail.brain.inputs) == 20
+        assert len(detail.brain.inputs) == len(INPUT_NAMES)
 
 
 def test_when_the_selected_animal_dies_its_last_detail_is_sent_marked_dead():
