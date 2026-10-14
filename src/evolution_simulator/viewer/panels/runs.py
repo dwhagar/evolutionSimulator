@@ -3,7 +3,8 @@
 A dock (hidden until asked for: File, Saved runs, or the View menu) holding one row per saved run
 with its name, seed, program version, simulated time, last save, population, size and a small
 population chart. The buttons open a run's history (``_run_history``), resume it (the window then
-shows that world, paused), export its history as a table, or delete it. File gets Save run now
+shows that world, paused), copy its settings into a new run with a fresh seed (*Copy with new seed*,
+through the setup screen's ``start_run_from``), export its history as a table, or delete it. File gets Save run now
 (Ctrl+S) and Saved runs (Ctrl+O). The size warning (UX.25: 5 GB by default) shows above the list.
 All the work is the ``RunManager``'s; this module is the screen.
 """
@@ -11,6 +12,8 @@ All the work is the ``RunManager``'s; this module is the screen.
 from __future__ import annotations
 
 import logging
+import random
+from dataclasses import replace
 
 from PySide6.QtCore import QPointF, QSize, Qt
 from PySide6.QtGui import QAction, QColor, QIcon, QKeySequence, QPainter, QPen, QPixmap, QPolygonF
@@ -35,6 +38,8 @@ from evolution_simulator.viewer.run_manager import RunManager, format_ago, forma
 from evolution_simulator.world.timescale import format_duration
 
 log = logging.getLogger(__name__)
+
+SEED_LIMIT = 2**32
 
 COLUMNS = (
     "Run",
@@ -85,15 +90,15 @@ class RunsPanel(QWidget):
         self.windows: list[RunHistoryWindow] = []
 
         layout = QVBoxLayout(self)
-        self.warning = QLabel()
+        self.warning = QLabel(self)
         self.warning.setWordWrap(True)
         self.warning.setStyleSheet("color: #c0392b; font-weight: bold;")
         self.warning.hide()
-        self.usage = QLabel()
+        self.usage = QLabel(self)
         layout.addWidget(self.warning)
         layout.addWidget(self.usage)
 
-        self.table = QTableWidget(0, len(COLUMNS))
+        self.table = QTableWidget(0, len(COLUMNS), self)
         self.table.setHorizontalHeaderLabels(list(COLUMNS))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -106,15 +111,20 @@ class RunsPanel(QWidget):
         layout.addWidget(self.table, stretch=1)
 
         buttons = QHBoxLayout()
-        self.save_button = QPushButton("Save run now")
-        self.resume_button = QPushButton("Resume")
-        self.history_button = QPushButton("History")
-        self.export_button = QPushButton("Export history (CSV)...")
-        self.delete_button = QPushButton("Delete")
-        self.refresh_button = QPushButton("Refresh")
+        self.save_button = QPushButton("Save run now", self)
+        self.resume_button = QPushButton("Resume", self)
+        self.history_button = QPushButton("History", self)
+        self.copy_button = QPushButton("Copy with new seed", self)
+        self.copy_button.setToolTip(
+            "Start a new run with this run's settings and a different seed."
+        )
+        self.export_button = QPushButton("Export history (CSV)...", self)
+        self.delete_button = QPushButton("Delete", self)
+        self.refresh_button = QPushButton("Refresh", self)
         self.save_button.clicked.connect(self.save_now)
         self.resume_button.clicked.connect(lambda: self.resume())
         self.history_button.clicked.connect(lambda: self.show_history())
+        self.copy_button.clicked.connect(lambda: self.copy_with_new_seed())
         self.export_button.clicked.connect(lambda: self.export_history())
         self.delete_button.clicked.connect(lambda: self.delete())
         self.refresh_button.clicked.connect(self.refresh)
@@ -122,6 +132,7 @@ class RunsPanel(QWidget):
             self.save_button,
             self.resume_button,
             self.history_button,
+            self.copy_button,
             self.export_button,
             self.delete_button,
         ):
@@ -223,6 +234,7 @@ class RunsPanel(QWidget):
         for button in (
             self.resume_button,
             self.history_button,
+            self.copy_button,
             self.export_button,
             self.delete_button,
         ):
@@ -339,6 +351,27 @@ class RunsPanel(QWidget):
         window.show()
         return window
 
+    def copy_with_new_seed(self, run_id: str | None = None) -> bool:
+        """Start a new run with a run's settings and a different, random seed. The starting
+        counts are the run's own when they can still be found, else the setup screen's; the choice
+        of seeded founders is not kept with a run, so the setup screen's is used."""
+        run_id = run_id or self.selected_id()
+        summary = next((r for r in self.rows if r.id == run_id), None)
+        start = self.context.services.get("start_run_from")
+        if summary is None or start is None:
+            return False
+        try:
+            config = self.manager.run_config(summary.id)
+            counts = self.manager.starting_counts(summary.id)
+        except (RunError, OSError, ValueError, KeyError) as error:
+            self.fail(f"Could not read the run: {error}")
+            return False
+        seed = random.SystemRandom().randrange(SEED_LIMIT - 1)
+        seed += seed >= summary.seed  # any seed but the old one
+        animals, plants = counts if counts is not None else (None, None)
+        name = None if summary.name == f"seed {summary.seed}" else f"{summary.name}, seed {seed}"
+        return start(replace(config, seed=seed), animals, plants, name)
+
     def _forget(self, window: RunHistoryWindow) -> None:
         if window in self.windows:
             self.windows.remove(window)
@@ -401,9 +434,11 @@ def build(context: ViewerContext) -> RunsPanel:
 
     save = QAction("&Save run now", panel)
     save.setShortcut(QKeySequence(QKeySequence.StandardKey.Save))
+    save.setStatusTip("Write a checkpoint of this run now")
     save.triggered.connect(lambda: panel.save_now())
     show = QAction("Saved &runs...", panel)
     show.setShortcut(QKeySequence(QKeySequence.StandardKey.Open))
+    show.setStatusTip("List the saved runs, to resume or look at one")
     show.triggered.connect(panel.show_dock)
     context.actions["save_run"] = save
     context.actions["show_runs"] = show

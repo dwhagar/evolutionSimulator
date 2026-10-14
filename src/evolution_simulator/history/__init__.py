@@ -18,6 +18,7 @@ from evolution_simulator.history.recorder import (
 )
 from evolution_simulator.history.samples import (
     HISTORY_FORMAT,
+    READABLE_FORMATS,
     HistorySamples,
     Sample,
     Stat,
@@ -28,6 +29,7 @@ from evolution_simulator.history.samples import (
 __all__ = [
     "DEFAULT_TIERS",
     "HISTORY_FORMAT",
+    "READABLE_FORMATS",
     "HistoryMirror",
     "HistorySamples",
     "Observable",

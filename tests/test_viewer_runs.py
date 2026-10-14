@@ -553,9 +553,9 @@ def test_the_charts_panel_can_supply_the_history_widgets(panel, controller, mana
 
     seen = []
 
-    def history_view(samples):
+    def history_view(samples, parent=None):
         seen.append(samples)
-        return QLabel("from the charts panel")
+        return QLabel("from the charts panel", parent)
 
     monkeypatch.setattr(charts, "history_view", history_view, raising=False)
     manager.save_now()
@@ -571,7 +571,7 @@ def test_a_charts_panel_that_fails_falls_back_to_the_plain_chart(
 ):
     from evolution_simulator.viewer.panels import charts
 
-    def broken(samples):
+    def broken(samples, parent=None):
         raise RuntimeError("no")
 
     monkeypatch.setattr(charts, "history_view", broken, raising=False)

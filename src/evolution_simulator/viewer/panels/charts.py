@@ -1,9 +1,11 @@
 """Charts and history (UX.16): pyqtgraph line charts of the recorded statistics.
 
-Five tabs read the ``HistorySamples`` the controller publishes (``controller.history``, one new
+Six tabs read the ``HistorySamples`` the controller publishes (``controller.history``, one new
 sample per simulated day): population, births and deaths (by cause), condition (energy, health and
-the shares asleep, pregnant and ready), a trait or gene over time (mean, spread and range), and a
-gene distribution that can be scrubbed through time. Everything is read from
+the shares asleep, pregnant and ready), lineages (founders that still have descendants alive), a trait
+or gene over time (mean, the middle 80 percent from the 10th to the 90th percentile, and the range),
+and a gene distribution that can be scrubbed through time. Genes and traits carry the display names
+and units of the catalogue (``evolution_simulator.catalogue``). Everything is read from
 ``evolution_simulator.history``; nothing here touches the world.
 
 The time axis is in simulated days, and in years once the run is more than two years old. Charts
@@ -18,7 +20,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from evolution_simulator.catalogue import Description, describe_gene, describe_trait
 from evolution_simulator.history import HistorySamples
 from evolution_simulator.viewer.controller import ViewerController
 from evolution_simulator.viewer.registry import PanelSpec, ViewerContext
@@ -106,16 +109,43 @@ def time_axis(history: HistorySamples | None) -> TimeAxis:
     return TimeAxis("days", days_per_period)
 
 
+def describe_stat(name: str) -> Description | None:
+    """The catalogue's name, unit and meaning of a recorded gene or trait
+    (``animal.gene.speed``, ``plant.trait.canopy_radius``), or ``None`` for anything else."""
+    _, _, rest = name.partition(".")
+    group, _, field = rest.partition(".")
+    try:
+        if group == "gene" and field:
+            return describe_gene(field)
+        if group == "trait" and field:
+            return describe_trait(field)
+    except KeyError:
+        return None
+    return None
+
+
 def pretty_stat(name: str) -> str:
-    """A readable name for a recorded statistic (``animal.trait.max_speed`` -> ``max speed (trait)``).
-    A display-name catalogue (UX.29) can replace this later."""
+    """A readable name for a recorded statistic: the catalogue's display name for a gene or trait
+    (``animal.gene.sight_fov`` -> ``Field of vision (gene)``), else the name made readable
+    (``animal.trait.max_speed`` -> ``max speed (trait)``)."""
     _, _, rest = name.partition(".")
     if rest == "age_at_death":
         return "age at death"
     group, _, field = rest.partition(".")
     if group in ("trait", "gene") and field:
+        described = describe_stat(name)
+        if described is not None:
+            return f"{described.name} ({group})"
         return f"{field.replace('_', ' ')} ({group})"
     return rest.replace(".", " ").replace("_", " ")
+
+
+def stat_label(name: str) -> str:
+    """The vertical-axis label of a statistic: its name and, when the catalogue has one, its unit."""
+    described = describe_stat(name)
+    if described is None or not described.unit:
+        return pretty_stat(name)
+    return f"{pretty_stat(name)}, {described.unit}"
 
 
 def stats_of_kind(history: HistorySamples, kind: str) -> list[str]:
@@ -155,6 +185,24 @@ def spread_band(means: np.ndarray, stds: np.ndarray, los: np.ndarray, his: np.nd
     return np.maximum(means - stds, los), np.minimum(means + stds, his)
 
 
+def percentile_band(
+    means: np.ndarray,
+    stds: np.ndarray,
+    los: np.ndarray,
+    his: np.ndarray,
+    p10s: np.ndarray,
+    p90s: np.ndarray,
+):
+    """The lower and upper edge of the middle 80 percent (10th to 90th percentile). Where a sample
+    has no percentiles (history recorded before they were kept, a nan here), the edge is the mean
+    plus or minus one deviation, as ``spread_band`` gives."""
+    fallback_low, fallback_high = spread_band(means, stds, los, his)
+    return (
+        np.where(np.isnan(p10s), fallback_low, p10s),
+        np.where(np.isnan(p90s), fallback_high, p90s),
+    )
+
+
 def death_causes(history: HistorySamples, kind: str) -> list[str]:
     """Causes of death of this kind that have happened at least once, in a fixed order."""
     causes = []
@@ -175,8 +223,20 @@ def _colour(value: str) -> QColor:
 class ChartPlot(pg.PlotWidget):
     """A plot in the window's own colours, with a legend, a grid and the usual mouse zoom."""
 
-    def __init__(self, y_label: str = "") -> None:
-        super().__init__()
+    def __init__(self, parent: QWidget, y_label: str = "") -> None:
+        super().__init__(parent)
+        item = self.getPlotItem()
+        for side in ("left", "bottom"):
+            item.getAxis(side).enableAutoSIPrefix(False)  # a share of 0.15 is not "150 (x0.001)"
+        item.showGrid(x=True, y=True, alpha=0.25)
+        self.legend = item.addLegend(offset=(10, 10))
+        self.apply_palette()
+        if y_label:
+            item.setLabel("left", y_label)
+
+    def apply_palette(self) -> None:
+        """Take the background and text colours from the window's palette (again, when the theme
+        changes)."""
         palette = self.palette()
         background, foreground = palette.window().color(), palette.windowText().color()
         self.setBackground(background)
@@ -185,11 +245,16 @@ class ChartPlot(pg.PlotWidget):
             axis = item.getAxis(side)
             axis.setPen(foreground)
             axis.setTextPen(foreground)
-            axis.enableAutoSIPrefix(False)  # a share of 0.15 should not read as 150 (x0.001)
-        item.showGrid(x=True, y=True, alpha=0.25)
-        self.legend = item.addLegend(offset=(10, 10), labelTextColor=foreground)
-        if y_label:
-            item.setLabel("left", y_label)
+        self.legend.setLabelTextColor(foreground)
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        palette_changed = event.type() in (
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+        )
+        if palette_changed and hasattr(self, "legend"):  # (not yet, while it is being built)
+            self.apply_palette()
 
     def reset(self) -> None:
         """Clear the curves and the legend, ready to draw again."""
@@ -226,20 +291,20 @@ class ChartTab(QWidget):
 
     title = ""
 
-    def __init__(self, y_label: str = "") -> None:
-        super().__init__()
-        self.plot = ChartPlot(y_label)
-        self.controls = QHBoxLayout()
-        self.controls.setContentsMargins(0, 0, 0, 0)
+    def __init__(self, parent: QWidget, y_label: str = "") -> None:
+        super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
+        self.plot = ChartPlot(self, y_label)
+        self.controls = QHBoxLayout()
+        self.controls.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(self.controls)
         layout.addWidget(self.plot, 1)
         self.history: HistorySamples | None = None
         self.axis = TimeAxis("days", 1.0)
 
     def add_check(self, text: str, checked: bool = True, colour: str | None = None) -> QCheckBox:
-        box = QCheckBox(text)
+        box = QCheckBox(text, self)
         box.setChecked(checked)
         if colour is not None:
             box.setStyleSheet(f"QCheckBox {{ color: {colour}; font-weight: bold; }}")
@@ -248,7 +313,7 @@ class ChartTab(QWidget):
         return box
 
     def add_combo(self, on_change: Callable[[], None] | None = None) -> QComboBox:
-        combo = QComboBox()
+        combo = QComboBox(self)
         combo.currentIndexChanged.connect(lambda _index: (on_change or self.redraw)())
         self.controls.addWidget(combo)
         return combo
@@ -275,12 +340,13 @@ class SeriesTab(ChartTab):
 
     def __init__(
         self,
+        parent: QWidget,
         title: str,
         y_label: str,
         series: Sequence[tuple[str, str, str]],
         checked: Sequence[str] | None = None,
     ) -> None:
-        super().__init__(y_label)
+        super().__init__(parent, y_label)
         self.title = title
         self.series = series
         self.checks = {
@@ -300,8 +366,9 @@ class SeriesTab(ChartTab):
 
 
 class PopulationTab(SeriesTab):
-    def __init__(self) -> None:
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(
+            parent,
             "Population",
             "Count",
             [
@@ -313,8 +380,9 @@ class PopulationTab(SeriesTab):
 
 
 class ConditionTab(SeriesTab):
-    def __init__(self) -> None:
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(
+            parent,
             "Condition",
             "Average of the animals (0 to 1)",
             [
@@ -330,13 +398,26 @@ class ConditionTab(SeriesTab):
         )
 
 
+class LineagesTab(SeriesTab):
+    """How many founders still have a line of descent alive (through the mother, or the seeding
+    plant). It falls when a line dies out, so it shows diversity being lost."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(
+            parent,
+            "Lineages",
+            "Founder lines still alive",
+            [("lineages.animal", "Animals", BLUE), ("lineages.plant", "Plants", GREEN)],
+        )
+
+
 class FlowsTab(ChartTab):
     """Births and deaths per period, and the deaths split by cause."""
 
     title = "Births and deaths"
 
-    def __init__(self) -> None:
-        super().__init__("Per day")
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, "Per day")
         self.kind = self.add_combo()
         for kind, text in KIND_NAMES.items():
             self.kind.addItem(text, kind)
@@ -369,17 +450,22 @@ class FlowsTab(ChartTab):
 
 
 class TraitTab(ChartTab):
-    """One trait or gene over time: its mean, a band of one deviation, and the range seen."""
+    """One trait or gene over time: its mean, the middle 80 percent, and the range seen."""
 
     title = "Traits and genes"
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
         self.kind = self.add_combo(self._kind_changed)
         for kind, text in KIND_NAMES.items():
             self.kind.addItem(text, kind)
         self.stat = self.add_combo()
         self.show_range = self.add_check("Range (lowest to highest)", True)
+        self.show_band = self.add_check("Middle 80% (10th to 90th percentile)", True)
+        self.show_band.setToolTip(
+            "Where history was recorded before percentiles were kept, the band is the mean "
+            "plus or minus one deviation instead."
+        )
         self.controls.addStretch(1)
         self._listed: tuple[str, ...] = ()
 
@@ -402,6 +488,11 @@ class TraitTab(ChartTab):
         self.stat.clear()
         for name in names:
             self.stat.addItem(pretty_stat(name), name)
+            described = describe_stat(name)
+            if described is not None:
+                self.stat.setItemData(
+                    self.stat.count() - 1, described.meaning, Qt.ItemDataRole.ToolTipRole
+                )
         index = self.stat.findData(keep)
         self.stat.setCurrentIndex(index if index >= 0 else (0 if names else -1))
         self.stat.blockSignals(False)
@@ -412,7 +503,7 @@ class TraitTab(ChartTab):
         name = self.stat.currentData()
         if name is None:
             return
-        self.plot.getPlotItem().setLabel("left", pretty_stat(name))
+        self.plot.getPlotItem().setLabel("left", stat_label(name))
         days, stats = history.stat_series(name)
         if not days:
             return
@@ -425,8 +516,10 @@ class TraitTab(ChartTab):
         if self.show_range.isChecked():
             self.plot.line(x, hi, colour, "Highest", width=1, style=Qt.PenStyle.DashLine)
             self.plot.line(x, lo, colour, "Lowest", width=1, style=Qt.PenStyle.DashLine)
-        if len(x) > 1:
-            low, high = spread_band(mean, std, lo, hi)
+        if len(x) > 1 and self.show_band.isChecked():
+            p10 = np.array([np.nan if s.p10 is None else s.p10 for s in stats])
+            p90 = np.array([np.nan if s.p90 is None else s.p90 for s in stats])
+            low, high = percentile_band(mean, std, lo, hi, p10, p90)
             top, bottom = pg.PlotCurveItem(x, high), pg.PlotCurveItem(x, low)
             fill = _colour(colour)
             fill.setAlpha(60)
@@ -439,20 +532,20 @@ class DistributionTab(ChartTab):
 
     title = "Gene distribution"
 
-    def __init__(self) -> None:
-        super().__init__("Share of the population")
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, "Share of the population")
         self.kind = self.add_combo(self._kind_changed)
         for kind, text in KIND_NAMES.items():
             self.kind.addItem(text, kind)
         self.gene = self.add_combo(self._gene_changed)
         self.controls.addStretch(1)
-        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider = QSlider(Qt.Orientation.Horizontal, self)
         self.slider.setRange(0, 0)
         self.slider.setSingleStep(1)
         self.slider.valueChanged.connect(lambda _value: self.redraw())
-        self.when = QLabel()
+        self.when = QLabel(self)
         scrub = QHBoxLayout()
-        scrub.addWidget(QLabel("Time:"))
+        scrub.addWidget(QLabel("Time:", self))
         scrub.addWidget(self.slider, 1)
         scrub.addWidget(self.when)
         self.layout().addLayout(scrub)  # type: ignore[union-attr]
@@ -535,26 +628,36 @@ class DistributionTab(ChartTab):
 class ChartsPanel(QWidget):
     """The five chart tabs over one ``ViewerController``."""
 
-    def __init__(self, controller: ViewerController | None = None) -> None:
+    def __init__(
+        self, controller: ViewerController | None = None, parent: QWidget | None = None
+    ) -> None:
         """Over a live ``controller``, or with none to show one finished history that is handed
         in with ``set_history`` (the run history window, ``history_view``)."""
-        super().__init__()
+        super().__init__(parent)
         self.controller = controller
-        self.tabs = QTabWidget()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.tabs = QTabWidget(self)
         self.chart_tabs: list[ChartTab] = [
-            tab() for tab in (PopulationTab, FlowsTab, ConditionTab, TraitTab, DistributionTab)
+            tab(self.tabs)
+            for tab in (
+                PopulationTab,
+                FlowsTab,
+                ConditionTab,
+                LineagesTab,
+                TraitTab,
+                DistributionTab,
+            )
         ]
         for tab in self.chart_tabs:
             self.tabs.addTab(tab, tab.title)
-        self.status = QLabel()
-        reset = QPushButton("Reset view")
+        self.status = QLabel(self)
+        reset = QPushButton("Reset view", self)
         reset.setToolTip("Fit the chart to all of its data again")
         reset.clicked.connect(self.reset_view)
         footer = QHBoxLayout()
         footer.addWidget(self.status, 1)
         footer.addWidget(reset)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.tabs, 1)
         layout.addLayout(footer)
 
@@ -620,9 +723,9 @@ class ChartsPanel(QWidget):
         self.current.fit()
 
 
-def history_view(history: HistorySamples) -> ChartsPanel:
+def history_view(history: HistorySamples, parent: QWidget | None = None) -> ChartsPanel:
     """The charts over one finished history, read only, for the run history window (UX.18)."""
-    panel = ChartsPanel()
+    panel = ChartsPanel(None, parent)
     panel.set_history(history)
     panel.refresh()
     return panel

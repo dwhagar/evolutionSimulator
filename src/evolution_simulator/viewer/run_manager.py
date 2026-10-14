@@ -42,7 +42,7 @@ from evolution_simulator.session import ResumeSpec, Session
 from evolution_simulator.viewer.backend import LocalBackend
 from evolution_simulator.viewer.controller import ViewerController
 from evolution_simulator.viewer.process_backend import ProcessBackend
-from evolution_simulator.world import World
+from evolution_simulator.world import World, WorldConfig
 
 log = logging.getLogger(__name__)
 
@@ -346,6 +346,28 @@ class RunManager(QObject):
 
     def checkpoints(self, run_id: str) -> list[CheckpointInfo]:
         return self.store.open(run_id).checkpoints()
+
+    def run_config(self, run_id: str) -> WorldConfig:
+        """The settings a run was made with."""
+        return self.store.open(run_id).config
+
+    def starting_counts(self, run_id: str) -> tuple[int, int] | None:
+        """``(animals, plants)`` the run began with, or ``None`` when that is no longer known.
+
+        The run does not write its starting counts down, so this is read from its first checkpoint
+        when that is from tick 0 (older ones are pruned), else from its first history sample.
+        """
+        run = self.store.open(run_id)
+        first = next(iter(run.checkpoints()), None)
+        if first is not None and first.tick == 0:
+            return first.animals, first.plants
+        history = run.history()
+        if history is None:
+            return None
+        animals, plants = history.series("animals")[1], history.series("plants")[1]
+        if not animals or not plants:
+            return None
+        return round(animals[0]), round(plants[0])
 
     def delete(self, run_id: str) -> None:
         """Remove a run for good. If it is the current run, the world on screen goes on but is no

@@ -317,10 +317,8 @@ def test_a_saved_layout_from_another_version_is_ignored(controller, settings, qa
 
 def test_the_about_box_opens(window):
     window.actions["about"].trigger()
-    boxes = window.findChildren(
-        QtCore.QObject, options=QtCore.Qt.FindChildOption.FindDirectChildrenOnly
-    )
-    assert any(type(box).__name__ == "QMessageBox" for box in boxes)
+    assert window.about_dialog is not None and window.about_dialog.isVisible()
+    window.about_dialog.close()
 
 
 def test_format_speed_names_the_preset_the_achieved_speed_and_when_behind():

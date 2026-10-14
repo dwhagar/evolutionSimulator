@@ -247,6 +247,17 @@ dependencies (a test checks that no core module names Qt or numpy).
   averaged by the periods each covers, histograms add. A coarser sample is built from the finer ones, so
   its `span` (periods covered) varies around the nominal length; every sample says its `day` (period it
   ends at) and `span`.
+- **Percentiles, lineages and the format (UX.32).** A `Stat` also carries `p10` and `p90` (linear
+  interpolation between the nearest ranks). Merging cannot be exact for percentiles without the numbers,
+  so a merged `Stat` takes the count-weighted average of the two, which is exact for equal parts and
+  close for samples of one population; it has none if either side has none. The samples have levels
+  `lineages.animal` and `lineages.plant`: the number of distinct founders with a line of descent alive,
+  where the line goes through the mother (the last parent of a `Born` event) or the seeding plant, and a
+  founder, or anyone born before the recorder started, is its own root. The recorder keeps one root per
+  living organism born while recording (`Born` sets it, `Died` drops it) and saves them. The history
+  format is 2 (`HISTORY_FORMAT`); `READABLE_FORMATS` is `(1, 2)`: a format-1 history or saved recorder
+  loads, its statistics have no percentiles and its living organisms are their own roots, and saving it
+  again writes format 2. A `Stat` is saved as five numbers, or seven with the percentiles.
 - **What the viewer reads.** `recorder.history()` returns an immutable `HistorySamples`: `tiers`,
   `samples()` (all, oldest first), `series(name)` (days and values, flows per period so tiers share one
   scale), `stat_series(name)`, `histogram_at(name, day)` for scrubbing, `names()` and `stat_names()`.
@@ -461,7 +472,7 @@ are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
   window never waits on a dialog.
 ### As built: the charts (`UX.16`)
 
-`viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with five
+`viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with six
 pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 
 - **History reaches the screen through the backend.** `Batch.history` carries the recorder's
@@ -474,19 +485,22 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
   and **UX.10** will load a saved history into the same signal.
 - **Tabs.** Population (animals, plants, corpses); Births and deaths (animals or plants, with the
   deaths split by cause, only the causes that happened); Condition (average energy, health, age and
-  diet, and the shares asleep, pregnant and ready to mate); Traits and genes (any recorded statistic
-  of the animals or the plants: its mean, a band of one standard deviation kept inside the range
-  seen, and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
+  diet, and the shares asleep, pregnant and ready to mate); Lineages (UX.32: founders that still have
+  a line of descent alive, animals and plants); Traits and genes (any recorded statistic
+  of the animals or the plants: its mean, the middle 80 percent from the 10th to the 90th percentile
+  (UX.32), and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
   a gene as shares of the population, with a slider over the days that have one, which follows the
   newest unless the user scrubbed back).
 - **Axis.** Simulated days, and years once the newest sample is two years in; flows are per day on
   every tier. Mouse wheel zooms and drag pans, right-click is pyqtgraph's menu (it also exports an
   image), and "Reset view" fits the data again.
-- **Differences from the first sketch.** The band is the mean plus or minus one deviation, not the
-  10th to 90th percentile, because the recorder keeps the mean, deviation, lowest and highest and not
-  percentiles. The number of lineages is not charted (the recorder does not count them; a separate
-  item if wanted). Stat names are made readable by `pretty_stat`; the display-name catalogue
-  (UX.29) can replace it.
+- **Differences from the first sketch, and what UX.32 changed.** The first build drew the mean plus or
+  minus one deviation, had no lineage chart and made stat names with `pretty_stat`, because the recorder
+  kept only mean, deviation, lowest and highest. UX.32 (below, under the recorder) added the percentiles
+  and lineage counts, so the band is the 10th to 90th percentile (the old band stays for samples
+  recorded without percentiles), the Lineages tab exists, and `pretty_stat` and the axis label
+  (`stat_label`, with the unit) use the display-name catalogue (UX.29), falling back to the readable
+  form for a name it does not know. The combo's tooltips carry the catalogue's one-line meaning.
 - **Drawing.** Redraws are throttled (200 ms) and only the tab in view is drawn, and only while the
   panel is visible, so a fast-forward costs the charts almost nothing. Colours are the Okabe and Ito
   colour-blind-safe set, one fixed colour per death cause, and the plots take the window's own
@@ -649,6 +663,22 @@ settings form, a line that says what is wrong (Start is disabled until nothing i
   (last checkpoint), swaps the world, starts a new `Recorder` (the next `HistoryBatch` is a full, empty
   history) and, if it was in a run, creates one named `NewRun.name` in the same store with its own
   `RunNotice`; a refused `NewRun` leaves the world and keeps its autosave.
+- **Preset files and Copy with new seed (UX.35).** *Save to file...* writes the boxes with
+  `RunSetup.to_json()` (animals, plants, seeded, the whole config tree, the seed); *Load from file...*
+  reads one with `RunSetup.from_json`, checks the counts against the caps, and keeps it among the user's
+  presets under the file's name (' (file)' added when a built-in has that name), so it is still there next
+  time. A file that is not a setup (not JSON, none of the setup's parts, a field of the wrong type, counts
+  over the cap) changes nothing and the status bar says why; a field missing from an older file keeps its
+  default and an unknown one is ignored (the `configdata` codec). The Saved runs panel's *Copy with new
+  seed* reads the run's settings from its manifest, draws a random seed other than the run's, and calls
+  the setup screen's `start_run_from` (`ViewerContext.services`, a name-keyed dict panels use to offer each
+  other a function, looked up when used because panel order is not fixed). That fills the boxes and starts
+  the run through the same `start()` as the button, so it saves or detaches the run on screen, asks about
+  an unsaved world and saves the new run from tick 0. The copy is named `<name>, seed N` (or after its seed
+  when the old run was unnamed). A run does not write down its starting counts or whether its founders were
+  seeded; the counts are read from its tick-0 checkpoint, else its first history sample (neither is
+  guaranteed once old checkpoints are pruned and the history is coarsened), and the seeded choice and, when
+  they cannot be found, the counts are the setup screen's.
 - **Found on the way.** `LocalBackend` subscribed `self._events.append` and then rebound `self._events`
   in each poll, so every event after the first poll went into a list nobody read. It subscribes a method
   now (`_heard`) and a test polls twice.
@@ -775,6 +805,38 @@ the bars and the drawn network, bars first. `viewer/inspector/tab_brain.py` is t
 - **Tests.** `tests/test_brain_tab.py`: the data, the wedge pointing the way the animal faces, the hub,
   the tab waiting for and then showing a run, a dead creature, the checkboxes, the canvas painting the
   overlay, and the stand-in simulation.
+
+### As built: polish (`UX.21`)
+
+The shell and the shared widgets, with no change to what any screen does.
+
+- **Themes.** View > Theme: Follow the system (the default), Light and Dark (`viewer/theme.py`). Light and
+  dark put Qt's Fusion style with a fixed palette over the whole program; Follow the system goes back to
+  the style and palette the program started with, which Qt 6.5 and later keeps in step with the operating
+  system. The choice is kept in the settings (`appearance/theme`, outside `window`, so Reset layout does
+  not forget it). A widget that draws with palette colours repaints on a palette-change event (the charts
+  do, in `ChartPlot.apply_palette`); the world view paints its own ground, daylight and creature colours and
+  looks the same in every theme.
+- **Shortcuts and help.** Help > Keyboard shortcuts (`F1`) opens a window (`viewer/help.py`) built from
+  `KEY_MAP` and from every other action of the window that has a key (Quit, New run, Save run now, Saved runs),
+  read from the actions, plus a short list of mouse actions. `KEY_TEXT` words each `KEY_MAP` entry, and a
+  test fails when a key is added without words. The window is rebuilt each time it is opened, so it is
+  current when a panel was closed or added.
+- **About.** Help > About shows the version, the licence (CC0 1.0, linked), the source address and a
+  "Third-party notices" window (`viewer/about.py`). The version is the `VERSION` file next to the downloadable
+  build, `version.toml` plus the commits since its base (as `scripts/version.py` counts them) when run from a
+  source checkout, and the installed package's version otherwise. The notices are the `THIRD_PARTY_NOTICES.md`
+  shipped beside the build or kept in `packaging/`, or a short built-in list when neither is found.
+- **Messages and tooltips.** Every status message goes through `tidy_message` (a capital letter and a full
+  stop), whichever panel sends it. Each menu action has a status tip, the status bar's labels have tooltips,
+  and a test lists any menu action of the program's own without one.
+- **The parenting rule** (the PySide6 double free found in UX.12): give every widget its parent in the
+  constructor, add a layout to its owner before filling it, and never read an item back with
+  `combo.model().item(i)`. The charts, controls, setup, runs, run history and the config form were brought
+  into line, and `tests/test_viewer_polish.py` checks every module of the viewer by reading its source
+  (a widget that really is a window of its own says `# no-parent` on its line). Panels the window builds
+  cannot be given a parent by their factory; the window gives them one when it docks them.
+- **Removed.** `panels/_placeholder.py`, which no slot uses any more.
 
 ## Speed and what the window shows
 

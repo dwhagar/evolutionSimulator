@@ -1,7 +1,7 @@
 """The read-only history of a saved run (UX.18): its facts, its checkpoints and its charts.
 
 A window of its own, so several runs can be looked at side by side and the live screens are not
-touched. The charts come from the charts panel when it offers a ``history_view(samples)`` function
+touched. The charts come from the charts panel when it offers a ``history_view(samples, parent)`` function
 (UX.16 builds the live charts and the same widgets then show a finished run); until then a plain
 population chart stands in.
 """
@@ -35,7 +35,7 @@ POPULATION_SERIES = (("animals", "Animals", "#d95f02"), ("plants", "Plants", "#1
 """(history value, label, colour) of the stand-in chart."""
 
 
-def charts_history_view() -> Callable[[HistorySamples], QWidget] | None:
+def charts_history_view() -> Callable[[HistorySamples, QWidget], QWidget] | None:
     """``history_view`` of the charts panel when it has one."""
     try:
         module = importlib.import_module("evolution_simulator.viewer.panels.charts")
@@ -46,11 +46,11 @@ def charts_history_view() -> Callable[[HistorySamples], QWidget] | None:
     return factory if callable(factory) else None
 
 
-def population_chart(samples: HistorySamples) -> QWidget:
+def population_chart(samples: HistorySamples, parent: QWidget | None = None) -> QWidget:
     """Animals and plants over simulated days, read only (zoom and pan with the mouse)."""
     import pyqtgraph as pg
 
-    plot = pg.PlotWidget()
+    plot = pg.PlotWidget(parent)
     plot.setBackground(None)
     plot.showGrid(x=True, y=True, alpha=0.25)
     plot.setLabel("bottom", "Simulated days")
@@ -82,7 +82,7 @@ class RunHistoryWindow(QDialog):
         self.resize(760, 640)
 
         layout = QVBoxLayout(self)
-        self.facts = QLabel(self._facts_text(summary, samples))
+        self.facts = QLabel(self._facts_text(summary, samples), self)
         self.facts.setTextFormat(Qt.TextFormat.PlainText)
         self.facts.setWordWrap(True)
         layout.addWidget(self.facts)
@@ -91,18 +91,18 @@ class RunHistoryWindow(QDialog):
         if samples is not None and len(samples) > 0:
             factory = charts_history_view() or population_chart
             try:
-                self.chart = factory(samples)
+                self.chart = factory(samples, self)
             except Exception:
                 log.exception("The history charts could not be built; using the plain chart")
-                self.chart = population_chart(samples)
+                self.chart = population_chart(samples, self)
             layout.addWidget(self.chart, stretch=1)
         else:
-            empty = QLabel("This run has no recorded history yet.")
+            empty = QLabel("This run has no recorded history yet.", self)
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
             layout.addWidget(empty, stretch=1)
 
-        layout.addWidget(QLabel("Checkpoints (the world can be resumed from any of them):"))
-        self.table = QTableWidget(len(checkpoints), 5)
+        layout.addWidget(QLabel("Checkpoints (the world can be resumed from any of them):", self))
+        self.table = QTableWidget(len(checkpoints), 5, self)
         self.table.setHorizontalHeaderLabels(
             ["Checkpoint", "Simulated time", "Animals", "Plants", "Written"]
         )
@@ -131,13 +131,13 @@ class RunHistoryWindow(QDialog):
         layout.addWidget(self.table)
 
         buttons = QHBoxLayout()
-        self.resume_button = QPushButton("Resume from the selected checkpoint")
+        self.resume_button = QPushButton("Resume from the selected checkpoint", self)
         self.resume_button.setEnabled(False)
         self.resume_button.clicked.connect(self._resume)
         self.table.itemSelectionChanged.connect(
             lambda: self.resume_button.setEnabled(self.selected_checkpoint() is not None)
         )
-        close = QPushButton("Close")
+        close = QPushButton("Close", self)
         close.clicked.connect(self.close)
         buttons.addWidget(self.resume_button)
         buttons.addStretch(1)

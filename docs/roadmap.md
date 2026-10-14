@@ -39,6 +39,10 @@ Asked for by the owner on 2026-10-14 (task area `UX`): a graphical viewer with a
 
 Built so far: world save and load in the core (`UX.9`, [#142](https://github.com/dwhagar/evolutionSimulator/pull/142)) the simulation session (`UX.6`, [#148](https://github.com/dwhagar/evolutionSimulator/pull/148)) and the statistics recorder (`UX.8`, [#152](https://github.com/dwhagar/evolutionSimulator/pull/152)). the app shell (`UX.11`, [#153](https://github.com/dwhagar/evolutionSimulator/pull/153)). Next: the process host (`UX.7`), the run store (`UX.10`), and wave 3, the screens (`UX.12` to `UX.17`), with the core additions for the inspector (`UX.29`).
 
+## Next: storage, species and the order of work
+
+Decided by the owner on 2026-10-14: data storage is SQLite (one `run.sqlite` per run, standard library only; `STORE.1`, `STORE.2`), and the viewer gets population graphs by species (`SPECIES.1`, `SPECIES.2`, `UX.41`) and a family tree view (`UX.39`). The first release of the interface is built apart from polish (`UX.21`): world view, controls, inspector with the brain and senses view, charts, run setup, saved runs and the Windows package, with the real world as the default launch. What blocks what, and what is ready now, is the "Order of work" tree in [TODO.md](../TODO.md).
+
 ## Later
 
 A first runnable simulation: organisms in the world with a step loop that feeds, ages, senses, thinks and

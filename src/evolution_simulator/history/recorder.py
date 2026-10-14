@@ -31,6 +31,7 @@ from typing import Any, Protocol
 from evolution_simulator.deaths import DeathCause
 from evolution_simulator.history.samples import (
     HISTORY_FORMAT,
+    READABLE_FORMATS,
     HistorySamples,
     Sample,
     Stat,
@@ -159,6 +160,10 @@ class Recorder:
         self._deaths = {f"{kind}.{cause}": 0 for kind in KINDS for cause in CAUSES}
         self._ages: dict[str, list[float]] = {kind: [] for kind in KINDS}
         """Ages (in periods) of those who died since the last sample."""
+        self._roots: dict[str, dict[int, int]] = {kind: {} for kind in KINDS}
+        """For each living organism born while recording: the founder its line of descent (through
+        the mother, or the seeding plant) goes back to. A founder, and anyone born before recording
+        began, is its own root and has no entry."""
         self._attached = False
         self._sample_listeners: list[Callable[[Sample], None]] = []
         if attach:
@@ -200,7 +205,11 @@ class Recorder:
         if isinstance(event, Born):
             if event.parents:
                 self._births[event.kind] += 1
+                roots = self._roots[event.kind]
+                line = event.parents[-1]
+                roots[event.id] = roots.get(line, line)
         elif isinstance(event, Died):
+            self._roots[event.kind].pop(event.id, None)
             self._deaths[f"{event.kind}.{event.cause.value}"] += 1
             seconds = self._source.time_scale.seconds_per_tick
             self._ages[event.kind].append(event.age_ticks * seconds / self.rules.period_seconds)
@@ -249,6 +258,8 @@ class Recorder:
             values["animal.ready"] = sum(a.ready_to_mate for a in animals) / n
         if plants:
             values["plant.biomass"] = math.fsum(p.biomass_ratio for p in plants) / len(plants)
+        values["lineages.animal"] = float(self._lineages("animal", animals))
+        values["lineages.plant"] = float(self._lineages("plant", plants))
         for kind in KINDS:
             values[f"births.{kind}"] = float(self._births[kind])
             values[f"deaths.{kind}"] = float(
@@ -286,6 +297,11 @@ class Recorder:
             stats=dict(sorted(stats.items())),
             histograms=dict(sorted(histograms.items())),
         )
+
+    def _lineages(self, kind: str, living: Sequence[Any]) -> int:
+        """How many founders still have a line of descent alive among the ``living`` organisms."""
+        roots = self._roots[kind]
+        return len({roots.get(organism.id, organism.id) for organism in living})
 
     def _histogram(self, numbers: list[float] | tuple[float, ...]) -> tuple[int, ...]:
         bins = self.rules.bins
@@ -328,6 +344,9 @@ class Recorder:
             "births": dict(self._births),
             "deaths": dict(self._deaths),
             "ages": {kind: list(ages) for kind, ages in self._ages.items()},
+            "roots": {
+                kind: sorted(map(list, roots.items())) for kind, roots in self._roots.items()
+            },
             "tiers": [[s.to_dict() for s in tier] for tier in self._tiers],
         }
 
@@ -335,7 +354,7 @@ class Recorder:
     def restore(cls, source: Observable, data: Mapping[str, Any], attach: bool = True) -> Recorder:
         """A recorder that carries on from ``to_dict`` output, listening to ``source`` (normally the
         world restored from the save made at the same moment)."""
-        if data.get("format") != HISTORY_FORMAT or data.get("kind") != "recorder":
+        if data.get("format") not in READABLE_FORMATS or data.get("kind") != "recorder":
             raise ValueError("This is not a saved statistics recorder of a format I can read.")
         recorder = cls(source, RecorderRules.from_dict(data["rules"]), attach=False)
         recorder._last_period = int(data["last_period"])
@@ -343,6 +362,11 @@ class Recorder:
         recorder._births = {kind: int(data["births"][kind]) for kind in KINDS}
         recorder._deaths = {key: int(data["deaths"][key]) for key in recorder._deaths}
         recorder._ages = {kind: [float(a) for a in data["ages"][kind]] for kind in KINDS}
+        # Format 1 kept no lineage roots: the living start as their own founders.
+        saved_roots = data.get("roots", {})
+        recorder._roots = {
+            kind: {int(i): int(root) for i, root in saved_roots.get(kind, ())} for kind in KINDS
+        }
         if len(data["tiers"]) != len(recorder._tiers):
             raise ValueError("The saved tiers do not match the saved rules.")
         recorder._tiers = [[Sample.from_dict(s) for s in tier] for tier in data["tiers"]]

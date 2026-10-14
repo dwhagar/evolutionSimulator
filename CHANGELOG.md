@@ -7,6 +7,10 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.21`: Light, dark and follow-the-system themes, a keyboard shortcuts window (F1), an About box with the version and third-party notices, status tips on every menu action, and a test that every viewer widget has a parent. [#214](https://github.com/dwhagar/evolutionsimulator/pull/214)
+- `UX.32`: Charts show the 10th to 90th percentile band for traits, a Lineages tab (founder lines still alive) and gene and trait names with units from the catalogue; the recorder keeps percentiles and lineage counts (history format 2, format 1 still loads). [#210](https://github.com/dwhagar/evolutionsimulator/pull/210)
+- `UX.35`: Setup presets can be saved to and loaded from files, and a saved run can be copied with a new seed. [#208](https://github.com/dwhagar/evolutionsimulator/pull/208)
+- `INFRA.6`: A viewer restart test no longer depends on timing. [#204](https://github.com/dwhagar/evolutionsimulator/pull/204)
 - `UX.38`: The sense overlays use each animal's real sight, hearing, smell and touch ranges instead of working them out from its traits. [#202](https://github.com/dwhagar/evolutionsimulator/pull/202)
 - `UX.37`: Closing the window on a world that was never saved asks whether to save it; panels can add their own close guard with `ViewerContext.add_close_guard`. [#198](https://github.com/dwhagar/evolutionsimulator/pull/198)
 - `UX.15`: The brain and senses view: a Brain tab in the inspector with the animal's inputs and outputs as labelled bars and its network drawn with connection strengths and live values, and vision, hearing, smell and touch overlays on the world view. [#197](https://github.com/dwhagar/evolutionsimulator/pull/197)

@@ -115,7 +115,7 @@ class _Leaf(_Editor):
         self.form, self.path, self.hint, self.default = form, path, hint, default
         self.optional = optional_of(hint) is not None
         self.base = optional_of(hint) or hint
-        self.label = QLabel(name.replace("_", " "))
+        self.label = QLabel(name.replace("_", " "), form)
         self.search = f"{path} {name.replace('_', ' ')} {doc}".lower()
         tip = (
             f"{doc}\n\nDefault: {format_value(default)}"
@@ -125,10 +125,10 @@ class _Leaf(_Editor):
         self.label.setToolTip(tip)
         self.edit: QCheckBox | QLineEdit
         if self.base is bool and not self.optional:
-            self.edit = QCheckBox()
+            self.edit = QCheckBox(form)
             self.edit.toggled.connect(form._edited)
         else:
-            self.edit = QLineEdit()
+            self.edit = QLineEdit(form)
             self.edit.textChanged.connect(form._edited)
         self.edit.setToolTip(tip)
         self.widgets = (self.label, self.edit)
@@ -199,23 +199,23 @@ class _Section(_Editor):
         self.children: dict[str, _Editor] = {}
         self.expanded = root
         self._expanded_by_user = root
-        self.widget = QWidget()
+        self.widget = QWidget(form)
         outer = QVBoxLayout(self.widget)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(2)
-        self.body = QWidget()
+        self.body = QWidget(self.widget)
         self.layout = QFormLayout(self.body)
         self.layout.setContentsMargins(14 if not root else 0, 2, 0, 6)
         self.layout.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
         if not root:
             head = QHBoxLayout()
             head.setContentsMargins(0, 0, 0, 0)
-            self.toggle = QToolButton()
+            self.toggle = QToolButton(self.widget)
             self.toggle.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
             self.toggle.setAutoRaise(True)
             self.toggle.clicked.connect(self._clicked)
             head.addWidget(self.toggle)
-            self.enabled = QCheckBox("on")
+            self.enabled = QCheckBox("on", self.widget)
             self.enabled.setToolTip(
                 "Off means this part of the world is left out (for example, no night)."
             )
@@ -359,6 +359,8 @@ class ConfigForm(QWidget):
             raise TypeError(f"ConfigForm needs a dataclass instance, got {default!r}.")
         self.default = default
         self._loading = True  # until built
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
         self._root = _Section(
             self,
             "",
@@ -369,8 +371,6 @@ class ConfigForm(QWidget):
             skip=skip,
             root=True,
         )
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self._root.widget)
         layout.addStretch(1)
         self._loading = False
