@@ -54,7 +54,13 @@ from evolution_simulator.session.messages import (
     Stopped,
 )
 from evolution_simulator.session.protocol import Simulation
-from evolution_simulator.session.session import Session, SessionEvent, SessionRules, StatusChanged
+from evolution_simulator.session.session import (
+    RunStarted,
+    Session,
+    SessionEvent,
+    SessionRules,
+    StatusChanged,
+)
 from evolution_simulator.session.specs import Prepared
 
 
@@ -185,6 +191,11 @@ class Host:
         return self.in_flight < self.rules.max_in_flight
 
     def _on_event(self, event: SessionEvent) -> None:
+        if isinstance(event, RunStarted):
+            # the world was replaced: its pending world events are stale, and this one must arrive
+            self._events = [e for e in self._events if isinstance(e, StatusChanged)]
+            self._events.append(event)
+            return
         if not isinstance(event, StatusChanged):
             now = self._clock()
             if now - self._window_start >= 1.0:

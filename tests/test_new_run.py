@@ -1,15 +1,21 @@
 """The NewRun command: a session throws its world away and starts another (UX.17)."""
 
 import pickle
+import time
 from dataclasses import replace
 
 import pytest
 
 from evolution_simulator.session import (
     CommandError,
+    EventBatch,
     FakeSimulation,
+    FakeSpec,
+    Host,
+    HostRules,
     NewRun,
     Play,
+    ProcessClient,
     RunStarted,
     Select,
     Session,
@@ -224,3 +230,84 @@ def test_the_real_builder_turns_a_value_error_into_a_command_error():
     object.__setattr__(command, "animals", 10**9)  # past the cap, as a stale command might be
     with pytest.raises(CommandError, match="could not be built"):
         build_world(command)
+
+
+# --- through the host, in the same process and in another ------------------------------------
+
+
+def host_on_fake(**host_rules):
+    clock = Clock()
+    sim = FakeSimulation(30, 40, seed=2, period=20)
+    session = Session(
+        sim,
+        rules=SessionRules(max_ticks_per_update=3, max_elapsed=10.0, work_budget=10.0),
+        clock=clock,
+    )
+    return Host(session, HostRules(**host_rules), clock), clock
+
+
+def world_events(host):
+    return [e for e in host._events if not isinstance(e, StatusChanged)]
+
+
+def test_the_host_sends_run_started_and_forgets_the_old_runs_pending_events():
+    host, clock = host_on_fake(event_interval=100.0)
+    host.first_message()
+    host.receive(Step(60))
+    for _ in range(30):
+        host.step()
+        if len(world_events(host)) >= 3:
+            break
+    assert len(world_events(host)) >= 3
+    host.receive(small(seed=8))
+    assert world_events(host) == [RunStarted("world, seed 8", 6, 20)]
+    clock.advance(200.0)
+    batches = [m for m in host.step() if isinstance(m, EventBatch)]
+    assert [e for b in batches for e in b.events if isinstance(e, RunStarted)] == [
+        RunStarted("world, seed 8", 6, 20)
+    ]
+
+
+def test_run_started_gets_through_when_the_event_cap_has_been_reached():
+    host, _ = host_on_fake(max_events_per_second=1, max_buffered_events=2)
+    host.first_message()
+    host.receive(Step(60))
+    for _ in range(30):
+        host.step()
+    assert host._events_dropped > 0  # the caps are in force
+    host.receive(small())
+    assert RunStarted in {type(e) for e in host._events}
+
+
+def wait_for_frame(client, wanted, timeout=60.0):
+    deadline = time.monotonic() + timeout
+    events, frame = [], None
+    while time.monotonic() < deadline:
+        inbox = client.poll()
+        events.extend(inbox.events)
+        frame = inbox.frame or frame
+        if frame is not None and wanted(frame):
+            return frame, events
+        time.sleep(0.01)
+    raise AssertionError(f"timed out; last frame {frame}")
+
+
+def test_a_new_run_is_built_in_the_other_process():
+    client = ProcessClient(FakeSpec(animals=10, plants=10, seed=1))
+    try:
+        wait_for_frame(client, lambda f: True)
+        client.send(NewRun(WorldConfig(seed=21), 7, 25))
+        frame, events = wait_for_frame(client, lambda f: f.animal_count == 7)
+        assert frame.tick == 0 and frame.plant_count == 25 and not frame.status.running
+        deadline = time.monotonic() + 30.0
+        while not any(isinstance(e, RunStarted) for e in events) and time.monotonic() < deadline:
+            events.extend(client.poll().events)
+            time.sleep(0.01)
+        assert [e for e in events if isinstance(e, RunStarted)] == [
+            RunStarted("world, seed 21", 7, 25)
+        ]
+        client.send(Step(5))
+        frame, _ = wait_for_frame(client, lambda f: f.tick == 5)
+        assert frame.animal_count <= 7
+    finally:
+        client.close()

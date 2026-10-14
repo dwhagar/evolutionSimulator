@@ -433,3 +433,35 @@ def test_the_controller_drops_the_old_run_when_a_new_one_starts(controller):
     assert controller.frame is not old_frame
     assert controller.frame.animal_count == 3 and controller.plants.count == 10
     assert controller.detail is None
+
+
+def test_a_new_run_starts_a_new_history_and_the_charts_follow(qapp, settings, clock):
+    from evolution_simulator.session import build_world
+
+    session = Session(
+        build_world(NewRun(WorldConfig(seed=1), 10, 30)),
+        rules=SessionRules(work_budget=10.0),
+        clock=clock,
+    )
+    backend = LocalBackend(session)
+    controller = ViewerController(backend)
+    window = MainWindow(controller, settings=settings)
+    try:
+        controller.send(Step(50))  # two simulated days
+        controller.poll()
+        assert controller.history is not None and len(controller.history) >= 2
+        old_days = len(controller.history)
+        histories = []
+        controller.history_received.connect(histories.append)
+        controller.send(NewRun(WorldConfig(seed=2), 8, 25))
+        controller.poll()
+        assert histories and len(histories[-1]) == 0  # the old run's days are gone
+        assert controller.history is histories[-1]
+        controller.send(Step(30))
+        clock.advance(0.1)  # a frame is due again
+        controller.poll()
+        assert 1 <= len(controller.history) <= old_days
+        assert controller.frame.tick == 30
+    finally:
+        window.close()
+        backend.close()

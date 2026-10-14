@@ -574,9 +574,17 @@ settings form, a line that says what is wrong (Start is disabled until nothing i
   so old presets survive a changed config). The user's presets and the last run started live in the
   viewer settings under `setup/presets` and `setup/last`; a panel reaches the settings through
   `ViewerContext.settings`.
+- **Where the world is built.** The command carries the config and `Session` builds the world, so with
+  the process host (UX.7) a large world is built in the simulation process and the window stays alive;
+  `LocalBackend` builds it in the viewer's process, which freezes the window for a moment. The host never
+  drops `RunStarted` (it is exempt from the event caps) and discards the old run's pending world events.
+  `LocalBackend` starts a new `Recorder` on the new world and publishes the empty history at once, so
+  the charts clear; `ViewerController` also forgets `history`.
 - **Not saved.** Starting a run throws the old one away; if it has run (tick above 0) the screen asks
-  first. Saving and loading runs is UX.9, UX.10 and UX.18. The world is built in the calling process, so
-  a large world freezes the window for a moment until the process host (UX.7) runs it elsewhere.
+  first. Saving and loading runs is UX.9, UX.10 and UX.18.
+- **Found on the way.** `LocalBackend` subscribed `self._events.append` and then rebound `self._events`
+  in each poll, so every event after the first poll went into a list nobody read. It subscribes a method
+  now (`_heard`) and a test polls twice.
 
 ## Speed and what the window shows
 

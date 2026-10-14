@@ -38,7 +38,7 @@ class ViewerController(QObject):
     """A ``Status``, when anything in it differs from the last one heard (the measured speed too)."""
     event_received = Signal(object)
     """A world event (``Born``, ``Died``, ``Mated``), or ``RunStarted`` when a new run replaced the
-    world (the controller has by then forgotten the old frame, plants and detail)."""
+    world (the controller has by then forgotten the old frame, plants, detail and history)."""
     history_received = Signal(object)
     """The ``HistorySamples`` so far, each time a new sample has been taken (once per simulated day)."""
     command_failed = Signal(str)
@@ -115,7 +115,7 @@ class ViewerController(QObject):
                 self._set_status(event.status)
             else:
                 if isinstance(event, RunStarted):  # nothing held about the old run is true now
-                    self.frame = self.detail = self.plants = None
+                    self.frame = self.detail = self.plants = self.history = None
                 self.event_received.emit(event)
         if batch.frame is not None:
             frame = batch.frame
