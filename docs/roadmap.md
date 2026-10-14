@@ -31,7 +31,7 @@ Still to build, now that the owner has answered the open questions:
 
 Not yet given a version; the owner sets milestones.
 - The world: continuous 2D space with user-set bounds, time scales from a minute to a thousand years per second, and a day-night cycle (`WORLD.2` to `WORLD.5`).
-- Senses: research on which senses to have and how they feed the brain (`SENSE.1`).
+- Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`.
 - The brain acting and learning: behaviour genes feeding the brain, random wander when undecided, a shape that evolves, and nightly learning (`BRAIN.13` to `BRAIN.16`, `BRAIN.10`).
 
 ## Later
