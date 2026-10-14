@@ -422,7 +422,7 @@ cost, pinned decisions for a fixed genome). All randomness is seeded.
 - Crossover is settled (`DNA.7`, [#14](https://github.com/dwhagar/evolutionSimulator/issues/14)): `reproduce` defaults
   to `crossover_linked`, which cuts between whole neurons unless `gene_fidelity` is lowered. Set it to 1.0
   for animals that must never blend inside a neuron.
-- Decision interval, memory ([#24](https://github.com/dwhagar/evolutionSimulator/issues/24)), learning
+- Memory ([#24](https://github.com/dwhagar/evolutionSimulator/issues/24)), learning
   ([#26](https://github.com/dwhagar/evolutionSimulator/issues/26)) and an evolvable size
   ([#28](https://github.com/dwhagar/evolutionSimulator/issues/28)).
 
