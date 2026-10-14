@@ -247,3 +247,89 @@ def test_fear_as_the_fixed_rule_uses_it_comes_from_one_place():
     assert traits.flag_in_fear == (traits._effective_fear() > traits.current_aggression)
     traits.vitality = 0.2
     assert traits._effective_fear() == pytest.approx(traits.base_fear_weight * (1.2 - 0.1))
+
+
+# --- decision interval (BRAIN.11) --------------------------------------------
+
+
+class CountingBrain:
+    """Wraps a brain and counts how often it actually decides."""
+
+    def __init__(self, brain):
+        self.brain = brain
+        self.calls = 0
+
+    def decide(self, inputs):
+        self.calls += 1
+        return self.brain.decide(inputs)
+
+    def __getattr__(self, name):
+        return getattr(self.brain, name)
+
+
+def counted(interval: int) -> tuple[AnimalTraits, CountingBrain]:
+    traits = AnimalTraits(PINNED, decision_interval=interval)
+    counter = CountingBrain(traits.brain)
+    traits.brain = counter
+    return traits, counter
+
+
+def test_the_default_interval_decides_every_tick():
+    traits, counter = counted(1)
+    for _ in range(6):
+        traits.think(SEEN)
+    assert counter.calls == 6
+    assert traits.decision_interval == 1
+
+
+@pytest.mark.parametrize("interval", [2, 3, 4])
+def test_the_brain_runs_once_every_n_ticks(interval):
+    traits, counter = counted(interval)
+    for _ in range(12):
+        traits.think(SEEN)
+    assert counter.calls == 12 // interval
+
+
+def test_ticks_between_decisions_keep_the_last_decision_even_if_the_world_changes():
+    traits, _ = counted(3)
+    first = traits.think(SEEN)
+    assert traits.think(Percepts()) == first
+    assert traits.think(PREY) == first
+    assert traits.think(Percepts()) != first  # the fourth call decides afresh
+
+
+def test_decisions_follow_the_same_schedule_every_run():
+    def run() -> list[BrainDecision]:
+        traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(2)), decision_interval=4)
+        r = random.Random(1)
+        out = []
+        for i in range(20):
+            out.append(traits.think(Percepts(plant_closeness=(i % 5) / 5), r))
+        return out
+
+    assert run() == run()
+
+
+def test_wandering_only_draws_randomness_when_a_decision_is_made():
+    traits = AnimalTraits(PINNED, decision_interval=5)
+    r = random.Random(4)
+    traits.think(Percepts(), r)  # blind: wanders, draws
+    state = r.getstate()
+    for _ in range(4):
+        assert traits.think(Percepts(), r).wandering
+    assert r.getstate() == state
+
+
+def test_a_slower_thinker_pays_proportionally_less_upkeep():
+    every = AnimalTraits(PINNED)
+    fourth = AnimalTraits(PINNED, decision_interval=4)
+    assert fourth.brain_upkeep == pytest.approx(every.brain_upkeep / 4)
+    assert every.basal_metabolism - fourth.basal_metabolism == pytest.approx(
+        every.brain_upkeep * 0.75
+    )
+
+
+def test_the_interval_must_be_at_least_one_tick():
+    with pytest.raises(ValueError):
+        AnimalTraits(PINNED, decision_interval=0)
+    assert traits_module.DECISION_INTERVAL >= 1
