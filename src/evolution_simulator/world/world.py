@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import math
 import random
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 
 from evolution_simulator.config import (
@@ -76,6 +77,7 @@ from evolution_simulator.world.views import (
     animal_view,
     corpse_view,
     plant_view,
+    trait_columns,
 )
 
 INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
@@ -208,6 +210,7 @@ class World:
         """Largest body radius of any animal added so far."""
         self._sleep_listeners: list[SleepListener] = []
         self._event_listeners: list[EventListener] = []
+        self._step_listeners: list[Callable[[StepReport], None]] = []
         self._stepping: bool = False
         self._traced: int | None = None
         self.calls: dict[int, tuple[float, float]] = {}
@@ -291,6 +294,14 @@ class World:
     def remove_event_listener(self, listener: EventListener) -> None:
         self._event_listeners.remove(listener)
 
+    def add_step_listener(self, listener: Callable[[StepReport], None]) -> None:
+        """Be called with each tick's ``StepReport`` once the step has finished (the statistics
+        recorder uses it). Nothing is called, and nothing built, while there is no listener."""
+        self._step_listeners.append(listener)
+
+    def remove_step_listener(self, listener: Callable[[StepReport], None]) -> None:
+        self._step_listeners.remove(listener)
+
     def _emit(self, event: WorldEvent) -> None:
         for listener in self._event_listeners:
             listener(event)
@@ -315,6 +326,15 @@ class World:
 
     def plant_views(self) -> list[PlantView]:
         return [plant_view(p) for p in self.plants]
+
+    def trait_columns(self, kind: str) -> dict[str, list[float]]:
+        """Every living ``"animal"`` or ``"plant"``'s traits and genes, one list per name (see
+        ``views.trait_columns``), for the statistics recorder."""
+        if kind == "animal":
+            return trait_columns(self.animals)
+        if kind == "plant":
+            return trait_columns(self.plants)
+        raise ValueError(f"Unknown kind {kind!r}: expected 'animal' or 'plant'.")
 
     def corpse_views(self) -> list[CorpseView]:
         return [corpse_view(c) for c in self.corpses]
@@ -492,9 +512,12 @@ class World:
         """Advance one tick."""
         self._stepping = True
         try:
-            return self._step()
+            report = self._step()
         finally:
             self._stepping = False
+        for listener in list(self._step_listeners):
+            listener(report)
+        return report
 
     def _step(self) -> StepReport:
         animals = self.animals

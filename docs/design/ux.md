@@ -205,6 +205,38 @@ dependencies (a test checks that no core module names Qt or numpy).
 - **FakeSimulation** has the same face as `World` for the session and the screens, with a scripted
   population curve and events; the session tests run every case against both.
 
+### As built: the statistics recorder (`UX.8`)
+
+`evolution_simulator.history` (no dependencies) keeps the history the charts and the run history read.
+
+- **Use.** `Recorder(world)` listens to the world's events and to the end of every step
+  (`World.add_step_listener`, new), and once a simulated period has passed (a day, `RecorderRules`)
+  takes a `Sample`: levels (animals, plants, corpses, mean energy, health, age, diet and the shares
+  asleep, pregnant and ready to mate, mean plant biomass), flows (`births.<kind>`, `deaths.<kind>` and
+  `deaths.<kind>.<cause>`; founders put in by hand are not births), a `Stat` (count, mean, standard
+  deviation, minimum, maximum) for every trait and single-value gene of the animals and plants
+  (`animal.trait.mass`, `animal.gene.size`, from `World.trait_columns`),
+  the age at death, and in the first sample and every thirtieth after it a 20-bin histogram per gene.
+  A source without `add_step_listener` or `trait_columns` (the `FakeSimulation`) still works: call
+  `recorder.observe()` after each step, and the trait statistics are simply absent.
+- **Bounded.** Four ring buffers (tiers): 90 days, 52 weeks, 60 months, 128 years, 330 samples at
+  most. What falls off the end of a tier is merged into the next, and the last tier merges its two
+  oldest samples when full, so nothing is thrown away and memory never grows. Merging is exact for what
+  is kept: a merged `Stat` is the statistic of all the individuals together, flows add up, levels are
+  averaged by the periods each covers, histograms add. A coarser sample is built from the finer ones, so
+  its `span` (periods covered) varies around the nominal length; every sample says its `day` (period it
+  ends at) and `span`.
+- **What the viewer reads.** `recorder.history()` returns an immutable `HistorySamples`: `tiers`,
+  `samples()` (all, oldest first), `series(name)` (days and values, flows per period so tiers share one
+  scale), `stat_series(name)`, `histogram_at(name, day)` for scrubbing, `names()` and `stat_names()`.
+- **Does not touch the run.** It only reads; the world builds events and calls step listeners only
+  while someone listens, and a test checks that a run has the same `state_digest` with and without a
+  recorder.
+- **Saved.** `HistorySamples.to_dict()` / `from_dict()` and `recorder.to_dict()` / `Recorder.restore(world, data)`
+  (the latter also keeps the counters since the last sample, so a restored world and recorder carry on
+  exactly as an uninterrupted pair; tested with `save_world`). `save_history(path)` writes JSON, gzip by
+  suffix. The run store (`UX.10`) puts this file beside the world checkpoints.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these
