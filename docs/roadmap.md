@@ -28,7 +28,7 @@ and variable-length genomes `DNA.4` ([#5](https://github.com/dwhagar/evolutionSi
 
 ## Next: brain
 
-A simple neural network that can drive behaviour (`BRAIN.1` research, then `BRAIN.2` build). It has not
+A simple neural network that can drive behaviour (`BRAIN.1` research, owner decisions `BRAIN.3` to `BRAIN.8`, then the `BRAIN.2` build). It has not
 been given a version yet; the owner sets milestones.
 
 ## Later

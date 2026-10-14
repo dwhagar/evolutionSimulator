@@ -36,14 +36,15 @@ how the two interact. See [docs/roadmap.md](docs/roadmap.md).
 | TRAIT.2 | Decide whether longevity carries a cost ([#16](https://github.com/dwhagar/evolutionSimulator/issues/16)) | waiting on owner | |
 | REPRO.2 | Decide what `fertility` does ([#17](https://github.com/dwhagar/evolutionSimulator/issues/17)) | waiting on owner | |
 | WORLD.1 | Decide the world model, so trait ranges stop being guesses ([#10](https://github.com/dwhagar/evolutionSimulator/issues/10)) | waiting on owner | |
-| DNA.7 | Make per-gene crossover the default (`crossover_by_gene` exists, default is still per-digit) | blocked | DNA.5 |
-| DNA.8 | Per-position mutation weight, and mutation rate as expected changes per genome | blocked | DNA.6 |
+| DNA.7 | Make gene-boundary crossover the default | built in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20), held for owner | DNA.5 |
+| DNA.8 | Per-position mutation weight, and mutation rate as expected changes per genome | built in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20), held for owner | DNA.6 |
 | TRAIT.3 | Move all tuning constants in `traits.py` into one config object | blocked | TRAIT.2, REPRO.2, WORLD.1 |
 | TRAIT.4 | Define traits as data (gene IDs, range, scale, mutation step) so DNA does not know trait names | open | |
-| TRAIT.5 | Fix the prototype's initial-state quirks and add a mating-cost guard | blocked | REPRO.2, WORLD.1 |
+| TRAIT.5 | Fix the prototype's initial-state quirks and add a mating-cost guard | built in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20), held for owner | REPRO.2, WORLD.1 |
+| DNA.10 | Genome `LAYOUT_VERSION` on every DNA class, saved and checked on load (animal genome becomes 61 digits when `fertility` is removed) | built in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20), held for owner | REPRO.2 |
 
 Items DNA.7, DNA.8 and TRAIT.3 to TRAIT.5 come from section 9.5 of
-[docs/research/basic-traits.md](docs/research/basic-traits.md).
+[docs/research/basic-traits.md](docs/research/basic-traits.md). Foundations 1 built the research threads' defaults for DNA.7, DNA.8, TRAIT.5 and the removal of the unused `fertility` gene (REPRO.2) in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20); it is held until the owner answers or says to merge. These items turn to done when it merges.
 
 ## Waiting on the owner
 
@@ -61,8 +62,14 @@ shape 0.1 are in the table above; these are the rest.
 
 | ID | Item | Status | Needs |
 | --- | --- | --- | --- |
-| BRAIN.1 | Brain research: a simple neural network, written for a reader new to the topic (`docs/design`), with questions for the owner raised as issues | open | Research 1, once the DNA research is finished |
-| BRAIN.2 | Foundations 2: build the brain | blocked | BRAIN.1, owner's answers to its issues |
+| BRAIN.1 | Brain research: a simple neural network, written for a reader new to the topic (`docs/design`), with questions for the owner raised as issues BRAIN.3 to BRAIN.8 | in progress | Research 1 |
+| BRAIN.2 | Foundations 2: build the brain | blocked | BRAIN.1, owner's answers to BRAIN.3 to BRAIN.8 |
+| BRAIN.3 | Decide: neural network or a fixed decision rule | waiting on owner | BRAIN.1 |
+| BRAIN.4 | Decide: does a creature have memory | waiting on owner | BRAIN.1 |
+| BRAIN.5 | Decide: energy cost of thinking | waiting on owner | BRAIN.1 |
+| BRAIN.6 | Decide: learning during a creature's life | waiting on owner | BRAIN.1 |
+| BRAIN.7 | Decide: starting brains (random, hand-made, or inherited) | waiting on owner | BRAIN.1 |
+| BRAIN.8 | Decide: fixed or evolvable brain size | waiting on owner | BRAIN.1 |
 | DNA.9 | Decide sex at birth versus inherited | blocked | REPRO.1 |
 | WORLD.2 | First world and step loop: place organisms, run ticks, feed, reproduce | blocked | WORLD.1 |
 
