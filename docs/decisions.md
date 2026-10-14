@@ -63,3 +63,4 @@ Issue [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) and [#27](h
 - All threads merge their PRs automatically once checks are green.
 - Weekly CI, Mondays 07:00 UTC. Build number counts merges into main.
 - Senses are the next research topic (`SENSE.1`): which senses to have and how they feed the brain.
+- Changing the world while it runs (spawn, remove, feed, move; [#125](https://github.com/dwhagar/evolutionSimulator/issues/125), `UX.4`): the owner chose "Watch only first". The viewer stays read-only; `UX.20` stays parked, and every command keeps going through the one session interface so interventions can follow later.
