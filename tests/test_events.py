@@ -5,7 +5,7 @@ from world_support import animal_dna, breeding_pair, hourly_world, plant_dna, wo
 
 from evolution_simulator.deaths import DeathCause
 from evolution_simulator.traits import AnimalTraits, PlantTraits
-from evolution_simulator.world import Born, Died, Mated, Vec, World, WorldConfig
+from evolution_simulator.world import Ate, Born, Died, Mated, Vec, World, WorldConfig
 
 HERE = Vec.of(500, 500)
 STILL = {"speed": -2.0}
@@ -130,6 +130,32 @@ def test_a_grazed_plant_dies_eaten():
     world.step()
     deaths = [e for e in events if isinstance(e, Died) and e.kind == "plant"]
     assert [(d.id, d.cause) for d in deaths] == [(plant.id, DeathCause.EATEN)]
+
+
+def test_a_meal_from_a_plant_is_announced_with_the_amount_taken():
+    world = make(graze_amount=2.0)
+    events = listen(world)
+    plant = world.add_plant(plant_dna(max_biomass="3333", toxicity="0000"), HERE)
+    plant.traits.current_biomass = 50.0
+    animal = world.add_animal(animal_dna(brain={**STILL, "eat": 2.0}), HERE, heading=0.0)
+    world.step()
+    meals = [e for e in events if isinstance(e, Ate)]
+    assert meals == [Ate(1, animal.id, "plant", plant.id, pytest.approx(2.0))]
+
+
+def test_a_meal_from_a_corpse_is_announced_and_a_refused_one_is_not():
+    world = make()
+    events = listen(world)
+    hunter = world.add_animal(
+        animal_dna(brain=BITER, size="1111", carnivore_eff="3333"), HERE, heading=0.0
+    )
+    prey = world.add_animal(animal_dna(brain=STILL, size="0000"), Vec.of(501, 500), heading=0.0)
+    hunter.traits.current_energy = 0.3 * hunter.traits.max_energy
+    world.run(40)
+    corpse_meals = [e for e in events if isinstance(e, Ate) and e.food == "corpse"]
+    assert corpse_meals and all(e.eater == hunter.id and e.amount > 0 for e in corpse_meals)
+    kill_tick = next(e.tick for e in events if isinstance(e, Died) and e.id == prey.id)
+    assert corpse_meals[0].tick >= kill_tick
 
 
 def test_a_mating_a_pregnancy_and_a_birth_are_announced(sure_conception):

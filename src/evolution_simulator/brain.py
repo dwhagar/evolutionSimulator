@@ -94,6 +94,28 @@ def _logistic(x: float) -> float:
     return e / (1.0 + e)
 
 
+@dataclass(frozen=True, slots=True)
+class BrainNetwork:
+    """The wiring of a brain as plain numbers, for drawing it (``UX.29``).
+
+    Hidden neuron ``j`` has bias ``hidden_biases[j]`` and a weight ``input_weights[j][i]`` from
+    each input ``i``; output ``k`` has bias ``output_biases[k]`` and a weight
+    ``output_weights[k][j]`` from each hidden neuron. A weight inside the dead zone reads 0, so a
+    connection is drawn only where its weight is not 0. ``slots`` says which genome slot each hidden
+    neuron came from (the neurons that are switched on), out of ``slot_count``.
+    """
+
+    inputs: int
+    gain: float
+    hidden_biases: tuple[float, ...]
+    input_weights: tuple[tuple[float, ...], ...]
+    output_biases: tuple[float, ...]
+    output_weights: tuple[tuple[float, ...], ...]
+    signed_outputs: tuple[bool, ...]
+    slots: tuple[int, ...] = ()
+    slot_count: int = 0
+
+
 class Brain:
     """An immutable feedforward network with a fixed shape.
 
@@ -208,6 +230,21 @@ class Brain:
             total = gain * (bias + math.sumprod(weights, hidden))
             result.append(math.tanh(total) if signed[k] else _logistic(total))
         return hidden, tuple(result)
+
+    def network(self, slots: Sequence[int] = (), slot_count: int = 0) -> BrainNetwork:
+        """This brain's wiring as plain numbers (see ``BrainNetwork``); ``slots`` and
+        ``slot_count`` are filled in by whoever knows the genome."""
+        return BrainNetwork(
+            inputs=self.shape.inputs,
+            gain=self.gain,
+            hidden_biases=tuple(bias for bias, _ in self._hidden),
+            input_weights=tuple(weights for _, weights in self._hidden),
+            output_biases=tuple(bias for bias, _ in self._outputs),
+            output_weights=tuple(weights for _, weights in self._outputs),
+            signed_outputs=self.shape.signed_outputs,
+            slots=tuple(slots),
+            slot_count=slot_count,
+        )
 
     def with_output_offsets(
         self, weight_offsets: Sequence[Sequence[float]], bias_offsets: Sequence[float]
