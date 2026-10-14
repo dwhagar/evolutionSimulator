@@ -47,6 +47,42 @@ INDEX_CELL_SIZE: float = 64.0
 
 
 @dataclass(frozen=True)
+class PlantRules:
+    """How neighbouring plants limit each other's growth (WORLD.8).
+
+    **Soil.** Within ``neighbourhood`` units of a plant, the plants (itself included) hold some
+    biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the plant
+    keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice starvation,
+    at or above capacity). This is a logistic limit, and what keeps a population from running to
+    the cap however fast the plants grow. It is the same for every plant on purpose: if root
+    reach set the neighbourhood, evolution would shrink roots to dodge it.
+
+    **Light.** Each heavier neighbour whose canopy covers the plant adds ``1 - distance / canopy
+    radius`` to its shade load, and the plant keeps ``1 / (1 + shade_strength * load)`` of the
+    light, so tall plants shade seedlings.
+
+    The effects are refreshed for one in every ``refresh_interval`` plants each tick, because
+    plants do not move and the loads change slowly.
+    """
+
+    neighbourhood: float = 25.0
+    capacity: float = 0.015
+    """Biomass per unit of ground that the soil can feed."""
+    shade_strength: float = 1.0
+    refresh_interval: int = 10
+
+    def __post_init__(self) -> None:
+        if not (math.isfinite(self.neighbourhood) and self.neighbourhood > 0.0):
+            raise ValueError(f"neighbourhood must be positive, got {self.neighbourhood}.")
+        if not (math.isfinite(self.capacity) and self.capacity > 0.0):
+            raise ValueError(f"capacity must be positive, got {self.capacity}.")
+        if not (math.isfinite(self.shade_strength) and self.shade_strength >= 0.0):
+            raise ValueError(f"shade_strength must be zero or more, got {self.shade_strength}.")
+        if self.refresh_interval < 1:
+            raise ValueError("refresh_interval must be at least 1.")
+
+
+@dataclass(frozen=True)
 class WorldConfig:
     """Everything that defines a run besides the organisms put into it."""
 
@@ -62,6 +98,7 @@ class WorldConfig:
     day_cycle: DayCycle | None = field(default_factory=DayCycle)
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     sleep: SleepRules = field(default_factory=SleepRules)
+    plants: PlantRules = field(default_factory=PlantRules)
     max_animals: int = 1000
     max_plants: int = 5000
     """Safety caps so a run cannot grow without limit; births stop at the cap."""
@@ -261,8 +298,11 @@ class World:
         self._refresh_animal_index()
         self._update_sleep(animals)
         sunlight = self.daylight
+        self._refresh_competition(plants)
         for plant in plants:
-            plant.traits.set_environmental_conditions(sunlight=sunlight)
+            plant.traits.set_environmental_conditions(
+                sunlight=sunlight * plant.shade, soil_competition=plant.soil
+            )
 
         # 1. Sense and decide, all from the same start-of-tick world. Sleepers do not.
         for animal in animals:
@@ -312,6 +352,28 @@ class World:
             plant_births=plant_births,
             plant_deaths=plant_deaths,
         )
+
+    def _refresh_competition(self, plants: list[Plant]) -> None:
+        """Update the shade and soil of this tick's share of the plants (see ``PlantRules``)."""
+        rules = self.config.plants
+        ground = math.pi * rules.neighbourhood**2
+        for plant in plants:
+            if plant.id % rules.refresh_interval != self.tick % rules.refresh_interval:
+                continue
+            biomass = 0.0
+            shade_load = 0.0
+            reach = max(rules.neighbourhood, self.max_canopy)
+            for other, distance in self.plants_within(plant.position, reach):
+                if distance <= rules.neighbourhood:
+                    biomass += other.traits.current_biomass
+                if (
+                    other is not plant
+                    and distance < other.radius
+                    and other.traits.current_biomass > plant.traits.current_biomass
+                ):
+                    shade_load += 1.0 - distance / other.radius
+            plant.soil = max(0.0, 1.0 - biomass / (ground * rules.capacity))
+            plant.shade = 1.0 / (1.0 + rules.shade_strength * shade_load)
 
     def _update_sleep(self, animals: list[Animal]) -> None:
         """Put animals to sleep at night and wake them in the morning (or when starving)."""

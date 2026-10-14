@@ -45,9 +45,10 @@ class Animal:
 
 
 class Plant:
-    """A rooted organism; it never moves."""
+    """A rooted organism; it never moves. ``shade`` and ``soil`` (each 0 to 1) are how much light
+    and soil water neighbouring plants leave it; the world refreshes them every few ticks."""
 
-    __slots__ = ("id", "parents", "position", "traits")
+    __slots__ = ("id", "parents", "position", "shade", "soil", "traits")
 
     kind = "plant"
 
@@ -62,6 +63,8 @@ class Plant:
         self.traits = traits
         self.position = position
         self.parents = parents
+        self.shade: float = 1.0
+        self.soil: float = 1.0
 
     @property
     def is_alive(self) -> bool:
