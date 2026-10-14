@@ -1,8 +1,8 @@
 """Compute the project version as MAJOR.minor.build from git history.
 
-The build number is the number of commits reachable from HEAD but not from the
-`base` commit in version.toml. Every commit therefore bumps the build by one
-with no manual step. Run `python scripts/version.py` to print the current version.
+The build number is the number of first-parent commits reachable from HEAD but not from the
+`base` commit in version.toml. On main that is one per merge (squash, merge commit or fast-forward
+of a single commit), with no manual step. Run `python scripts/version.py` to print the current version.
 """
 
 import subprocess
@@ -13,10 +13,10 @@ ROOT = Path(__file__).resolve().parent.parent
 
 
 def build_number(base: str) -> int:
-    """Commits since `base`, or 0 when git history is unavailable."""
+    """First-parent commits since `base`, or 0 when git history is unavailable."""
     try:
         out = subprocess.run(
-            ["git", "rev-list", "--count", f"{base}..HEAD"],
+            ["git", "rev-list", "--first-parent", "--count", f"{base}..HEAD"],
             cwd=ROOT,
             capture_output=True,
             text=True,
