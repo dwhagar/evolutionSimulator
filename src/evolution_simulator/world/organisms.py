@@ -10,9 +10,19 @@ from evolution_simulator.world.vector import Vec
 class Animal:
     """A mobile organism. ``heading`` is in radians (0 faces +x, counterclockwise); the world
     keeps it between -pi and pi. ``last_decision`` is what its brain chose this tick (``None``
-    while it sleeps). ``asleep`` is set by the world's day-night cycle."""
+    while it sleeps). ``asleep`` is set by the world's day-night cycle. ``partner`` is the id of the
+    father while this animal is carrying his litter."""
 
-    __slots__ = ("asleep", "heading", "id", "last_decision", "parents", "position", "traits")
+    __slots__ = (
+        "asleep",
+        "heading",
+        "id",
+        "last_decision",
+        "parents",
+        "partner",
+        "position",
+        "traits",
+    )
 
     kind = "animal"
 
@@ -31,6 +41,7 @@ class Animal:
         self.parents = parents
         self.last_decision: BrainDecision | None = None
         self.asleep: bool = False
+        self.partner: int | None = None
 
     @property
     def is_alive(self) -> bool:

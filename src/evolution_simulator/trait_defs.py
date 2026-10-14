@@ -27,9 +27,12 @@ from evolution_simulator.sense_genes import (
 )
 
 CARE_FRACTION_RANGE: tuple[float, float] = (0.10, 0.80)
-"""A newborn's starting energy as a share of its own energy store (``caregiving``)."""
+"""A newborn's starting energy as a share of its own energy store (``parenting``)."""
+COOLDOWN_DAYS_RANGE: tuple[float, float] = (2.0, 90.0)
+"""Gap between matings in simulated days (``repro_cooldown``, log scale)."""
 INTERVAL_FRACTION_RANGE: tuple[float, float] = (0.01, 0.25)
-"""Shortest gap between births as a share of the expected lifespan (``repro_interval``, log scale)."""
+"""Shortest gap between seed bursts as a share of the plant lifespan (``seeding_interval``, log
+scale). Plants only until the plant genes move to days (``TRAIT.8``)."""
 
 SEED_PROVISION_RANGE: tuple[float, float] = (0.05, 0.50)
 """A seed's starting biomass as a share of its own full size (``seed_provision``, log scale). The
@@ -218,6 +221,8 @@ ANIMAL_TRAITS = TraitSet(
         _level("fear"),
         _level("encoder_fidelity"),
         _level("repro_drive", "Urge to find a mate: lowers the energy needed to start looking."),
+        _level("fertility", "Chance a mating takes, litter size, gestation; costs upkeep."),
+        _level("recovery", "How fast the body heals and regains energy at rest; costs upkeep."),
         # Ranged traits.
         TraitDef("mass", ("size",), 1.0, 4.0, description="Body mass in simulation units."),
         TraitDef(
@@ -230,19 +235,19 @@ ANIMAL_TRAITS = TraitSet(
         TraitDef("call_radius", ("encoder_fidelity",), 0.0, 60.0),
         TraitDef("call_energy_cost", ("encoder_fidelity",), 1.5, 7.5),
         TraitDef("sex_strategy", ("sex_strategy",), kind=Kind.CATEGORY),
-        # Reproduction (REPRO.5).
+        # Reproduction (REPRO.8).
         TraitDef(
             "care_fraction",
-            ("caregiving",),
+            ("parenting",),
             *CARE_FRACTION_RANGE,
-            description="A newborn starts with this share of its own energy store.",
+            description="A newborn starts with the mean of its parents' share of its energy store.",
         ),
         TraitDef(
-            "interval_fraction",
-            ("repro_interval",),
-            *INTERVAL_FRACTION_RANGE,
+            "cooldown_days",
+            ("repro_cooldown",),
+            *COOLDOWN_DAYS_RANGE,
             scale=Scale.LOG,
-            description="Shortest gap between births, as a share of the expected lifespan.",
+            description="Simulated days between matings, before the repair stretch.",
         ),
     ),
 )

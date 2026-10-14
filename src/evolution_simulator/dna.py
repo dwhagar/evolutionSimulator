@@ -790,6 +790,17 @@ class DNA:
             self._layout, self._sequence[: gene.start] + new + self._sequence[gene.end :]
         )
 
+    def with_value(self, gene_id: str, value: float) -> Self:
+        """A copy with a gene set to the digits nearest ``value`` (0.0 to 1.0, as ``value`` reads it)."""
+        gene = self._layout.gene(gene_id)
+        top = 4**gene.length - 1
+        number = round(min(1.0, max(0.0, value)) * top)
+        digits = []
+        for _ in range(gene.length):
+            number, digit = divmod(number, 4)
+            digits.append(digit)
+        return self.replaced(gene_id, reversed(digits))
+
     # -------------------------------------------------------------------------
     # Internals
     # -------------------------------------------------------------------------

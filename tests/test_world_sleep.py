@@ -1,7 +1,7 @@
 """The day-night cycle and sleep (WORLD.5)."""
 
 import pytest
-from world_support import animal_dna, plant_dna
+from world_support import HOURLY, animal_dna, plant_dna
 
 from evolution_simulator.world import (
     BasicSenses,
@@ -138,11 +138,13 @@ def test_a_sleeper_does_not_move_eat_or_mate():
 
 
 def test_sleep_saves_and_regains_energy():
-    sleeper = make()
-    awake = make(day_cycle=None)
+    # Hourly ticks, so a tick's upkeep and its movement are on the same scale (the day is 100 ticks).
+    sleeper = make(time_scale=HOURLY, day_cycle=DayCycle(length_seconds=100.0 * 3600.0))
+    awake = make(time_scale=HOURLY, day_cycle=None)
     still = {"speed": -2.0}
-    a = sleeper.add_animal(animal_dna(brain=still), HERE, heading=0.0)
-    b = awake.add_animal(animal_dna(brain=still), HERE, heading=0.0)
+    quick = {"recovery": "333"}  # the best sleepers regain the most; an average one breaks even
+    a = sleeper.add_animal(animal_dna(brain=still, **quick), HERE, heading=0.0)
+    b = awake.add_animal(animal_dna(brain=still, **quick), HERE, heading=0.0)
     a.traits.current_energy = b.traits.current_energy = 0.4 * a.traits.max_energy
     sleeper.run(31)
     awake.run(31)

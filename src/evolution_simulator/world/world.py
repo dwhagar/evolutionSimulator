@@ -8,8 +8,9 @@ a tick counter. ``step`` advances one tick, always in the same order:
 2. In id order each animal ages and burns energy, turns, moves (walls stop it) and, if its brain
    says "eat" and a plant is in reach, grazes.
 3. Animals that want to mate, are ready, and are close enough pair off in id order, each taking the
-   willing animal in reach with the closest genome (REPRO.4, ``mating.py``); each pair makes one
-   child.
+   willing animal of the other sex in reach with the closest genome (REPRO.4, ``mating.py``). A
+   mating that takes makes the bearer pregnant; a bearer whose time is up gives birth to her litter
+   next to her, if both parents can pay (REPRO.8).
 4. Plants grow in id order; a plant that is ready drops seeds around it.
 5. The dead are removed and the clock advances.
 
@@ -17,9 +18,12 @@ Everything random comes from one ``random.Random`` seeded by ``WorldConfig.seed`
 visited in id order, and nothing reads a clock, so the same config, the same organisms and the same
 sequence of calls always give the same world (``state_digest`` shows it).
 
-A child's starting energy and a seed's starting biomass come out of its parents (REPRO.5), and a
-pair mates only if both can afford the birth (TRAIT.5). Attacking prey and acting on the other brain
-outputs are BRAIN.10.
+A child's starting energy and a seed's starting biomass come out of its parents (REPRO.5, REPRO.8),
+and a litter is born only if both parents can afford it (TRAIT.5). Animals age, burn energy, heal
+and carry young per reference tick (an hour of simulated time), scaled by the world's tick length:
+a tick of ``seconds_per_tick`` is ``seconds_per_tick / 3600`` of that clock. Movement and grazing
+are per tick and not scaled yet (WORLD.7). Attacking prey and acting on the other brain outputs are
+BRAIN.10.
 """
 
 from __future__ import annotations
@@ -30,8 +34,13 @@ import random
 from dataclasses import dataclass, field
 
 from evolution_simulator.dna import DNA
-from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
-from evolution_simulator.traits import AnimalTraits, PlantTraits
+from evolution_simulator.layouts import PLANT_LAYOUT, founder_animal_dna
+from evolution_simulator.traits import (
+    REFERENCE_TICK_SECONDS,
+    AnimalTraits,
+    MatingResult,
+    PlantTraits,
+)
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.mating import choose_mate
@@ -94,7 +103,7 @@ class WorldConfig:
     mating_reach: float = 3.0
     """Two animals mate only if their centres are this close or closer."""
     birth_scatter: float = 1.0
-    """A child appears within this distance of its parents' midpoint."""
+    """A litter appears within this distance of its mother."""
     day_cycle: DayCycle | None = field(default_factory=DayCycle)
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     sleep: SleepRules = field(default_factory=SleepRules)
@@ -160,6 +169,11 @@ class World:
     @property
     def time_scale(self) -> TimeScale:
         return self.config.time_scale
+
+    @property
+    def dt(self) -> float:
+        """How many reference ticks (hours) one tick is: the factor on per-reference-tick rates."""
+        return self.time_scale.seconds_per_tick / REFERENCE_TICK_SECONDS
 
     @property
     def simulated_seconds(self) -> float:
@@ -274,11 +288,12 @@ class World:
         return plant
 
     def populate(self, animals: int = 0, plants: int = 0) -> None:
-        """Add random organisms at random places (plants first, then animals)."""
+        """Add random organisms at random places (plants first, then animals). The animals are a first
+        generation: random genomes with the reproduction genes at their starting levels."""
         for _ in range(plants):
             self.add_plant(DNA.random(PLANT_LAYOUT, self.rng))
         for _ in range(animals):
-            self.add_animal(DNA.random(ANIMAL_LAYOUT, self.rng))
+            self.add_animal(founder_animal_dna(self.rng))
 
     # -------------------------------------------------------------------------
     # The step loop
@@ -313,13 +328,14 @@ class World:
                 animal.last_decision = animal.traits.think(percepts, self.rng)
 
         # 2. Live, move and eat (or sleep).
+        dt = self.dt
         for animal in animals:
             if animal.asleep:
                 self._rest(animal)
                 continue
             decision = animal.last_decision
             assert decision is not None
-            animal.traits.update_metabolism_and_aging(decision.speed)
+            animal.traits.update_metabolism_and_aging(decision.speed, dt)
             if not animal.is_alive:
                 continue
             animal.heading = wrap_angle(
@@ -332,9 +348,10 @@ class World:
             if decision.eats_or_attacks:
                 self._graze(animal)
 
-        # 3. Mate.
+        # 3. Mate, then deliver the litters that are due.
         self._refresh_animal_index()
-        animal_births = self._mate(animals)
+        self._mate(animals)
+        animal_births = self._deliver(animals)
 
         # 4. Plants grow and seed.
         plant_births = 0
@@ -402,10 +419,12 @@ class World:
         """One tick of sleep: age as usual, burn less energy and regain some."""
         rules = self.config.sleep
         traits = animal.traits
-        traits.update_metabolism_and_aging(0.0)
+        dt = self.dt
+        traits.update_metabolism_and_aging(0.0, dt)
         if traits.is_alive:
             saved = traits.basal_metabolism * (1.0 - rules.metabolism_factor)
-            gained = saved + rules.energy_regain * traits.max_energy
+            regained = rules.energy_regain * traits.max_energy * traits.rest_regain_factor
+            gained = (saved + regained) * dt
             traits.current_energy = min(traits.max_energy, traits.current_energy + gained)
 
     def _refresh_animal_index(self) -> None:
@@ -429,6 +448,7 @@ class World:
         animal.traits.feed(eaten, is_meat=False, toxicity=toxicity)
 
     def _mate(self, animals: list[Animal]) -> int:
+        """Pair the willing animals off and try each pair. Returns the matings that took."""
         cfg = self.config
         willing = [
             a
@@ -437,11 +457,11 @@ class World:
             and not a.asleep
             and a.last_decision is not None
             and a.last_decision.seeks_mating
-            and a.traits.mating_cooldown == 0
+            and a.traits.can_mate
         ]
         willing_ids = {a.id for a in willing}
         paired: set[int] = set()
-        newborn: list[tuple[AnimalTraits, Vec, tuple[int, ...]]] = []
+        conceived = 0
         for a in willing:
             if a.id in paired:
                 continue
@@ -453,18 +473,38 @@ class World:
             best = choose_mate(a, reachable)
             if best is None:
                 continue
-            if len(self._animals) + len(newborn) >= cfg.max_animals:
-                break
             paired.update((a.id, best.id))
-            child = AnimalTraits(a.traits.dna.reproduce(best.traits.dna, self.rng))
-            if not AnimalTraits.give_birth(a.traits, best.traits, child):
-                continue  # one of them could not pay: nobody is charged
-            at = Vec.midpoint(a.position, best.position)
-            newborn.append((child, self._scatter(at, cfg.birth_scatter), (a.id, best.id)))
-        for child, position, parents in newborn:
-            facing = self.rng.uniform(-math.pi, math.pi)
-            self._insert_animal(child, position, facing, parents)
-        return len(newborn)
+            father, mother = (a, best) if a.traits.sex == 0 else (best, a)
+            result = AnimalTraits.mate(father.traits, mother.traits, self.rng)
+            if result is MatingResult.CONCEIVED:
+                mother.partner = father.id
+                conceived += 1
+        return conceived
+
+    def _deliver(self, animals: list[Animal]) -> int:
+        """Birth the litters that are due, in id order of the mothers. A litter is born next to its
+        mother as far as the animal cap allows, and only if both parents can pay; if not, she goes
+        on carrying it and tries again next tick. Returns the number of young born."""
+        born = 0
+        for mother in animals:
+            pregnancy = mother.traits.pregnancy
+            if not mother.is_alive or pregnancy is None or not pregnancy.due:
+                continue
+            room = self.config.max_animals - len(self._animals)
+            count = min(pregnancy.litter, room)
+            if count <= 0:
+                continue
+            litter = [AnimalTraits(genome) for genome in pregnancy.children[:count]]
+            if not AnimalTraits.give_birth(mother.traits, litter):
+                continue
+            parents = (mother.id,) if mother.partner is None else (mother.partner, mother.id)
+            mother.partner = None
+            for child in litter:
+                position = self._scatter(mother.position, self.config.birth_scatter)
+                facing = self.rng.uniform(-math.pi, math.pi)
+                self._insert_animal(child, position, facing, parents)
+            born += count
+        return born
 
     def _seed(self, plant: Plant) -> int:
         """Drop seeds. The plant pays for as many as its budget allows (up to its clutch gene), each

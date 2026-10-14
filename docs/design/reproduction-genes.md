@@ -9,6 +9,17 @@ revision replaces it in place and follows the answers logged in [decisions.md](.
 The numbers are starting values to tune, not measurements of the running simulator. The small model in
 [Does the trade-off work?](#does-the-trade-off-work) is a toy, with its assumptions stated.
 
+> **Built (animals).** `REPRO.8` built everything for animals in this note on top of
+> [#74](https://github.com/dwhagar/evolutionSimulator/pull/74): the four genes and the sex digit, `recovery`
+> (`TRAIT.7`), pregnancies, absolute-day durations and per-hour charging, with the constants named as in the
+> table at the end. Animal layout version 5, 472 digits. Differences from the note: the pregnancy list is
+> kept on the bearers, not in a separate world list; the protective effect of `parenting` and the "own young"
+> channel wait for `SENSE.14`; a father who has died pays nothing and gives nothing at the birth; the
+> costs of drive (wear, upkeep) follow the gene, while the threshold, boldness and brain input follow the
+> sex-modified drive. The plant genes are `REPRO.3` and `TRAIT.8` (the seed genes are built, the longevity gene
+> is not). See [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity) and the
+> [long-run check](#long-run-check) below.
+
 ## Summary
 
 - **Four reproduction genes plus the sex digit** (the owner's three, and parenting as its own gene, the

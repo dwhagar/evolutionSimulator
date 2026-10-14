@@ -190,19 +190,23 @@ def test_reproduction_traits_cover_their_ranges():
     low = ANIMAL_TRAITS.express(DNA(ANIMAL_LAYOUT, "0" * ANIMAL_LAYOUT.length))
     high = ANIMAL_TRAITS.express(DNA(ANIMAL_LAYOUT, "3" * ANIMAL_LAYOUT.length))
     assert (low["care_fraction"], high["care_fraction"]) == (0.10, pytest.approx(0.80))
-    assert (low["interval_fraction"], high["interval_fraction"]) == (
-        pytest.approx(0.01),
-        pytest.approx(0.25),
+    assert (low["cooldown_days"], high["cooldown_days"]) == (
+        pytest.approx(2.0),
+        pytest.approx(90.0),
     )
     assert (low["repro_drive"], high["repro_drive"]) == (0.0, 1.0)
-    # The interval is geometric: the middle of the gene is the geometric mean of the ends.
-    assert ANIMAL_TRAITS["interval_fraction"].from_unit(0.5) == pytest.approx((0.01 * 0.25) ** 0.5)
+    assert (low["fertility"], high["fertility"]) == (0.0, 1.0)
+    assert (low["recovery"], high["recovery"]) == (0.0, 1.0)
+    # The cooldown is geometric: the middle of the gene is the geometric mean of the ends.
+    assert ANIMAL_TRAITS["cooldown_days"].from_unit(0.5) == pytest.approx((2.0 * 90.0) ** 0.5)
 
 
 def test_each_reproduction_gene_feeds_its_own_trait():
     for gene_id, trait in (
-        ("caregiving", "care_fraction"),
-        ("repro_interval", "interval_fraction"),
+        ("parenting", "care_fraction"),
+        ("repro_cooldown", "cooldown_days"),
         ("repro_drive", "repro_drive"),
+        ("fertility", "fertility"),
+        ("recovery", "recovery"),
     ):
         assert [t.name for t in ANIMAL_TRAITS.traits_reading(gene_id)] == [trait]

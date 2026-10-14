@@ -5,7 +5,7 @@ import pytest
 from evolution_simulator import traits as traits_module
 from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
-from evolution_simulator.traits import AnimalTraits, BaseTraits, PlantTraits
+from evolution_simulator.traits import AnimalTraits, BaseTraits, MatingResult, PlantTraits
 
 
 def animal_dna(sequence: str) -> DNA:
@@ -277,133 +277,403 @@ def test_tactile_reflex_needs_touch():
     assert feeling.flag_tactile_evade
 
 
-def newborn_of(*_parents) -> AnimalTraits:
+def newborn_of(**genes: str) -> AnimalTraits:
     """A child to be born: any animal will do, the birth step only reads its energy store."""
-    return AnimalTraits(animal_with(size="3333"))  # max_energy 300
+    return AnimalTraits(animal_with(size="3333", **genes))  # max_energy 300
 
 
 def grown(traits: AnimalTraits) -> AnimalTraits:
-    traits.mating_cooldown = 0
+    traits.mating_cooldown = 0.0
     traits._update_needs_and_drives()
     return traits
 
 
-def test_birth_costs_each_parent_half_the_newborns_energy_at_its_own_care():
-    a = grown(AnimalTraits(animal_with(caregiving="333", somatic_maint="0000")))  # care 0.8
-    b = grown(AnimalTraits(animal_with(caregiving="000", somatic_maint="0000")))  # care 0.1
-    child = newborn_of()
-    a.current_energy = b.current_energy = 200.0
-    assert AnimalTraits.give_birth(a, b, child)
-    assert child.max_energy == pytest.approx(300.0)
-    assert child.current_energy == pytest.approx(0.45 * 300.0)  # the mean of 0.8 and 0.1
-    assert a.current_energy == pytest.approx(200.0 - 0.4 * 300.0)
-    assert b.current_energy == pytest.approx(200.0 - 0.05 * 300.0)
+def male(**genes: str) -> AnimalTraits:
+    """A grown sex-0 animal (all-zero genes besides the ones named)."""
+    return grown(AnimalTraits(animal_with(sex_strategy="0", **genes)))
 
 
-def test_repair_makes_a_birth_dearer_full_repair_doubles_it():
-    base = AnimalTraits(animal_with(caregiving="222", somatic_maint="0000"))
-    full = AnimalTraits(animal_with(caregiving="222", somatic_maint="3333"))
-    assert full.birth_cost(300.0) == pytest.approx(2.0 * base.birth_cost(300.0))
-    half = AnimalTraits(animal_with(caregiving="222", somatic_maint="1333"))
-    assert half.birth_cost(300.0) == pytest.approx(
-        base.birth_cost(300.0) * (1.0 + half.phenotype["somatic_maint"])
+def female(**genes: str) -> AnimalTraits:
+    """A grown sex-1 animal."""
+    return grown(AnimalTraits(animal_with(sex_strategy="1", **genes)))
+
+
+class Roll(random.Random):
+    """A random generator whose ``random()`` always gives the same number (and whose other draws
+    are real), to make a chance come out one way."""
+
+    def __init__(self, value: float) -> None:
+        super().__init__(1)
+        self.value = value
+
+    def random(self) -> float:
+        return self.value
+
+
+def pregnant_pair(**bearer_genes: str) -> tuple[AnimalTraits, AnimalTraits]:
+    """A father and a bearer, the bearer pregnant by a mating that took."""
+    father, mother = male(), female(**bearer_genes)
+    assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.CONCEIVED
+    return father, mother
+
+
+def due(mother: AnimalTraits) -> AnimalTraits:
+    mother.pregnancy.remaining = 0.0
+    return mother
+
+
+# --- sex, drive and mating ---------------------------------------------------
+
+
+def test_the_sex_digit_gives_the_sex_and_the_drive_modifier():
+    seen = {
+        digit: AnimalTraits(animal_with(sex_strategy=digit, repro_drive="222")) for digit in "0123"
+    }
+    assert [seen[d].sex for d in "0123"] == [0, 1, 0, 1]
+    assert [seen[d].drive_modifier for d in "0123"] == [0.0, 0.0, 0.25, -0.25]
+    drive = seen["0"].phenotype["repro_drive"]
+    assert seen["2"].effective_drive == pytest.approx(drive * 1.25)
+    assert seen["3"].effective_drive == pytest.approx(drive * 0.75)
+    assert AnimalTraits(animal_with(sex_strategy="2", repro_drive="333")).effective_drive == 1.0
+
+
+def test_the_effective_drive_sets_the_threshold_and_the_brain_input():
+    plain = grown(AnimalTraits(animal_with(sex_strategy="0", repro_drive="222")))
+    keen = grown(AnimalTraits(animal_with(sex_strategy="2", repro_drive="222")))
+    drive = plain.phenotype["repro_drive"]
+
+    def wants(traits: AnimalTraits, ratio: float) -> bool:
+        traits.current_energy = ratio * traits.max_energy
+        traits._update_needs_and_drives()
+        return traits.flag_wants_mate
+
+    just = 0.85 - 0.5 * drive
+    assert wants(plain, just + 0.01) and not wants(plain, just - 0.01)
+    keen_just = 0.85 - 0.5 * drive * 1.25
+    assert wants(keen, keen_just + 0.01) and not wants(keen, keen_just - 0.01)
+
+
+def test_two_of_one_sex_do_not_mate_and_nothing_is_charged():
+    a, b = male(), male()
+    before = a.current_energy, b.current_energy
+    assert AnimalTraits.mate(a, b, Roll(0.0)) is MatingResult.REFUSED
+    assert (a.current_energy, b.current_energy) == before
+    f, g = female(), female()
+    assert AnimalTraits.mate(f, g, Roll(0.0)) is MatingResult.REFUSED
+    assert AnimalTraits.mate(f, a, Roll(0.0)) is MatingResult.REFUSED  # roles the wrong way round
+
+
+def test_a_mating_costs_each_partner_three_percent_and_starts_the_cooldown():
+    father, mother = male(repro_cooldown="000"), female(repro_cooldown="333")
+    start = father.current_energy
+    assert AnimalTraits.mate(father, mother, Roll(0.99)) is MatingResult.MISSED  # chance <= 0.9
+    assert father.current_energy == pytest.approx(start - 0.03 * father.max_energy)
+    assert mother.current_energy == pytest.approx(start - 0.03 * mother.max_energy)
+    assert father.mating_cooldown == pytest.approx(2.0 * 24)
+    assert mother.mating_cooldown == pytest.approx(90.0 * 24)
+    assert not mother.is_pregnant
+    assert not father.flag_wants_mate and not mother.flag_wants_mate
+
+
+def test_nobody_mates_in_cooldown_pregnant_dead_or_without_the_energy():
+    father, mother = male(), female()
+    mother.mating_cooldown = 3.0
+    assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.REFUSED
+    mother.mating_cooldown = 0.0
+    mother.current_energy = 0.03 * mother.max_energy  # not strictly more than the effort
+    assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.REFUSED
+    mother.current_energy = mother.max_energy
+    mother.apply_damage(1e9)
+    assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.REFUSED
+    _, mother2 = pregnant_pair()
+    assert AnimalTraits.mate(male(), mother2, Roll(0.0)) is MatingResult.REFUSED
+    assert father.current_energy == father.max_energy * 0.75  # untouched
+
+
+def test_the_chance_of_conceiving_rises_with_both_fertilities():
+    def chance(fertility_a: str, fertility_b: str) -> float:
+        taken = 0
+        for i in range(2000):
+            father, mother = male(fertility=fertility_a), female(fertility=fertility_b)
+            result = AnimalTraits.mate(father, mother, random.Random(i))
+            taken += result is MatingResult.CONCEIVED
+        return taken / 2000
+
+    assert chance("000", "000") == pytest.approx(0.30, abs=0.04)
+    assert chance("333", "333") == pytest.approx(0.90, abs=0.04)
+    assert chance("333", "000") == pytest.approx(0.60, abs=0.04)
+
+
+def test_litter_size_and_gestation_come_from_the_bearers_fertility():
+    for digits, litter, days in (("000", 1, 2.0), ("333", 8, 20.0), ("222", 6, 2 + 18 * 42 / 63)):
+        father, mother = (
+            male(fertility="333" if digits == "000" else "000"),
+            female(fertility=digits),
+        )
+        assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.CONCEIVED
+        assert mother.litter_size == litter == mother.pregnancy.litter
+        assert mother.pregnancy.remaining == pytest.approx(days * 24)
+        assert mother.pregnancy.father is father
+
+
+def test_the_litter_genomes_are_fixed_at_conception_from_both_parents():
+    father, mother = male(), female()
+    AnimalTraits.mate(father, mother, Roll(0.0))
+    assert all(g.layout == mother.dna.layout for g in mother.pregnancy.children)
+
+
+def test_a_pregnant_bearer_is_slower_hungrier_and_does_not_look_for_a_mate():
+    father, mother = male(), female(fertility="333", speed="3333")
+    free = AnimalTraits(mother.dna)
+    free_speed, free_basal = free.current_max_speed, free.basal_metabolism
+    assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.CONCEIVED
+    assert mother.is_pregnant and mother.mating_cooldown == 0.0  # her cooldown starts at the birth
+    assert not mother.can_mate and not mother.flag_wants_mate
+    assert mother.current_max_speed == pytest.approx(free_speed * (1 - 0.3))  # litter of 8 of 8
+    mother.current_energy = 100.0
+    mother.update_metabolism_and_aging()
+    assert 100.0 - mother.current_energy == pytest.approx(
+        free_basal * 1.5
+    )  # +50% for a full litter
+    half = female(fertility="111")  # litter of 1 + round(0.333 * 7) = 3
+    AnimalTraits.mate(male(), half, Roll(0.0))
+    assert half.current_max_speed < AnimalTraits(half.dna).current_max_speed
+
+
+def test_the_pregnancy_counts_down_in_reference_ticks():
+    _, mother = pregnant_pair(fertility="000")  # 2 days = 48 reference ticks
+    for _ in range(47):
+        mother.current_energy = mother.max_energy
+        mother.update_metabolism_and_aging()
+    assert not mother.pregnancy.due
+    mother.update_metabolism_and_aging()
+    assert mother.pregnancy.due
+    other = pregnant_pair(fertility="000")[1]
+    other.update_metabolism_and_aging(0.0, 24.0)  # one tick of a day
+    assert other.pregnancy.remaining == pytest.approx(24.0)
+
+
+def test_birth_costs_each_parent_half_the_litters_energy_at_its_own_care():
+    father, mother = male(parenting="333", somatic_maint="0000"), female(parenting="000")
+    AnimalTraits.mate(father, mother, Roll(0.0))
+    father.current_energy = mother.current_energy = 300.0
+    litter = [newborn_of() for _ in range(2)]
+    assert AnimalTraits.give_birth(due(mother), litter)
+    assert father.phenotype["care_fraction"] == pytest.approx(0.8)
+    for child in litter:
+        assert child.current_energy == pytest.approx(0.45 * 300.0)  # the mean of 0.8 and 0.1
+    assert father.current_energy == pytest.approx(300.0 - 2 * 0.4 * 300.0)
+    assert mother.current_energy == pytest.approx(300.0 - 2 * 0.05 * 300.0)
+    assert not mother.is_pregnant
+
+
+def test_repair_makes_a_birth_dearer_full_repair_triples_it():
+    base = AnimalTraits(animal_with(parenting="222", somatic_maint="0000"))
+    full = AnimalTraits(animal_with(parenting="222", somatic_maint="3333"))
+    assert full.birth_cost([300.0]) == pytest.approx(3.0 * base.birth_cost([300.0]))
+    half = AnimalTraits(animal_with(parenting="222", somatic_maint="1333"))
+    assert half.birth_cost([300.0]) == pytest.approx(
+        base.birth_cost([300.0]) * (1.0 + 2.0 * half.phenotype["somatic_maint"])
     )
     # The newborn still gets the unsurcharged amount.
-    a, b = (
-        grown(AnimalTraits(animal_with(caregiving="222", somatic_maint="3333"))),
-        grown(AnimalTraits(animal_with(caregiving="222", somatic_maint="3333"))),
+    father, mother = (
+        male(parenting="222", somatic_maint="3333"),
+        female(parenting="222", somatic_maint="3333"),
     )
-    a.current_energy = b.current_energy = 250.0
+    AnimalTraits.mate(father, mother, Roll(0.0))
+    father.current_energy = mother.current_energy = 290.0
     child = newborn_of()
-    assert AnimalTraits.give_birth(a, b, child)
-    assert child.current_energy == pytest.approx(a.phenotype["care_fraction"] * 300.0)
-    assert 250.0 - a.current_energy == pytest.approx(a.phenotype["care_fraction"] * 300.0)
+    assert AnimalTraits.give_birth(due(mother), [child])
+    care = mother.phenotype["care_fraction"]
+    assert child.current_energy == pytest.approx(care * 300.0)
+    assert 290.0 - mother.current_energy == pytest.approx(care * 300.0 / 2 * 3.0)
 
 
 def test_nobody_is_charged_unless_both_parents_can_pay():
-    rich = grown(AnimalTraits(animal_with(caregiving="333")))
-    poor = grown(AnimalTraits(animal_with(caregiving="333")))
-    rich.current_energy = rich.max_energy
-    poor.current_energy = 1.0
+    father, mother = male(parenting="333"), female(parenting="333")
+    AnimalTraits.mate(father, mother, Roll(0.0))
+    mother.current_energy = mother.max_energy
+    father.current_energy = 1.0
     child = newborn_of()
-    assert not AnimalTraits.give_birth(rich, poor, child)
-    assert rich.current_energy == rich.max_energy and poor.current_energy == 1.0
-    assert rich.mating_cooldown == 0 and poor.mating_cooldown == 0
+    assert not AnimalTraits.give_birth(due(mother), [child])
+    assert mother.current_energy == mother.max_energy and father.current_energy == 1.0
+    assert mother.is_pregnant  # she keeps carrying them and tries again
     assert child.current_energy == pytest.approx(child.max_energy * 0.75)  # untouched
 
 
-def test_a_parent_cannot_pay_its_last_energy_or_birth_during_cooldown():
-    a, b = grown(AnimalTraits(LOW_ANIMAL)), grown(AnimalTraits(LOW_ANIMAL))
+def test_a_parent_cannot_pay_its_last_energy_and_a_birth_waits_for_its_time():
+    father, mother = male(), female()
+    AnimalTraits.mate(father, mother, Roll(0.0))
     child = newborn_of()
-    a.current_energy = b.current_energy = a.birth_cost(child.max_energy)  # exactly the cost
-    assert not AnimalTraits.give_birth(a, b, child)
-    a.current_energy = b.current_energy = a.max_energy
-    b.mating_cooldown = 3
-    assert not AnimalTraits.give_birth(a, b, child)
-    assert a.current_energy == a.max_energy
+    assert not AnimalTraits.give_birth(mother, [child])  # not due yet
+    due(mother)
+    father.current_energy = mother.current_energy = mother.birth_cost([child.max_energy])
+    assert not AnimalTraits.give_birth(mother, [child])  # exactly the cost
+    father.current_energy = mother.current_energy = mother.max_energy
+    assert AnimalTraits.give_birth(mother, [child])
+    assert not AnimalTraits.give_birth(mother, [child])  # no longer pregnant
 
 
-def test_the_dead_cannot_have_children():
-    a, b = grown(AnimalTraits(LOW_ANIMAL)), grown(AnimalTraits(LOW_ANIMAL))
-    b.apply_damage(b.max_damage_capacity * 10)
-    assert not b.is_alive
-    assert not AnimalTraits.give_birth(a, b, newborn_of())
+def test_a_dead_father_pays_nothing_and_gives_nothing():
+    father, mother = male(parenting="333"), female(parenting="333", size="3333")
+    AnimalTraits.mate(father, mother, Roll(0.0))
+    father.apply_damage(1e9)
+    mother.current_energy = mother.max_energy
+    child = newborn_of()
+    assert AnimalTraits.give_birth(due(mother), [child])
+    assert child.current_energy == pytest.approx(0.5 * 0.8 * 300.0)  # only her half
 
 
-def test_birth_starts_each_parents_own_cooldown():
-    quick = grown(AnimalTraits(animal_with(repro_interval="000")))
-    slow = grown(AnimalTraits(animal_with(repro_interval="333")))
-    quick.current_energy = slow.current_energy = quick.max_energy
-    assert AnimalTraits.give_birth(quick, slow, newborn_of())
-    assert (
-        quick.mating_cooldown == quick.interval_ticks < slow.mating_cooldown == slow.interval_ticks
-    )
+def test_the_dead_cannot_give_birth():
+    _, mother = pregnant_pair()
+    due(mother)
+    mother.apply_damage(mother.max_damage_capacity * 10)
+    assert not AnimalTraits.give_birth(mother, [newborn_of()])
+
+
+def test_the_birth_starts_the_bearers_cooldown():
+    quick = female(repro_cooldown="000")
+    slow = female(repro_cooldown="333")
+    for mother in (quick, slow):
+        AnimalTraits.mate(male(), mother, Roll(0.0))
+        mother.current_energy = mother.max_energy
+        assert AnimalTraits.give_birth(due(mother), [newborn_of()])
+    assert quick.mating_cooldown == pytest.approx(2.0 * 24)
+    assert slow.mating_cooldown == pytest.approx(90.0 * 24)
     assert not quick.flag_wants_mate and not slow.flag_wants_mate
 
 
-def test_interval_is_a_share_of_the_animals_own_lifespan():
-    small = AnimalTraits(animal_with(size="0000", repro_interval="222"))
-    large = AnimalTraits(animal_with(size="3333", repro_interval="222"))
-    assert large.lifespan_ticks > small.lifespan_ticks
-    for traits in (small, large):
-        stretch = 1.0 + 0.5 * traits.phenotype["somatic_maint"]
-        expected = traits.phenotype["interval_fraction"] * traits.lifespan_ticks * stretch
-        assert traits.interval_ticks == round(expected)
-    assert large.interval_ticks > small.interval_ticks
-
-
-def test_repair_stretches_the_interval_and_the_lifespan():
-    plain = AnimalTraits(animal_with(repro_interval="222", somatic_maint="0000"))
-    repaired = AnimalTraits(animal_with(repro_interval="222", somatic_maint="3333"))
+def test_repair_stretches_the_cooldown_and_the_lifespan():
+    plain = AnimalTraits(animal_with(repro_cooldown="222", somatic_maint="0000"))
+    repaired = AnimalTraits(animal_with(repro_cooldown="222", somatic_maint="3333"))
     assert repaired.lifespan_ticks == pytest.approx(plain.lifespan_ticks * 4.5)
-    assert repaired.interval_ticks == pytest.approx(plain.interval_ticks * 4.5 * 1.5, abs=1)
+    assert repaired.cooldown_ticks == pytest.approx(plain.cooldown_ticks * 2.0)
 
 
-def test_interval_gene_spans_one_to_twenty_five_percent_of_a_lifespan():
-    low = AnimalTraits(animal_with(repro_interval="000", somatic_maint="0000"))
-    high = AnimalTraits(animal_with(repro_interval="333", somatic_maint="0000"))
-    assert low.phenotype["interval_fraction"] == pytest.approx(0.01)
-    assert high.phenotype["interval_fraction"] == pytest.approx(0.25)
-    assert low.interval_ticks == round(0.01 * low.lifespan_ticks)
-    assert high.interval_ticks == round(0.25 * high.lifespan_ticks)
+def test_the_cooldown_gene_spans_two_to_ninety_days():
+    low = AnimalTraits(animal_with(repro_cooldown="000"))
+    high = AnimalTraits(animal_with(repro_cooldown="333"))
+    assert low.phenotype["cooldown_days"] == pytest.approx(2.0)
+    assert high.phenotype["cooldown_days"] == pytest.approx(90.0)
+    low_third = AnimalTraits(animal_with(repro_cooldown="111")).phenotype["cooldown_days"]
+    assert (
+        low_third < (2.0 * 90.0) ** 0.5
+    )  # a log scale: a third of the way is under the geometric mean
 
 
-def test_a_newborn_is_a_juvenile_for_one_birth_interval():
-    traits = AnimalTraits(animal_with(repro_interval="111", repro_drive="333"))
-    assert traits.mating_cooldown == traits.interval_ticks > 1
+def test_a_newborn_is_a_juvenile_for_six_percent_of_its_lifespan():
+    traits = AnimalTraits(animal_with(repro_drive="333"))
+    assert traits.mating_cooldown == pytest.approx(0.06 * traits.lifespan_ticks)
     assert not traits.flag_wants_mate
-    for _ in range(traits.interval_ticks):
+    for _ in range(round(0.06 * traits.lifespan_ticks) + 1):
         traits.current_energy = traits.max_energy
         traits.update_metabolism_and_aging()
-    assert traits.mating_cooldown == 0
+    assert traits.mating_cooldown == 0.0
     assert traits.flag_wants_mate
 
 
-def test_caregiving_spans_ten_to_eighty_percent():
-    assert AnimalTraits(animal_with(caregiving="000")).phenotype["care_fraction"] == 0.1
-    assert AnimalTraits(animal_with(caregiving="333")).phenotype["care_fraction"] == pytest.approx(
+def test_longer_lived_animals_mature_later():
+    small = AnimalTraits(animal_with(size="0000"))
+    large = AnimalTraits(animal_with(size="3333"))
+    assert large.mating_cooldown > small.mating_cooldown
+
+
+def test_parenting_spans_ten_to_eighty_percent():
+    assert AnimalTraits(animal_with(parenting="000")).phenotype["care_fraction"] == 0.1
+    assert AnimalTraits(animal_with(parenting="333")).phenotype["care_fraction"] == pytest.approx(
         0.8
     )
+
+
+# --- wear, drive and the reference tick ---------------------------------------
+
+
+def test_a_default_animal_lives_about_a_simulated_year():
+    traits = AnimalTraits(animal_with())
+    traits.phenotype = {**traits.phenotype, "somatic_maint": 0.5, "repro_drive": 0.5}
+    traits.max_damage_capacity = 150.0  # size 0.5
+    assert traits.lifespan_ticks == pytest.approx(8765, abs=1)  # an hour a tick: a year
+
+
+def test_the_drive_shortens_life_to_62_percent():
+    calm = AnimalTraits(animal_with(repro_drive="000"))
+    driven = AnimalTraits(animal_with(repro_drive="333"))
+    assert driven.lifespan_ticks == pytest.approx(calm.lifespan_ticks / 1.6)
+    assert driven.lifespan_ticks / calm.lifespan_ticks == pytest.approx(0.625)
+
+
+def test_a_longer_tick_scales_wear_energy_and_cooldown_but_not_movement():
+    one = AnimalTraits(animal_with(somatic_maint="0000"))
+    four = AnimalTraits(one.dna)
+    for traits in (one, four):
+        traits.mating_cooldown = 100.0
+        traits.current_energy = traits.max_energy
+    for _ in range(4):
+        one.update_metabolism_and_aging()
+    four.update_metabolism_and_aging(0.0, 4.0)
+    assert four.accumulated_damage == pytest.approx(one.accumulated_damage)
+    assert four.current_energy == pytest.approx(one.current_energy)
+    assert four.mating_cooldown == one.mating_cooldown == 96.0
+    moving = AnimalTraits(one.dna)
+    moving.current_energy = moving.max_energy
+    moving.update_metabolism_and_aging(1.0, 4.0)
+    kinetic = 0.35 * moving.mass
+    assert moving.max_energy - moving.current_energy == pytest.approx(
+        moving.basal_metabolism * 4.0 + kinetic
+    )
+
+
+# --- recovery ----------------------------------------------------------------
+
+
+def test_lost_health_heals_with_a_half_life_set_by_recovery():
+    slow = AnimalTraits(animal_with(recovery="000"))
+    fast = AnimalTraits(animal_with(recovery="333"))
+    assert slow.heal_halflife_ticks == pytest.approx(20.0 * 24)
+    assert fast.heal_halflife_ticks == pytest.approx(1.0 * 24)
+    for traits in (slow, fast):
+        traits.current_health = traits.max_damage_capacity - 40.0
+        traits.current_energy = traits.max_energy
+        traits._heal(traits.heal_halflife_ticks)
+        assert traits.max_damage_capacity - traits.current_health == pytest.approx(20.0, abs=0.1)
+
+
+def test_healing_costs_energy_and_needs_a_half_full_store():
+    traits = AnimalTraits(animal_with(recovery="333"))
+    traits.current_health = traits.max_damage_capacity - 40.0
+    traits.current_energy = 0.45 * traits.max_energy
+    traits.update_metabolism_and_aging()
+    assert traits.current_health == traits.max_damage_capacity - 40.0  # too hungry to heal
+    traits.current_energy = 0.9 * traits.max_energy
+    before = traits.current_energy
+    traits.update_metabolism_and_aging()
+    healed = traits.current_health - (traits.max_damage_capacity - 40.0)
+    assert healed > 0
+    assert before - traits.current_energy == pytest.approx(traits.basal_metabolism + 0.5 * healed)
+
+
+def test_healing_does_not_undo_wear():
+    traits = AnimalTraits(animal_with(recovery="333"))
+    traits.accumulated_damage = 50.0
+    traits.current_energy = traits.max_energy
+    for _ in range(20):
+        traits.update_metabolism_and_aging()
+    assert traits.accumulated_damage >= 50.0
+    assert traits.vitality < 0.5 + 1e-9
+
+
+def test_recovery_speeds_up_the_energy_regained_at_rest_and_costs_upkeep():
+    assert AnimalTraits(animal_with(recovery="000")).rest_regain_factor == pytest.approx(0.5)
+    assert AnimalTraits(animal_with(recovery="333")).rest_regain_factor == pytest.approx(2.0)
+    assert AnimalTraits(animal_with(recovery="000")).recovery_upkeep == 0.0
+    assert AnimalTraits(animal_with(recovery="333")).recovery_upkeep == pytest.approx(0.10)
+    half = AnimalTraits(animal_with(recovery="133"))
+    assert half.recovery_upkeep == pytest.approx(0.10 * half.phenotype["recovery"] ** 2)
+
+
+def test_fertility_costs_upkeep_with_its_square():
+    assert AnimalTraits(animal_with(fertility="000")).fertility_upkeep == 0.0
+    assert AnimalTraits(animal_with(fertility="333")).fertility_upkeep == pytest.approx(0.04)
 
 
 def test_repair_upkeep_is_convex():
@@ -425,12 +695,12 @@ def test_repair_cost_is_in_basal_metabolism():
     assert repaired.basal_metabolism - plain.basal_metabolism == pytest.approx(0.20)
 
 
-def test_staying_ready_to_breed_costs_energy_more_when_the_interval_is_short():
-    quick = AnimalTraits(animal_with(repro_interval="000"))
-    slow = AnimalTraits(animal_with(repro_interval="333"))
+def test_staying_ready_to_breed_costs_energy_more_when_the_cooldown_is_short():
+    quick = AnimalTraits(animal_with(repro_cooldown="000"))
+    slow = AnimalTraits(animal_with(repro_cooldown="333"))
     assert quick.readiness_upkeep > slow.readiness_upkeep
-    assert quick.readiness_upkeep == pytest.approx(0.03 * (0.05 / 0.01) ** 0.5)
-    assert slow.readiness_upkeep == pytest.approx(0.03 * (0.05 / 0.25) ** 0.5)
+    assert quick.readiness_upkeep == pytest.approx(0.03 * (5.0 / 2.0) ** 0.5)
+    assert slow.readiness_upkeep == pytest.approx(0.03 * (5.0 / 90.0) ** 0.5)
 
 
 def test_the_drive_costs_upkeep_with_its_square():
@@ -635,11 +905,14 @@ def test_base_traits_hooks_are_noops_and_damage_kills():
 # --- construction state and pinned numbers (TRAIT.5) -------------------------
 
 # A fixed genome, so these numbers only change when a formula or the layout does. The body digits are
-# the prototype's test genome with the three reproduction genes (caregiving, repro_interval and
-# repro_drive) set in the place its `fertility` gene held; the brain is all zeros.
+# the prototype's test genome with the five reproduction genes (parenting, repro_cooldown,
+# repro_drive, fertility and recovery) set in the place its `fertility` gene held; the brain is all
+# zeros.
 _BODY = "3302332321121021200230232133200030321201111300230220212303212"
-_AT = ANIMAL_LAYOUT.gene("caregiving").start
-PINNED_ANIMAL = animal_dna(_BODY[:_AT] + "211" + "123" + "220" + _BODY[_AT:] + "0" * 396)
+_AT = ANIMAL_LAYOUT.gene("parenting").start
+PINNED_ANIMAL = animal_dna(
+    _BODY[:_AT] + "211" + "123" + "220" + "301" + "132" + _BODY[_AT:] + "0" * 396
+)
 PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122")
 
 
@@ -668,16 +941,24 @@ def test_plant_vitality_matches_health_at_birth():
 def test_pinned_reproduction_numbers():
     t = AnimalTraits(PINNED_ANIMAL)
     assert t.phenotype["care_fraction"] == pytest.approx(0.511111111)
-    assert t.phenotype["interval_fraction"] == pytest.approx(0.039729870)
+    assert t.phenotype["cooldown_days"] == pytest.approx(10.222324058)
     assert t.phenotype["repro_drive"] == pytest.approx(0.634920635)
-    assert t.wear_per_tick == pytest.approx(0.037463271)
-    assert t.lifespan_ticks == pytest.approx(4239.446366782)
-    assert t.interval_ticks == 193
-    assert t.mating_cooldown == 193
+    assert t.phenotype["fertility"] == pytest.approx(0.777777778)
+    assert t.phenotype["recovery"] == pytest.approx(0.476190476)
+    assert t.sex == 0 and t.drive_modifier == 0.25
+    assert t.effective_drive == pytest.approx(0.793650794)
+    assert t.wear_per_tick == pytest.approx(0.024970757)
+    assert t.lifespan_ticks == pytest.approx(6360.381051326)
+    assert t.mating_cooldown == pytest.approx(381.622863080)  # 6% of the lifespan
+    assert t.cooldown_ticks == pytest.approx(315.569156812)
+    assert t.litter_size == 6
+    assert t.gestation_ticks == pytest.approx(384.0)
     assert t.repair_upkeep == pytest.approx(0.016390619)
-    assert t.readiness_upkeep == pytest.approx(0.033654852)
+    assert t.readiness_upkeep == pytest.approx(0.020981254)
     assert t.drive_upkeep == pytest.approx(0.020156211)
-    assert t.birth_cost(t.max_energy) == pytest.approx(71.543765219)
+    assert t.fertility_upkeep == pytest.approx(0.024197531)
+    assert t.recovery_upkeep == pytest.approx(0.022675737)
+    assert t.birth_cost([t.max_energy]) == pytest.approx(87.466615404)
 
 
 def test_pinned_animal_phenotype():
@@ -693,8 +974,8 @@ def test_pinned_animal_phenotype():
     assert t.smell_range == pytest.approx(50.196078431)
     assert t.body_radius == pytest.approx(0.699381521)
     assert t.tactile_range == pytest.approx(1.616805516)
-    # repair, readiness and drive upkeep and the zero-weight brain; the sense bill is on area (SENSE.11)
-    assert t.basal_metabolism == pytest.approx(0.606158009)
+    # repair, readiness, drive, fertility and recovery upkeep and the zero-weight brain; the sense bill is on area (SENSE.11)
+    assert t.basal_metabolism == pytest.approx(0.640357679)
     assert t.call_radius == pytest.approx(13.411764706)
     assert t.call_energy_cost == pytest.approx(2.841176471)
     assert t.sex_type == 2

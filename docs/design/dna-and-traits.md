@@ -9,7 +9,7 @@ Written 2026-10-14 by the Foundations 1 thread.
 | --- | --- |
 | `dna.py` | `DNA` (immutable genome), `GenomeLayout`, `GeneSpec` and `BlockSpec` (the gene table); knows gene IDs only |
 | `diploid.py` | `DiploidDNA` (two `DNA` strands read through a `DominanceModel`), `DominanceModel`, `CODOMINANT` |
-| `layouts.py` | `ANIMAL_LAYOUT` (466 digits: 70 body, 396 brain) and `PLANT_LAYOUT` (30 digits) as plain data, and `dna_from_dict` |
+| `layouts.py` | `ANIMAL_LAYOUT` (472 digits: 76 body, 396 brain) and `PLANT_LAYOUT` (30 digits) as plain data, and `dna_from_dict` |
 | `brain.py`, `brain_adapter.py` | The `Brain` network and the world-side inputs and outputs; see [brain.md](brain.md) |
 | `trait_defs.py` | `TraitDef` and `TraitSet`: what each trait reads from DNA, its range, scale and mutation step; `ANIMAL_TRAITS`, `PLANT_TRAITS` |
 | `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits`: runtime organism state and the formulas built on the traits; `AnimalTraits` also builds the animal's `Brain` |
@@ -33,10 +33,11 @@ open questions in issues #2 to #11 by example; those answers are used here and l
   values of `digits_per_value` digits each, decoded onto a range `low` to `high` (`dna.values(gene_id)`).
   The animal's brain is one block of 198 two-digit values over -2 to 2. A block's values come in `groups`
   that crossover keeps together (one per hidden neuron). A block is still a gene with a position, so it is
-  read, replaced (`dna.replaced(gene_id, digits)`), saved and compared like any other.
+  read, replaced (`dna.replaced(gene_id, digits)`, or `dna.with_value(gene_id, 0.75)` to set a gene to the digits nearest a
+  value from 0 to 1), saved and compared like any other.
 - Genes belong to a named **segment** (`GeneSpec(..., segment="brain")`, default `"body"`); the genes of a
   segment must be consecutive. Segments are what mutation is set per, and they are the only place the genome
-  has structure beyond the gene table. `ANIMAL_LAYOUT` has `body` (digits 0 to 70) and `brain` (70 to 466).
+  has structure beyond the gene table. `ANIMAL_LAYOUT` has `body` (digits 0 to 76) and `brain` (76 to 472).
 - **DNA does not know trait names.** It exposes genes by ID (`value`, `digit`, `raw`, `slice_of`) and the
   decode API (`get_slice`, `decode_int`, `decode_normalized`), nothing else. The prototype's `dna.size`
   style properties are gone; what a gene is *for* is declared in `trait_defs.py`.
@@ -63,7 +64,7 @@ The prototype's `+` operator is gone because it cannot take an RNG or a rate. Mi
 (different layouts) raises `TypeError`.
 
 The mutation rate is **per digit** by default, as the DNA research note recommends, so the expected number of
-changes per child scales with genome length: about 0.70 for the animal body and 0.15 for a plant (the plant layout uses half the animal rate, `REPRO.3`). That would
+changes per child scales with genome length: about 0.76 for the animal body and 0.15 for a plant (the plant layout uses half the animal rate, `REPRO.3`). That would
 give the 396-digit brain about 4 changes per child on its own, so the animal layout sets the brain's default as
 **expected changes per segment** instead (1.0 per child). The defaults live on the layout
 (`GenomeLayout(..., segment_mutations={...})`), and every call can override them, so the owner's answers to
@@ -122,44 +123,77 @@ every step. The harness is not in the repo.
 
 ## Reproduction and longevity
 
-`REPRO.5` and `TRAIT.6`, from the design in [reproduction-genes.md](reproduction-genes.md) and the owner's answers
-to [#16](https://github.com/dwhagar/evolutionSimulator/issues/16) and
-[#17](https://github.com/dwhagar/evolutionSimulator/issues/17). `fertility` is gone; three 3-digit genes
-replace it (animal layout version 3, 466 digits).
+`REPRO.5`, `TRAIT.6` and, on top of them, `REPRO.8` (with `TRAIT.7`, `DNA.9` and the per-hour charging of
+`WORLD.7`), from the design in [reproduction-genes.md](reproduction-genes.md) and the owner's answers to
+[#16](https://github.com/dwhagar/evolutionSimulator/issues/16),
+[#17](https://github.com/dwhagar/evolutionSimulator/issues/17) and
+[#36](https://github.com/dwhagar/evolutionSimulator/issues/36). The animal layout is version 5: 76 body digits
+(five 3-digit reproduction genes, `parenting`, `repro_cooldown`, `repro_drive`, `fertility` and `recovery`) and the
+396-digit brain, 472 in all.
 
 | Gene | Trait | Range | What it does |
 | --- | --- | --- | --- |
-| `caregiving` | `care_fraction` | 0.10 to 0.80 | A newborn starts with this share of its own energy store (the parents' mean). Each parent pays half, at its own value. |
-| `repro_interval` | `interval_fraction` | 0.01 to 0.25, log | The shortest gap between births, and the age of first breeding, as a share of the animal's own lifespan. |
-| `repro_drive` | `repro_drive` | 0 to 1 | Lowers the energy needed to start looking for a mate, makes the animal bolder while a mate is in view, and bends how close a possible mate looks to the brain (`Temperament.repro_drive`). |
+| `parenting` | `care_fraction` | 0.10 to 0.80 | A newborn starts with the mean of its parents' share of its own energy store. Each parent pays at its own value. |
+| `repro_cooldown` | `cooldown_days` | 2 to 90 days, log | Gap between matings, in simulated days, stretched by repair. |
+| `repro_drive` | `repro_drive` | 0 to 1 | Lowers the energy needed to start looking for a mate, makes the animal bolder while a mate is in view, bends how close a possible mate looks to the brain (`Temperament.repro_drive`), and shortens life. |
+| `fertility` | `fertility` | 0 to 1 | Chance a mating takes, litter size (1 to 8) and gestation (2 to 20 days) when the animal bears; upkeep for either sex. |
+| `recovery` | `recovery` | 0 to 1 | How fast lost health heals and how fast energy is regained at rest; upkeep. |
+| `sex_strategy` | `sex`, `drive_modifier` | digit 0 to 3 | `digit % 2` is the sex (0 impregnates, 1 bears); digit 2 raises the effective drive by 25%, digit 3 lowers it by 25%. The prototype's behaviour offsets for digits 0 and 3 are kept as they were. |
 
-- **Lifespan.** `AnimalTraits.lifespan_ticks` is the damage the body can take divided by `wear_per_tick`
-  (0.075 slowed by repair). `interval_ticks` is `interval_fraction * lifespan_ticks * (1 + 0.5 * somatic_maint)`,
-  so it scales with body and repair, not with a fixed count of ticks. A newborn starts with
-  `mating_cooldown = interval_ticks`: it is a juvenile for one interval.
-- **Birth.** `AnimalTraits.give_birth(parent_a, parent_b, newborn)` replaces `consume_mating_cost`. Both
-  parents must be alive, off cooldown and have more energy than their share, else it returns `False` and nobody
-  is charged (this is the mating-cost guard of `TRAIT.5`). Each parent pays
-  `care_fraction / 2 * newborn.max_energy * (1 + somatic_maint)` and starts its own cooldown. The newborn
-  gets the mean `care_fraction` times its energy store, without the surcharge.
-- **Longevity trade-off (`TRAIT.6`).** Repair is no longer free to keep up: its upkeep is
-  `0.20 * somatic_maint ** 2` (it was `0.12 * somatic_maint`), a birth costs `1 + somatic_maint` times as
-  much, and the interval is stretched by `1 + 0.5 * somatic_maint`. The design note's toy model puts the
-  best repair level in the middle rather than at the maximum.
-- **Upkeep.** Staying ready costs `0.03 * (0.05 / interval_fraction) ** 0.5` per tick and the drive costs
-  `0.05 * repro_drive ** 2`; both are in `basal_metabolism`.
-- **Wanting a mate.** The energy share needed is `clamp(0.85 - 0.5 * drive - 0.2 * (1 - vitality), 0.10, 0.95)`
-  (it was `0.35 + 0.35 * vitality`). During a cooldown a possible mate does not show up in the brain's
-  inputs and the animal does not call for one.
-- **Not built.** The protective effect of `caregiving` on aggression and fear needs a "young nearby" sense
-  (`SENSE.1`). Plant seeds are in [Plants](#plants-repro3).
-- **Constants.** `traits.py` holds them as named module constants (`REPAIR_COST`, `REPAIR_BIRTH_SURCHARGE`,
-  `REPAIR_INTERVAL_STRETCH`, `READINESS_UPKEEP`, `DRIVE_UPKEEP`, `DRIVE_THRESHOLD_*`, `DRIVE_BOLDNESS`), named
-  as in the design note's table so `TRAIT.3` can move them into the config object. The gene ranges are in
-  `trait_defs.py` (`CARE_FRACTION_RANGE`, `INTERVAL_FRACTION_RANGE`).
-- **In the world.** `World` builds the child's traits, calls `give_birth`, and puts the child in only if it
-  returned `True`; a seed starts with the biomass its parent paid for it
-  (`PlantTraits.launch_seeds`). `WorldConfig.min_mating_energy_ratio` is gone.
+- **The reference tick.** Every per-tick rate in `traits.py` is "per reference tick", an hour of simulated time
+  (`REFERENCE_TICK_SECONDS = 3600`), and every duration is kept in reference ticks (`TICKS_PER_DAY = 24`). The
+  world multiplies the rates by `dt = seconds_per_tick / 3600` (`World.dt`), and
+  `update_metabolism_and_aging(movement_speed_ratio, dt)` charges wear, upkeep, healing, the cooldown and the
+  pregnancy by it. Movement is charged per tick and not per `dt`, because it follows the distance moved; moving
+  and eating per hour of simulated time is a `WORLD.7` job, and until then only a one-hour tick gives the
+  balance the numbers were set for. The world's default tick is still one second.
+- **Lifespan.** `wear_per_tick` is `WEAR_BASE * (1 + 0.6 * repro_drive) / (1 + 3.5 * somatic_maint)` with
+  `WEAR_BASE = 0.0362`, so `lifespan_ticks` (in reference ticks, hours) is the damage the body can take divided by
+  that. An animal with size 0.5 and repair and drive 0.5 lives 8,765 hours, about a simulated year; a drive of 1
+  gives 62.5% of the life of a drive of 0.
+- **Maturity.** A newborn is a juvenile for 6% of its expected lifespan (`MATURITY_SHARE`): its
+  `mating_cooldown` starts there and counts down by `dt`. Bigger, longer-lived animals mature later.
+- **Mating.** `AnimalTraits.mate(impregnator, bearer, rng)` takes a sex-0 and a sex-1 animal that can mate
+  (alive, off cooldown, not pregnant, more energy than the effort) or returns `REFUSED` and charges nobody.
+  Otherwise each spends 3% of its store, starts its cooldown (`cooldown_days * 24 * (1 + somatic_maint)`
+  hours), and the mating takes with chance `0.30 + 0.60 * mean fertility`. A mating that takes fixes the litter's
+  genomes now (`bearer.dna.reproduce(father.dna)`, one per young, the bearer's `fertility` sets how many)
+  and makes the bearer pregnant: a `Pregnancy` on `AnimalTraits.pregnancy` holding the genomes, the time left
+  and the father. Her cooldown starts at the birth.
+- **Pregnancy.** The bearer cannot mate, does not look for a mate and shows no mate to her brain; she is
+  slowed by `0.3 * litter / 8` and burns `0.5 * litter / 8` more of her basal metabolism. The time left counts down
+  by `dt`; when it is up and `World._deliver` finds room under the animal cap, `AnimalTraits.give_birth(bearer,
+  newborns)` runs.
+- **Birth.** Each parent pays `0.5 * care_fraction_own * (sum of the newborns' energy stores) * (1 + 2 *
+  somatic_maint)`; each newborn starts with half of each paying parent's `care_fraction` times its own store (the
+  parents' mean when both pay), without the surcharge. Every payer needs strictly more energy than the cost, else
+  nobody is charged and the bearer keeps carrying the litter (the guard of `TRAIT.5`). A father who has died pays
+  nothing and gives nothing. The litter appears next to the bearer, as far as the animal cap allows, and she pays
+  only for those born.
+- **Longevity trade-off (`TRAIT.6`).** Repair costs upkeep `0.20 * somatic_maint ** 2`, a birth costs
+  `1 + 2 * somatic_maint` times as much, and the cooldown is stretched by `1 + somatic_maint`.
+- **Upkeep.** Staying ready costs `0.03 * (5 / cooldown_days) ** 0.5`, the drive `0.05 * drive ** 2`, fertility
+  `0.04 * fertility ** 2` and recovery `0.10 * recovery ** 2`, all per reference tick and in `basal_metabolism`.
+  Drive costs use the gene, not the sex-modified drive.
+- **Wanting a mate.** The energy share needed is `clamp(0.85 - 0.5 * effective_drive - 0.2 * (1 - vitality), 0.10,
+  0.95)`. In a cooldown or a pregnancy a possible mate does not show up in the brain's inputs, `ready_to_mate` is
+  0 and the animal does not call for one.
+- **Recovery (`TRAIT.7`).** Lost health heals with a half-life of `20 * (1/20) ** recovery` days (20 days at 0, 1
+  day at 1) while the energy store is at least half full, at 0.5 energy per point; it replaces the old "4 health per
+  feeding". Wear (ageing) does not heal. `SleepRules.energy_regain` is multiplied by `0.5 + 1.5 * recovery` (the
+  world reads `AnimalTraits.rest_regain_factor`). An average sleeper roughly breaks even, a fast healer gains.
+- **First generation.** `World.populate` builds animals with `layouts.founder_animal_dna`: random genomes with
+  `fertility` 0.75 (six young), `parenting` 0 and the rest of the reproduction genes at 0.5 (`FOUNDER_LEVELS`).
+  `add_animal` takes whatever genome it is given.
+- **Not built.** The protective effect of `parenting` on aggression and fear and the "own young" channel need a
+  "young nearby" sense (`SENSE.14`), so parenting acts through energy only for now. The pregnancy list is kept on
+  the bearers (visited in id order) rather than as a separate list in the world; the behaviour is the same.
+- **Constants.** `traits.py` holds them as named module constants (`WEAR_BASE`, `DRIVE_WEAR`, `REPAIR_*`,
+  `READINESS_*`, `DRIVE_*`, `SEX_DRIVE_MODIFIER`, `MATURITY_SHARE`, `MATING_EFFORT`, `FERTILITY_*`, `LITTER_MAX`,
+  `GESTATION_*`, `HEAL_*`, `RECOVERY_*`), named as in the design note's table so `TRAIT.3` can move them into the
+  config object. The gene ranges are in `trait_defs.py`.
+- **Long-run check.** `scripts/reproduction_check.py` runs the real traits in a small food-limited ecology and
+  reports where the genes settle; see [reproduction-genes.md](reproduction-genes.md#long-run-check).
 
 ## Plants (REPRO.3)
 

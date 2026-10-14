@@ -24,7 +24,10 @@ from evolution_simulator.traits import (
     PlantTraits,
 )
 
-BODY = ("0123" * 18)[:70]
+OLD_BODY = ("0123" * 18)[:70]
+BODY = (
+    OLD_BODY[:65] + "000000" + OLD_BODY[65:]
+)  # fertility and recovery at zero, the rest as before
 BRAIN = "".join(str((i * 7 + i // 5) % 4) for i in range(396))  # fixed, varied, not saturated
 PINNED = DNA(ANIMAL_LAYOUT, BODY + BRAIN)
 FAINT = "13" * 198  # every weight is level 7 of 16: -0.133, below the active threshold
