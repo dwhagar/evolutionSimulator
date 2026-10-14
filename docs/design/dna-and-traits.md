@@ -50,12 +50,13 @@ All take an injected `random.Random` and return a new genome; a parent is never 
 | Method | Behaviour |
 | --- | --- |
 | `mutated(rng, rate=None, mutations_per_segment=None)` | A changed digit moves to one of the other three digits. With `rate`, every digit changes with that probability whatever its segment. With `mutations_per_segment={"brain": 1.0}`, each named segment gets that expected number of changed digits per child; segments left out keep the layout's `default_mutations`. With neither, the layout defaults apply: 0.01 per digit for the plant and the animal body, 1.0 per child for the animal brain. The two settings cannot be combined. |
-| `crossover(partner, rng)` | Uniform per-digit crossover (the prototype's operator, the default). |
+| `crossover_linked(partner, rng, mean_cuts=1.0, gene_fidelity=0.9)` | **The default** (`DNA.7`). A few cut points, starting from a random parent and switching parent at each cut, so neighbouring genes travel together. `mean_cuts` is the expected number of cuts (a value below 1 is the chance of one cut). `gene_fidelity` is how closely a cut follows the gene table: 1.0 always cuts between whole genes (a brain neuron stays whole), 0.0 always cuts at a random digit inside the unit, and the default 0.9 is mostly between genes with the occasional odd cut inside one. |
+| `crossover(partner, rng)` | Uniform per-digit crossover (the prototype's operator); no longer the default. |
 | `crossover_one_point(partner, rng)` | Front of this genome, back of the partner, one random cut. |
 | `crossover_by_gene(partner, rng)` | Each whole gene from either parent (a block counts as one gene). |
 | `crossover_by_unit(partner, rng)` | Each whole **unit** from either parent: a gene, or one group inside a block. For the brain that is a whole hidden neuron with its incoming and outgoing weights, so a child never gets a blend inside a neuron. The same as `crossover_by_gene` on a layout with no blocks. |
 | `clone_with_mutation(rng, rate=None, mutations_per_segment=None)` | Asexual path. |
-| `reproduce(partner, rng, rate=None, crossover=None, mutations_per_segment=None)` | Single entry point: no partner clones, a partner crosses over, then mutates. `crossover=` swaps in any of the strategies above. |
+| `reproduce(partner, rng, rate=None, crossover=None, mutations_per_segment=None)` | Single entry point: no partner clones, a partner crosses over, then mutates. `crossover=` swaps in any of the strategies above; the default is `crossover_linked`, and `functools.partial(DNA.crossover_linked, mean_cuts=2, gene_fidelity=1.0)` changes its settings. |
 
 The prototype's `+` operator is gone because it cannot take an RNG or a rate. Mixing two species
 (different layouts) raises `TypeError`.
@@ -124,9 +125,9 @@ Flagged by the research threads; not changed without the owner's call.
   one mutation there can move a value by 0.25 to 0.75, while a last-digit change moves it by about 0.004.
   A Gray code would smooth this.
 - **Uniform per-digit crossover blends inside a gene** ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)). Parents at 0.0 and 1.0 can give a child at
-  0.75. `crossover_by_gene` avoids it, and `crossover_by_unit` also keeps brain neurons whole; switching the
-  default is one argument to `reproduce`. Until it is answered, animals that reproduce should pass
-  `crossover=DNA.crossover_by_unit`, or the brain's weights blend inside each neuron.
+  0.75. Resolved by `DNA.7`: `reproduce` now defaults to `crossover_linked`, which cuts mostly between
+  genes (and between whole brain neurons) with a small, configurable chance of a cut inside one. The
+  uniform operator is still there as `DNA.crossover`.
 - **Sex is an inherited digit with no balancing.** A small population can lose one sex. Assigning it at
   birth is a change to `reproduce`.
 - **`fertility` is decoded but nothing reads it**, so it drifts neutrally.
