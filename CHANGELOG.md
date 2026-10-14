@@ -7,6 +7,7 @@ number changes with every merge, so entries reference the line rather than each 
 ## 0.0 — Pre-release
 
 ### Added
+- DNA and traits objects: immutable base-4 `AnimalDNA` / `PlantDNA` with seedable mutation, crossover and reproduction, and `AnimalTraits` / `PlantTraits` phenotypes, ported from the owner's prototype (see [docs/design/dna-and-traits.md](docs/design/dna-and-traits.md)).
 - Docs tree (`docs/design`, `docs/research`, `docs/archive`), roadmap, and TODO list.
 - Automatic `MAJOR.minor.build` versioning: the build counts merges into main.
 - Project scaffold: Python 3.12+ package, pytest, ruff, and weekly scheduled CI (Mondays 07:00 UTC).
