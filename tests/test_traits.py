@@ -440,15 +440,14 @@ def test_pinned_animal_phenotype():
     assert t.max_damage_capacity == pytest.approx(158.823529412)
     assert t.base_max_speed == pytest.approx(5.232)
     assert t.base_turn_rate == pytest.approx(0.228787879)
-    assert t.effective_sight_range == pytest.approx(22.776355247)
+    assert t.effective_sight_range == pytest.approx(19.630449827)
     assert t.fov_degrees == pytest.approx(294.745098039)
-    assert t.hearing_range == pytest.approx(58.647058824)
-    assert t.smell_range == pytest.approx(60.156862745)
+    assert t.hearing_range == pytest.approx(53.0)
+    assert t.smell_range == pytest.approx(50.196078431)
     assert t.body_radius == pytest.approx(0.699381521)
     assert t.tactile_range == pytest.approx(1.616805516)
-    assert t.basal_metabolism == pytest.approx(
-        0.588616253
-    )  # includes the zero-weight brain's upkeep
+    # includes the zero-weight brain's upkeep; the sense bill is charged on area (SENSE.11)
+    assert t.basal_metabolism == pytest.approx(0.570309269)
     assert t.call_radius == pytest.approx(13.411764706)
     assert t.call_energy_cost == pytest.approx(2.841176471)
     assert t.sex_type == 2
