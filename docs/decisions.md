@@ -4,6 +4,23 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-14: owner taps on the decision cards
+
+The owner answered ten open questions with taps on cards in the project chat. Answers beyond the working defaults are marked **changes the default**.
+
+| Question | Task | Decision | What follows |
+| --- | --- | --- | --- |
+| [#123](https://github.com/dwhagar/evolutionSimulator/issues/123), native window or web | UX.2, UX.28 | Native desktop only (the default). The web viewer is dropped. | Nothing to build for the web. |
+| [#124](https://github.com/dwhagar/evolutionSimulator/issues/124), which computers | UX.3 | Windows first (the default). | `UX.19` package, `UX.34` owner check. |
+| [#125](https://github.com/dwhagar/evolutionSimulator/issues/125), watch or intervene | UX.4, UX.20 | "Watch only first": the viewer stays read-only. | `UX.20` stays parked; commands keep going through the one session interface. |
+| [#132](https://github.com/dwhagar/evolutionSimulator/issues/132), how the Windows program is handed over | UX.26 | An unsigned zip with the warning explained in the README (the default). | Built in `UX.19`. |
+| [#134](https://github.com/dwhagar/evolutionSimulator/issues/134), which extras and when | UX.28 | "Pick some now", and the first extra is the family tree view. The others (compare two runs, watch a headless run, video export, several runs at once) stay queued. | `UX.39` family tree; `UX.40` holds the queued extras. |
+| [#91](https://github.com/dwhagar/evolutionSimulator/issues/91), smell trails | SENSE.20 | **Changes the default: yes.** Smell leaves fading trails (a scent field in the world). | `SENSE.20` is a go. |
+| [#92](https://github.com/dwhagar/evolutionSimulator/issues/92), visibility | SENSE.21 | **Changes the default: yes.** Add visibility traits (size, movement, camouflage or stealth). | `SENSE.21` is a go. |
+| [#69](https://github.com/dwhagar/evolutionSimulator/issues/69) 4, plants against animals in lifespan | TRAIT.12 | **Changes the default.** Plants start longer-lived than animals, as the owner first said (not a month against an animal year); they can still evolve. Watch for plants crowding the world and tune the balance. | `TRAIT.12`, after `WORLD.15`. |
+| [#57](https://github.com/dwhagar/evolutionSimulator/issues/57), sleeping creatures | WORLD.6 | Partly vulnerable (the default): a sleeper is slower to sense and to flee but not deaf. | `brain-learning.md` wording fixed to match. |
+| [#52](https://github.com/dwhagar/evolutionSimulator/issues/52), brain size | BRAIN.17 | Up to 16 hidden neurons, unused slots allowed (the default). | Already built. |
+
 ## 2026-10-14: request for a graphical interface
 
 The owner asked how an interface should be made, wanted a graphical one, and asked whether it should be web or native Windows, then asked for it to be broken into TODO items with questions as issues, under the task area `UX`. Working default until answered: a native desktop program (PySide6 with pyqtgraph), a headless simulation core with the viewer as a separate layer and the simulation in its own process, Windows first.
@@ -63,4 +80,3 @@ Issue [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) and [#27](h
 - All threads merge their PRs automatically once checks are green.
 - Weekly CI, Mondays 07:00 UTC. Build number counts merges into main.
 - Senses are the next research topic (`SENSE.1`): which senses to have and how they feed the brain.
-- Changing the world while it runs (spawn, remove, feed, move; [#125](https://github.com/dwhagar/evolutionSimulator/issues/125), `UX.4`): the owner chose "Watch only first". The viewer stays read-only; `UX.20` stays parked, and every command keeps going through the one session interface so interventions can follow later.
