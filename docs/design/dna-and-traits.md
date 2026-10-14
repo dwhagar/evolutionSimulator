@@ -11,7 +11,7 @@ Written 2026-10-14 by the Foundations 1 thread.
 | `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits` |
 
 The model is the owner's prototype (archived in [`docs/archive/prototype`](../archive/prototype/README.md)),
-not the defaults suggested by the research notes (PRs #12 and #13). The prototype answers several of the
+not the defaults suggested by the research notes ([DNA and reproduction](../research/dna-and-reproduction.md), including its review of the prototype, and the traits note in PR #12). The prototype answers several of the
 open questions in issues #2 to #11 by example; those answers are used here and listed under
 [Decisions taken from the prototype](#decisions-taken-from-the-prototype) so they can be confirmed.
 
@@ -93,14 +93,18 @@ way and is easy to change.
 
 Flagged by the research threads; not changed without the owner's call.
 
-- **Digit position matters.** The first digit of a four-digit gene carries three quarters of its range, so
+- **Digit position matters** ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)). The first digit of a four-digit gene carries three quarters of its range, so
   one mutation there can move a value by 0.25 to 0.75, while a last-digit change moves it by about 0.004.
   A Gray code would smooth this.
-- **Uniform per-digit crossover blends inside a gene.** Parents at 0.0 and 1.0 can give a child at
+- **Uniform per-digit crossover blends inside a gene** ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)). Parents at 0.0 and 1.0 can give a child at
   0.75. `crossover_by_gene` avoids it; switching the default is one argument to `reproduce`.
 - **Sex is an inherited digit with no balancing.** A small population can lose one sex. Assigning it at
   birth is a change to `reproduce`.
-- **`fertility` is decoded but nothing reads it.**
+- **`fertility` is decoded but nothing reads it**, so it drifts neutrally.
+- **Mutation rate is per digit**, so the same 0.01 gives 0.65 changes per animal but 0.24 per plant. The
+  research note suggests defining it as expected changes per genome instead; not done yet.
+- **Animal drive flags start unset** until the first tick, because `__init__` never calls
+  `_update_needs_and_drives()`.
 - **`somatic_maint` is cheap and cuts wear up to 4.5 times**, so selection will push it to the maximum
   unless something penalises long life.
 - **Plant vitality starts at 1.0** although a seedling's health starts at half of its maximum; the
