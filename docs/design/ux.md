@@ -449,6 +449,35 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 - **Tests.** `tests/test_charts.py`: the helpers, the history path (backend, controller), and every
   tab against a real ten-day world history and made-up ones, offscreen.
 
+### As built: the Windows package (`UX.19`)
+
+- **Files.** `packaging/entry.py` is the program PyInstaller freezes; `packaging/evolutionSimulator.spec`
+  is the one-folder, windowed spec; `scripts/package.py` builds it, adds `LICENSE`,
+  `THIRD_PARTY_NOTICES.md`, a short `README.txt` and `VERSION`, and zips to
+  `dist/evolutionSimulator-<version>-win64.zip` (`linux64` on Linux). `pip install -e ".[gui,package]"`
+  gives it everything. The `gui` extra now names `PySide6-Essentials`.
+- **Second process.** `entry.py` calls `multiprocessing.freeze_support()` first, and
+  `viewer/__main__.py` is guarded too (a spawned process imports its main module and must not open a
+  second window). `evolutionSimulator.exe --selftest` starts a `ProcessClient` on a `FakeSpec`,
+  steps five ticks and exits 0 when a frame came back: it opens no window, so the workflow runs it on a
+  runner with no screen. The viewer does not use `ProcessClient` yet; the selftest keeps the frozen
+  second-process start covered until it does.
+- **No console.** A windowed program has `sys.stdout` and `sys.stderr` set to `None`; `entry.py` points
+  them at the null device so a stray `print` cannot raise. `copy_metadata` carries the package
+  metadata so `__version__` works. There are no data files in `src` yet; when a screen adds one (a
+  palette, an icon), list it in the spec's `datas`.
+- **Workflow.** `.github/workflows/package-windows.yml` runs on `workflow_dispatch` only (CI stays
+  weekly), builds on `windows-latest`, runs `--selftest` and a `--quit-after` launch under Qt's
+  offscreen platform, and uploads the zip as a workflow artifact.
+- **Notices.** PySide6 and Qt are LGPL v3 and ship as separate DLLs, which the notice says can be replaced.
+  `README.md` explains the unsigned zip and the SmartScreen warning (owner question
+  [#132](https://github.com/dwhagar/evolutionSimulator/issues/132): default accepted).
+- **Tested on Linux** (`tests/test_packaging.py`): the spec runs against PyInstaller stand-ins, the
+  entry point under `freeze_support`, the package script's helpers and the zip layout; a real Linux
+  PyInstaller build and run of the frozen program was done by hand. **Not tested without Windows:** see
+  the checklist in the UX.19 pull request (a real build, the SmartScreen flow, and the pipe-block finding:
+  a hung viewer holding four unacknowledged frames must not stall the host's `Pipe.send`).
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

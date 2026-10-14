@@ -23,6 +23,17 @@ python -m evolution_simulator list --out runs/
 
 Each run is a folder with its settings, history and checkpoints; see [docs/design/ux.md](docs/design/ux.md).
 
+## Windows download
+
+A build for Windows is made on request (the "Package Windows" workflow in the Actions tab), as a zip
+named `evolutionSimulator-<version>-win64.zip`. Unzip the whole folder and run `evolutionSimulator.exe`.
+The program is not signed with a code-signing certificate, which costs money every year, so Windows
+SmartScreen may say "Windows protected your PC" the first time: choose "More info", then "Run anyway".
+The warning says the publisher is unknown, nothing more, and the source is all here to read. The zip
+carries the licence notices for the libraries it includes (see `packaging/THIRD_PARTY_NOTICES.md`).
+
+To build it yourself: `pip install -e ".[gui,package]"` then `python scripts/package.py`.
+
 ## Project layout
 
 ```
@@ -30,6 +41,8 @@ src/evolution_simulator/   package source
 tests/                     pytest test suite
 docs/                      roadmap, design, research, archive
 scripts/version.py         prints the current MAJOR.minor.build version
+scripts/package.py         builds the Windows zip (UX.19)
+packaging/                 PyInstaller spec, entry point and notices
 ```
 
 ## Versioning
