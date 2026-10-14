@@ -24,7 +24,13 @@ from PySide6.QtWidgets import (
 from evolution_simulator import __version__
 from evolution_simulator.session import MAX_SPEED, Frame, Pause, Play, SetSpeed, Status, Step
 from evolution_simulator.viewer.controller import ViewerController
-from evolution_simulator.viewer.registry import Area, PanelSpec, ViewerContext, discover_panels
+from evolution_simulator.viewer.registry import (
+    Area,
+    MenuName,
+    PanelSpec,
+    ViewerContext,
+    discover_panels,
+)
 from evolution_simulator.world.timescale import SPEED_PRESETS, format_duration
 
 log = logging.getLogger(__name__)
@@ -84,7 +90,13 @@ class MainWindow(QMainWindow):
         self._build_actions()
         self._build_menus()
 
-        context = ViewerContext(controller, self.actions, self.statusBar().showMessage)
+        context = ViewerContext(
+            controller,
+            self.actions,
+            self.statusBar().showMessage,
+            self.add_menu_action,
+            self.set_run_label,
+        )
         self._build_panels(discover_panels() if specs is None else list(specs), context)
         self._default_state = self.saveState(LAYOUT_VERSION)
         self._restore_layout()
@@ -93,6 +105,7 @@ class MainWindow(QMainWindow):
         controller.status_changed.connect(self._on_status)
         controller.command_failed.connect(lambda text: self.statusBar().showMessage(text, 8000))
         controller.backend_failed.connect(self._on_backend_failed)
+        controller.backend_replaced.connect(self._on_backend_replaced)
         self._on_status(controller.status)
         if controller.frame is not None:
             self._on_frame(controller.frame)
@@ -139,6 +152,7 @@ class MainWindow(QMainWindow):
     def _build_menus(self) -> None:
         bar = self.menuBar()
         self.file_menu = bar.addMenu("&File")
+        self._file_end = self.file_menu.addSeparator()
         self.file_menu.addAction(self.actions["quit"])
         self.run_menu = bar.addMenu("&Run")
         self.run_menu.addAction(self.actions["play_pause"])
@@ -150,6 +164,21 @@ class MainWindow(QMainWindow):
         self.view_menu = bar.addMenu("&View")
         self.help_menu = bar.addMenu("&Help")
         self.help_menu.addAction(self.actions["about"])
+
+    def add_menu_action(self, menu: MenuName, action: QAction) -> None:
+        """Add an action to a menu (a screen asks through its ``ViewerContext``). In the File menu
+        it goes above the separator that sits over Quit."""
+        if menu == "file":
+            self.file_menu.insertAction(self._file_end, action)
+        else:
+            {"run": self.run_menu, "view": self.view_menu, "help": self.help_menu}[menu].addAction(
+                action
+            )
+
+    def set_run_label(self, text: str) -> None:
+        self.run_label = text or None
+        self.status_labels["run"].setText(text)
+        self.setWindowTitle(APP_NAME if not text else f"{APP_NAME} - {text}")
 
     def _build_panels(self, specs: list[PanelSpec], context: ViewerContext) -> None:
         centre = [spec for spec in specs if spec.area == "center"]
@@ -250,6 +279,14 @@ class MainWindow(QMainWindow):
         for speed, action in self._speed_actions.items():
             action.setChecked(speed == status.speed_preset)
         self.status_labels["speed"].setText(format_speed(status))
+
+    def _on_backend_replaced(self, _backend) -> None:
+        for name in ("play_pause", "step", *(f"speed_{s}" for s in self._speed_actions)):
+            self.actions[name].setEnabled(True)
+        self._on_status(self.controller.status)
+        labels = self.status_labels
+        labels["clock"].setText("Waiting for the simulation")
+        labels["counts"].setText("")
 
     def _on_backend_failed(self, text: str) -> None:
         self.statusBar().showMessage(f"The simulation stopped: {text}")

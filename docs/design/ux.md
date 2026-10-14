@@ -149,7 +149,7 @@ creature, so the viewer reads them with `numpy.frombuffer` without a loop. Rows:
 
 | Kind | Fields |
 | --- | --- |
-| Animal | id, x, y, heading, body radius, energy ratio, health ratio, age ratio (age over lifespan), flags (asleep, pregnant, ready to mate, wandering, sex), diet (meat share of what it can digest), a "family colour" key (distance of its genome from the population's centre) |
+| Animal | id, x, y, heading, body radius, energy ratio, health ratio, age ratio (age over lifespan), flags (asleep, pregnant, ready to mate, wandering, sex), diet (meat share of what it can digest), two "family colour" numbers (`family_a`, `family_b`: the genome projected on two fixed directions, so relatives get close numbers; see `lineage.py`) |
 | Plant | id, x, y, canopy radius, biomass ratio, flags (ready to seed) |
 | Corpse | id, x, y, meat left ratio |
 
@@ -215,8 +215,14 @@ dependencies (a test checks that no core module names Qt or numpy).
   matrix and a flag byte per row, with the column names in the block, so a viewer reads them with
   `numpy.frombuffer`. About 11 KB for 300 animals; 74 KB when the 3,000 plants ride along, which
   they do only every half second and when the session settles (paused, steps done), so a paused
-  world is exact. `FRAME_FORMAT` versions the layout. The family colour key of the first sketch is
-  not in the frame yet (it needs a cheap genome distance; it is UX.12's to ask for).
+  world is exact. `FRAME_FORMAT` versions the layout (2 since `UX.30`, which added the animals'
+  `family_a` and `family_b` columns). The family colour key is two numbers per animal,
+  `lineage.family_key`: the genome's digits projected on two fixed random directions, about 20
+  microseconds once per animal (cached) and a pure function of the genome, so it is not saved.
+  Relatives get close numbers (a child sits between its parents, a mutant next to the original) and
+  unrelated random genomes are about 1 apart on each; a real population is much tighter, so the
+  viewer should stretch the range found in the frame (for example between its 5th and 95th
+  percentile) over its colour wheel or ramp.
 - **FakeSimulation** has the same face as `World` for the session and the screens, with a scripted
   population curve and events; the session tests run every case against both.
 
@@ -407,6 +413,103 @@ python -m evolution_simulator list --out runs/
 - **Tests.** `tests/test_viewer_controls.py`: the pure helpers (`neighbour_speed`, `ticks_per_day`, the
   text), the buttons against the window's actions, the readouts against frames, the custom speed, the
   no-draw logic, and the keys through `QTest.keyClick`.
+
+### As built: saved runs in the viewer (`UX.18`)
+
+`viewer/run_manager.py` (`RunManager`, one per controller) joins the run store to the window, and the screens
+are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
+
+- **Save run now** (File, Ctrl+S). The first save starts a run (named after its seed unless given a name) with
+  a `Recorder` and an autosave (`UX.10`'s rules), so the run keeps checkpointing as it goes; later saves add a
+  checkpoint to the same run. A world that ran before the first save has history only from that point.
+  `manager.detach()` lets the current run go (with a last checkpoint) for a new world; `UX.17` calls it.
+- **Saved runs** (File, Ctrl+O, or View): a dock, hidden at first, with one row per run: name, seed, program
+  version, simulated time, last saved, animals, plants, size and a small population line. Buttons: Save run
+  now, Resume, History (also a double-click), Export history (CSV), Delete, Refresh. The run on screen is in
+  bold. The size warning of `UX.25` (5 GB by default) shows above the list and again after a save.
+- **Resume** restores the newest checkpoint that reads (or the one picked in the history window), builds a new
+  `Session` on it, and swaps it in behind the controller with `ViewerController.replace_backend`, which clears
+  the cached frame, detail and plants and emits `backend_replaced`. The world shows paused. A different run on
+  screen gets a last checkpoint first; resuming the run on screen goes back to its saved state, and both that
+  and a world that was never saved ask before anything is lost.
+- **History** is a window of its own per run (several can be open), read only: the facts, the charts, and the
+  checkpoint list with Resume from the selected one. The charts are the charts panel itself over one finished
+  history (`panels/charts.history_view(samples)`, a `ChartsPanel` with no controller); if that is missing or
+  fails, a plain animals and plants chart stands in. A run with no history samples yet says so.
+- **Shell hooks** added for this: `ViewerContext.add_menu_action(menu, action)` (File actions sit above Quit),
+  `ViewerContext.set_run_label(text)` (status bar and title), `MainWindow.add_menu_action` and
+  `set_run_label`, `ViewerController.replace_backend` and `backend_replaced`, and `--runs-folder DIR` on the
+  command line. A screen that holds anything about the old run (a selected animal, a trail) should drop it on
+  `backend_replaced` (the charts panel does). `LocalBackend(session, record=recorder)` takes a recorder that is
+  already listening, which is how a resumed run keeps its history; `RunManager` saves with the backend's own
+  recorder, so there is one per world.
+- **Limits.** Saving and resuming work on a `LocalBackend` (the world is in the window's process), through
+  `RunManager.local_world()`. Through the process host they wait for `UX.31` (the host creating the recorder,
+  sending history and starting from `Run.resume`); that function is the one place to change. Listing, history,
+  export and delete need no world and work with any backend.
+### As built: the charts (`UX.16`)
+
+`viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with five
+pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
+
+- **History reaches the screen through the backend.** `Batch.history` carries the recorder's
+  `HistorySamples` in the batch that follows each new sample (once per simulated day, not every
+  frame), `ViewerController` keeps it as `controller.history` and emits `history_received`, and a
+  panel built late starts from the latest. `LocalBackend` makes the `Recorder` itself (`record=False`
+  for none) and calls `observe()` on each poll, so the `FakeSimulation`, which has no step listener,
+  is sampled once per poll (a long update gives one coarser sample). **UX.7's client has to carry
+  the history in its batches** the same way (a `HistorySamples` or its `to_dict`, once per sample),
+  and **UX.10** will load a saved history into the same signal.
+- **Tabs.** Population (animals, plants, corpses); Births and deaths (animals or plants, with the
+  deaths split by cause, only the causes that happened); Condition (average energy, health, age and
+  diet, and the shares asleep, pregnant and ready to mate); Traits and genes (any recorded statistic
+  of the animals or the plants: its mean, a band of one standard deviation kept inside the range
+  seen, and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
+  a gene as shares of the population, with a slider over the days that have one, which follows the
+  newest unless the user scrubbed back).
+- **Axis.** Simulated days, and years once the newest sample is two years in; flows are per day on
+  every tier. Mouse wheel zooms and drag pans, right-click is pyqtgraph's menu (it also exports an
+  image), and "Reset view" fits the data again.
+- **Differences from the first sketch.** The band is the mean plus or minus one deviation, not the
+  10th to 90th percentile, because the recorder keeps the mean, deviation, lowest and highest and not
+  percentiles. The number of lineages is not charted (the recorder does not count them; a separate
+  item if wanted). Stat names are made readable by `pretty_stat`; the display-name catalogue
+  (UX.29) can replace it.
+- **Drawing.** Redraws are throttled (200 ms) and only the tab in view is drawn, and only while the
+  panel is visible, so a fast-forward costs the charts almost nothing. Colours are the Okabe and Ito
+  colour-blind-safe set, one fixed colour per death cause, and the plots take the window's own
+  background and text colours.
+- **Tests.** `tests/test_charts.py`: the helpers, the history path (backend, controller), and every
+  tab against a real ten-day world history and made-up ones, offscreen.
+
+### As built: the Windows package (`UX.19`)
+
+- **Files.** `packaging/entry.py` is the program PyInstaller freezes; `packaging/evolutionSimulator.spec`
+  is the one-folder, windowed spec; `scripts/package.py` builds it, adds `LICENSE`,
+  `THIRD_PARTY_NOTICES.md`, a short `README.txt` and `VERSION`, and zips to
+  `dist/evolutionSimulator-<version>-win64.zip` (`linux64` on Linux). `pip install -e ".[gui,package]"`
+  gives it everything. The `gui` extra now names `PySide6-Essentials`.
+- **Second process.** `entry.py` calls `multiprocessing.freeze_support()` first, and
+  `viewer/__main__.py` is guarded too (a spawned process imports its main module and must not open a
+  second window). `evolutionSimulator.exe --selftest` starts a `ProcessClient` on a `FakeSpec`,
+  steps five ticks and exits 0 when a frame came back: it opens no window, so the workflow runs it on a
+  runner with no screen. The viewer does not use `ProcessClient` yet; the selftest keeps the frozen
+  second-process start covered until it does.
+- **No console.** A windowed program has `sys.stdout` and `sys.stderr` set to `None`; `entry.py` points
+  them at the null device so a stray `print` cannot raise. `copy_metadata` carries the package
+  metadata so `__version__` works. There are no data files in `src` yet; when a screen adds one (a
+  palette, an icon), list it in the spec's `datas`.
+- **Workflow.** `.github/workflows/package-windows.yml` runs on `workflow_dispatch` only (CI stays
+  weekly), builds on `windows-latest`, runs `--selftest` and a `--quit-after` launch under Qt's
+  offscreen platform, and uploads the zip as a workflow artifact.
+- **Notices.** PySide6 and Qt are LGPL v3 and ship as separate DLLs, which the notice says can be replaced.
+  `README.md` explains the unsigned zip and the SmartScreen warning (owner question
+  [#132](https://github.com/dwhagar/evolutionSimulator/issues/132): default accepted).
+- **Tested on Linux** (`tests/test_packaging.py`): the spec runs against PyInstaller stand-ins, the
+  entry point under `freeze_support`, the package script's helpers and the zip layout; a real Linux
+  PyInstaller build and run of the frozen program was done by hand. **Not tested without Windows:** see
+  the checklist in the UX.19 pull request (a real build, the SmartScreen flow, and the pipe-block finding:
+  a hung viewer holding four unacknowledged frames must not stall the host's `Pipe.send`).
 
 ## Speed and what the window shows
 

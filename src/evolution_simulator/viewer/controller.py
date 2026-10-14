@@ -2,7 +2,7 @@
 
 ``ViewerController`` polls its backend on a timer and turns what comes back into Qt signals, so a
 panel just connects to the ones it cares about and never talks to the backend or the session. It
-also remembers the latest of each thing (``frame``, ``detail``, ``status``, ``plants``), so a panel
+also remembers the latest of each thing (``frame``, ``detail``, ``status``, ``plants``, ``history``), so a panel
 built after the first frame can start from the current state instead of waiting for the next one.
 """
 
@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
+from evolution_simulator.history import HistorySamples
 from evolution_simulator.session import (
     Command,
     CommandError,
@@ -36,10 +37,17 @@ class ViewerController(QObject):
     """A ``Status``, when anything in it differs from the last one heard (the measured speed too)."""
     event_received = Signal(object)
     """A world event (``Born``, ``Died``, ``Mated``)."""
+    history_received = Signal(object)
+    """The ``HistorySamples`` so far, each time a new sample has been taken (once per simulated day)."""
     command_failed = Signal(str)
     """Text for a command the backend refused; nothing was changed."""
     backend_failed = Signal(str)
     """The backend raised while being polled; polling has stopped."""
+    backend_replaced = Signal(object)
+    """A different run now sits behind the controller (``replace_backend``, e.g. a resumed run).
+    The cached ``frame``, ``detail`` and ``plants`` were cleared first; a panel drops anything it
+    holds about the old run (the selected animal, a trail, a zoom to the old world) and starts again
+    from the frame that follows."""
 
     def __init__(self, backend: Backend, parent: QObject | None = None) -> None:
         super().__init__(parent)
@@ -48,6 +56,8 @@ class ViewerController(QObject):
         self.detail: AnimalDetail | None = None
         self.status: Status = backend.status
         self.plants: Block | None = None
+        self.history: HistorySamples | None = None
+        self._started = False
         self._timer = QTimer(self)
         self._timer.setInterval(POLL_MS)
         self._timer.timeout.connect(self.poll)
@@ -57,10 +67,28 @@ class ViewerController(QObject):
         return self._timer.isActive()
 
     def start(self) -> None:
+        self._started = True
         self._timer.start()
 
     def stop(self) -> None:
+        self._started = False
         self._timer.stop()
+
+    def replace_backend(self, backend: Backend) -> None:
+        """Show a different run: forget everything cached from the old backend, switch, tell the
+        panels (``backend_replaced``) and poll once so the new world appears at once. The caller
+        closes the old backend. Polling restarts if it was running or had stopped after a failure."""
+        self.backend = backend
+        self.frame = None
+        self.detail = None
+        self.plants = None
+        self.history = None
+        self.status = backend.status
+        self.backend_replaced.emit(backend)
+        self.status_changed.emit(self.status)
+        if self._started:
+            self._timer.start()
+        self.poll()
 
     def send(self, command: Command) -> bool:
         """Hand a command to the backend; ``False`` (and ``command_failed``) if it was refused."""
@@ -77,7 +105,7 @@ class ViewerController(QObject):
         try:
             batch = self.backend.poll()
         except Exception as error:  # noqa: BLE001 - any failure must stop the timer, not loop
-            self.stop()
+            self._timer.stop()
             self.backend_failed.emit(f"{type(error).__name__}: {error}")
             return
         for event in batch.events:
@@ -95,6 +123,9 @@ class ViewerController(QObject):
         if batch.detail is not None:
             self.detail = batch.detail
             self.detail_received.emit(batch.detail)
+        if batch.history is not None:
+            self.history = batch.history
+            self.history_received.emit(batch.history)
 
     def _set_status(self, status: Status) -> None:
         if status != self.status:

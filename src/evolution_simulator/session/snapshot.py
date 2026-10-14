@@ -27,7 +27,7 @@ from dataclasses import dataclass
 
 from evolution_simulator.world.views import AnimalView, CorpseView, PlantView
 
-FRAME_FORMAT: int = 1
+FRAME_FORMAT: int = 2
 """Version of the frame layout below."""
 
 ANIMAL_COLUMNS: tuple[str, ...] = (
@@ -39,6 +39,8 @@ ANIMAL_COLUMNS: tuple[str, ...] = (
     "health_ratio",
     "age_ratio",
     "diet",
+    "family_a",
+    "family_b",
 )
 PLANT_COLUMNS: tuple[str, ...] = ("x", "y", "radius", "biomass_ratio")
 CORPSE_COLUMNS: tuple[str, ...] = ("x", "y", "radius", "meat")
@@ -111,7 +113,18 @@ def pack_animals(views: Sequence[AnimalView]) -> Block:
     for v in views:
         ids.append(v.id)
         values.extend(
-            (v.x, v.y, v.heading, v.radius, v.energy_ratio, v.health_ratio, v.age_ratio, v.diet)
+            (
+                v.x,
+                v.y,
+                v.heading,
+                v.radius,
+                v.energy_ratio,
+                v.health_ratio,
+                v.age_ratio,
+                v.diet,
+                v.family_a,
+                v.family_b,
+            )
         )
         flags.append(
             v.asleep
