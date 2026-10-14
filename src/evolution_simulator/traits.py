@@ -18,6 +18,7 @@ from enum import Enum
 from evolution_simulator.brain import DEFAULT_BLUEPRINT, Brain
 from evolution_simulator.brain_adapter import (
     BrainDecision,
+    BrainTrace,
     Percepts,
     Temperament,
     Wanderer,
@@ -25,6 +26,7 @@ from evolution_simulator.brain_adapter import (
     decode_outputs,
 )
 from evolution_simulator.config import DEFAULT_RULES, TraitRules
+from evolution_simulator.deaths import DeathCause
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.learning import Learner, LearningRules, State
@@ -70,9 +72,11 @@ class BaseTraits:
         self.vitality: float = 1.0  # Scales from 1.0 (prime) down to 0.0 (dead)
         self.age_ticks: int = 0
         self.is_alive: bool = True
+        self.death_cause: DeathCause | None = None
+        """Why it died, once it has (``DeathCause``); ``None`` while it lives."""
 
-    def apply_damage(self, amount: float) -> float:
-        """Applies physical/toxin damage. Kills entity if health hits 0."""
+    def apply_damage(self, amount: float, cause: DeathCause = DeathCause.DAMAGE) -> float:
+        """Applies physical/toxin damage. Kills entity if health hits 0, of ``cause``."""
         if not self.is_alive:
             return 0.0
 
@@ -81,15 +85,16 @@ class BaseTraits:
         self.damage_since_decision += before - self.current_health
         self.damage_taken += before - self.current_health
         if self.current_health <= 0.0:
-            self._die()
+            self._die(cause)
         else:
             self._refresh_vitality_dependents()
             self._update_needs_and_drives()
         return self.current_health
 
-    def _die(self) -> None:
+    def _die(self, cause: DeathCause) -> None:
         """Internal teardown when life criteria fail."""
         self.is_alive = False
+        self.death_cause = cause
         self.current_energy = 0.0
         self.current_health = 0.0
         self._clear_flags()
@@ -235,6 +240,10 @@ class AnimalTraits(BaseTraits):
         self.matings: int = 0
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
+        self.trace_brain: bool = False
+        """Keep ``brain_trace`` up to date; the world turns it on for the selected animal only."""
+        self.brain_trace: BrainTrace | None = None
+        """The inputs, hidden values and outputs of the last brain run, while ``trace_brain``."""
         self._decision: BrainDecision | None = None
         self._last_threat: float = 0.0
         self._decided_threat: float = 0.0  # what the brain saw when it last ran (BRAIN.22)
@@ -462,7 +471,7 @@ class AnimalTraits(BaseTraits):
             self.pregnancy.remaining -= dt
 
         if self.current_energy <= 0.0 or self.vitality <= 0.0:
-            self._die()
+            self._die(DeathCause.OLD_AGE if self.vitality <= 0.0 else DeathCause.STARVATION)
             return
 
         self._update_needs_and_drives()
@@ -575,6 +584,8 @@ class AnimalTraits(BaseTraits):
         self._decided_touch = bool(percepts.touching)
         hidden, proposal = self.brain.decide_with_hidden(inputs)
         action = self._explore(proposal, rng)
+        if self.trace_brain:
+            self.brain_trace = BrainTrace(tuple(inputs), hidden, proposal, action)
         if learner is not None and state is not None:
             learner.record(state, hidden, proposal, action)
         decision = decode_outputs(action)
@@ -745,7 +756,7 @@ class AnimalTraits(BaseTraits):
                 * behaviour.poison_damage
                 * dt
             )
-            self.apply_damage(poison_damage)
+            self.apply_damage(poison_damage, DeathCause.POISON)
             if not self.is_alive:
                 return 0.0
 
@@ -964,7 +975,7 @@ class PlantTraits(BaseTraits):
         self.age_ticks += 1
         self.lived_ticks += dt
         if self.lived_ticks >= self.lifespan_ticks:
-            self._die()  # old age
+            self._die(DeathCause.OLD_AGE)
             return
         if self.seed_cooldown > 0.0:
             self.seed_cooldown = max(0.0, self.seed_cooldown - dt)
@@ -994,7 +1005,7 @@ class PlantTraits(BaseTraits):
             self.current_biomass += net_growth
             self.current_energy = max(0.0, self.current_biomass)
             if self.current_biomass <= 0.0:
-                self._die()
+                self._die(DeathCause.STARVATION)
                 return
 
         self._refresh_vitality_dependents()
@@ -1027,10 +1038,10 @@ class PlantTraits(BaseTraits):
         self.current_energy = self.current_biomass
 
         # Grazing inflicts direct physical damage to plant structure
-        self.apply_damage(actual_consumed * self.rules.plant.graze_damage)
+        self.apply_damage(actual_consumed * self.rules.plant.graze_damage, DeathCause.EATEN)
 
-        if self.current_biomass <= self.rules.plant.dies_below_biomass:
-            self._die()
+        if self.is_alive and self.current_biomass <= self.rules.plant.dies_below_biomass:
+            self._die(DeathCause.EATEN)
 
         return (actual_consumed, self.toxicity)
 

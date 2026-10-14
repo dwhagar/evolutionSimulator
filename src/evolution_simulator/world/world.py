@@ -41,6 +41,7 @@ from evolution_simulator.config import (
     SleepRules,
     TraitRules,
 )
+from evolution_simulator.deaths import DeathCause
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import founder_animal_dna, founder_plant_dna
 from evolution_simulator.learning import NightlyLearning
@@ -51,6 +52,7 @@ from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
 from evolution_simulator.world.corpses import Corpse, CorpseRules
 from evolution_simulator.world.daycycle import DayCycle
+from evolution_simulator.world.events import Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import (
@@ -64,6 +66,16 @@ from evolution_simulator.world.sleep import SleepListener
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.vector import Vec
+from evolution_simulator.world.views import (
+    AnimalDetail,
+    AnimalView,
+    CorpseView,
+    PlantView,
+    animal_detail,
+    animal_view,
+    corpse_view,
+    plant_view,
+)
 
 INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
 """Grid cell for neighbour searches: the longest sense range any animal can have (100 units)."""
@@ -206,6 +218,9 @@ class World:
         self.max_body: float = 0.0
         """Largest body radius of any animal added so far."""
         self._sleep_listeners: list[SleepListener] = []
+        self._event_listeners: list[EventListener] = []
+        self._stepping: bool = False
+        self._traced: int | None = None
         self.calls: dict[int, tuple[float, float]] = {}
         """Animals calling this tick, by id: (alarm call radius, mating call radius), 0 for none."""
         if self.config.learning is not None:
@@ -278,6 +293,66 @@ class World:
     def add_sleep_listener(self, listener: SleepListener) -> None:
         """Be told, in id order, when an animal falls asleep or wakes (the hook for BRAIN.24)."""
         self._sleep_listeners.append(listener)
+
+    def add_event_listener(self, listener: EventListener) -> None:
+        """Be told about every birth, death and mating as it happens (``world/events.py``). Events
+        are built only while at least one listener is added."""
+        self._event_listeners.append(listener)
+
+    def remove_event_listener(self, listener: EventListener) -> None:
+        self._event_listeners.remove(listener)
+
+    def _emit(self, event: WorldEvent) -> None:
+        for listener in self._event_listeners:
+            listener(event)
+
+    @property
+    def _event_tick(self) -> int:
+        """The tick events carry: the one the running step will finish as."""
+        return self.tick + 1 if self._stepping else self.tick
+
+    # -------------------------------------------------------------------------
+    # Read-only views, for the session and the viewers (UX.6)
+    # -------------------------------------------------------------------------
+
+    @property
+    def plant_count(self) -> int:
+        return len(self._plants)
+
+    def animal_views(self) -> list[AnimalView]:
+        """A value for every living animal, in id order."""
+        dt = self.dt
+        return [animal_view(a, dt) for a in self.animals]
+
+    def plant_views(self) -> list[PlantView]:
+        return [plant_view(p) for p in self.plants]
+
+    def corpse_views(self) -> list[CorpseView]:
+        return [corpse_view(c) for c in self.corpses]
+
+    def animal_detail(self, animal_id: int) -> AnimalDetail | None:
+        """The inspector's picture of one living animal, or ``None`` if there is none by that id."""
+        animal = self._animals.get(animal_id)
+        return None if animal is None else animal_detail(self, animal)
+
+    def trace_brain(self, animal_id: int | None) -> bool:
+        """Keep the brain's last inputs, hidden values and outputs for this animal (and stop for
+        the one traced before); ``None`` stops tracing. They appear in ``animal_detail`` once its
+        brain next runs. Tracing only copies numbers the brain already computed: it changes
+        nothing about the run. Returns whether there is such an animal to trace."""
+        previous = self._animals.get(self._traced) if self._traced is not None else None
+        if previous is not None:
+            previous.traits.trace_brain = False
+            previous.traits.brain_trace = None
+        self._traced = None
+        if animal_id is None:
+            return True
+        animal = self._animals.get(animal_id)
+        if animal is None:
+            return False
+        animal.traits.trace_brain = True
+        self._traced = animal_id
+        return True
 
     @property
     def animals(self) -> list[Animal]:
@@ -370,6 +445,12 @@ class World:
         self._animals[animal.id] = animal
         self._animal_index.insert(animal.id, animal.position, animal.radius)
         self.max_body = max(self.max_body, animal.radius)
+        if self._event_listeners:
+            self._emit(
+                Born(
+                    self._event_tick, "animal", animal.id, place.coords[0], place.coords[1], parents
+                )
+            )
         return animal
 
     def add_plant(
@@ -386,6 +467,10 @@ class World:
         self._plants[plant.id] = plant
         self._plant_index.insert(plant.id, plant.position, plant.radius)
         self.max_canopy = max(self.max_canopy, plant.radius)
+        if self._event_listeners:
+            self._emit(
+                Born(self._event_tick, "plant", plant.id, place.coords[0], place.coords[1], parents)
+            )
         return plant
 
     def populate(self, animals: int = 0, plants: int = 0, seeded: bool = True) -> None:
@@ -416,6 +501,13 @@ class World:
 
     def step(self) -> StepReport:
         """Advance one tick."""
+        self._stepping = True
+        try:
+            return self._step()
+        finally:
+            self._stepping = False
+
+    def _step(self) -> StepReport:
         animals = self.animals
         plants = self.plants
         self._refresh_animal_index()
@@ -679,9 +771,11 @@ class World:
             return
         traits = animal.traits
         target.traits.apply_damage(
-            rules.bite(traits.effective_carn_eff, traits.mass, target.traits.mass) * dt
+            rules.bite(traits.effective_carn_eff, traits.mass, target.traits.mass) * dt,
+            DeathCause.PREDATION,
         )
         target.disturbed = True
+        target.killed_by = animal.id
 
     def _scavenge(self, animal: Animal, dt: float) -> bool:
         """Eat from the nearest corpse the animal touches, if it can digest meat. Returns whether
@@ -757,6 +851,10 @@ class World:
             if result is MatingResult.CONCEIVED:
                 mother.partner = father.id
                 conceived += 1
+            if result is not MatingResult.REFUSED and self._event_listeners:
+                self._emit(
+                    Mated(self._event_tick, father.id, mother.id, result is MatingResult.CONCEIVED)
+                )
         return conceived
 
     def _deliver(self, animals: list[Animal]) -> int:
@@ -813,14 +911,30 @@ class World:
             raise NotImplementedError("Scattering is 2D for now.")
         return self.bounds.clamp(centre + offset)
 
-    @staticmethod
-    def _remove_dead(organisms: dict, index: SpatialIndex) -> int:
-        dead = [i for i, o in organisms.items() if not o.is_alive]
+    def _remove_dead(self, organisms: dict, index: SpatialIndex) -> int:
+        dead = sorted(i for i, o in organisms.items() if not o.is_alive)
         for organism_id in dead:
-            del organisms[organism_id]
+            organism = organisms.pop(organism_id)
             if organism_id in index:
                 index.remove(organism_id)
+            if self._event_listeners:
+                self._emit_death(organism)
         return len(dead)
+
+    def _emit_death(self, organism: Animal | Plant) -> None:
+        traits = organism.traits
+        cause = traits.death_cause or DeathCause.DAMAGE
+        killer = (
+            organism.killed_by
+            if isinstance(organism, Animal) and cause is DeathCause.PREDATION
+            else None
+        )
+        x, y = organism.position.coords[:2]
+        self._emit(
+            Died(
+                self._event_tick, organism.kind, organism.id, x, y, cause, killer, traits.age_ticks
+            )
+        )
 
     # -------------------------------------------------------------------------
     # Checking repeatability
