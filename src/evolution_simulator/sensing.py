@@ -177,6 +177,9 @@ class Neighbour:
     """How far its mating call carries, 0 when it is not calling."""
     mass: float = 0.0
     """Its body mass, for the relative-size input; 0 when not known."""
+    carrion: bool = False
+    """A corpse, reported as prey: it is smelled at the full range (it is not hiding), makes no
+    sound and does not count towards crowding."""
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
@@ -273,11 +276,11 @@ def sense(
                 abs(math.atan2(dy * fx - dx * fy, dx * fx + dy * fy)) <= half_fov
             )
         hears = reach_hearing > 0.0 and distance <= reach_hearing * n.loudness
-        smell_limit = weak_smell if role in ("prey", "threat") else reach_smell
+        smell_limit = weak_smell if role in ("prey", "threat") and not n.carrion else reach_smell
         smells = smell_limit > 0.0 and distance <= smell_limit * n.scent
         if n.alarm_call_radius > 0.0 or n.mating_call_radius > 0.0:
             callers.append((distance, n, dx, dy))
-        if role == "plant":
+        if role == "plant" or n.carrion:
             crowded = False
         else:
             crowded = (sees and "vision" in _CROWDING_SENSES) or (
@@ -322,14 +325,20 @@ def sense(
     sizeable: list[tuple[float, int, Neighbour, str]] = []  # prey and threats found, for size
     for target in TARGETS:
         direction_row, closeness_row, reporters = _TARGET_PLAN[target]
-        class_range = max(
-            (weak_smell if k == "smell" and target in ("prey", "threat") else reach[k])
-            for k in reporters
-        )
         found = best.get(target)
-        if found is None or class_range <= 0.0:
+        if found is None:
             continue
         distance, ident, neighbour, flags, dx, dy = found
+        class_range = max(
+            (
+                weak_smell
+                if k == "smell" and target in ("prey", "threat") and not neighbour.carrion
+                else reach[k]
+            )
+            for k in reporters
+        )
+        if class_range <= 0.0:
+            continue
         by = next(k for k in reporters if flags[k])
         if target in ("prey", "threat"):
             sizeable.append((distance, ident, neighbour, by))

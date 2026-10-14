@@ -59,7 +59,7 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
    (`REPRO.3`); a plant seeds only after its cooldown is over and at most `seed_capacity` seeds at once. A
    plant's age and cooldown also run on the reference-tick clock (`TRAIT.8`: it lives `longevity` days, a
    month for a first generation, and can first seed at 6% of that).
-5. The dead are removed and the tick counter goes up by one.
+5. Corpses rot, every animal that died leaves one, the dead are removed and the tick counter goes up by one.
 
 Aging (plants too), energy burn, healing, the mating cooldown and the pregnancy run per **reference tick** (an hour of
 simulated time) and are scaled by `World.dt = seconds_per_tick / 3600`. So are movement (`dt` times the
@@ -254,9 +254,20 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   eats the plant the animal overlaps, or, if it overlaps none, bites the nearest animal it touches
   that it counts as prey (`classify`: a meat eater at most 0.8 times its mass; code in
   `world/combat.py`, constants in `AttackRules` on `WorldConfig`). A bite does
-  `damage` (30) × carnivore efficiency × √(attacker mass / prey mass) × `dt` (damage is per reference tick, like grazing), wakes a sleeper, and the
-  animal that lands the killing bite eats `meat_share` (half) of the victim's maximum energy
-  through `feed(..., is_meat=True)`, so its carnivore efficiency decides how much it gains.
+  `damage` (30) × carnivore efficiency × √(attacker mass / prey mass) × `dt` (damage is per reference tick, like grazing) and wakes a sleeper. What a kill is worth is
+  the corpse it leaves (next item).
+- **Corpses** (`WORLD.12`, `world/corpses.py`, `CorpseRules` on `WorldConfig`). Every animal that
+  dies, by a bite or by starving, leaves a `Corpse` where it fell, with `meat_share` (half) of its
+  maximum energy as meat. The meat rots (half-life 72 reference ticks, so three days at the hourly
+  tick) and the corpse goes when under 1 is left. An animal that can digest meat and whose brain
+  says "eat or attack" with no plant underfoot eats from a corpse it touches (25 meat per
+  reference tick, times `dt`, through `feed(..., is_meat=True)`, so its carnivore efficiency decides
+  how much it gains); only then does it bite a live animal. For the senses a corpse is prey that
+  cannot hide: a meat eater reports it as the nearest prey, seen in its field of view or smelled at
+  the full smell range (live prey is smelled weakly), scaled by how much meat is left like a
+  plant's scent grows with its biomass. Corpses make no sound, do not crowd and are in
+  `state_digest`. The optional scent field (`SENSE.20`) and visibility properties (`SENSE.21`) are
+  not built.
   Seek-mating and the two call outputs are acted on as described above. `AnimalTraits` keeps no
   behaviour flags any more (no "wants food", "in fear" or "wants to attack"): the brain is the
   only source of behaviour, and a body only offers `wants_mate` and `mating_energy_threshold` as

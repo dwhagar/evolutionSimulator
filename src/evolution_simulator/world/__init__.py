@@ -1,12 +1,13 @@
 """The world: space, time, the step loop and the senses that connect organisms to it.
 
 Modules: ``vector`` (positions), ``bounds`` (WORLD.4), ``timescale`` (WORLD.3), ``spatial`` (finding
-neighbours), ``daycycle`` and ``sleep`` (WORLD.5), ``organisms``, ``combat`` (attacks and meat, BRAIN.10), ``mating`` (who mates with
+neighbours), ``daycycle`` and ``sleep`` (WORLD.5), ``organisms``, ``combat`` (attacks, BRAIN.10), ``corpses`` (what the dead leave, WORLD.12), ``mating`` (who mates with
 whom, REPRO.4), ``senses`` (swappable) and ``world`` (WORLD.2).
 """
 
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
+from evolution_simulator.world.corpses import Corpse, CorpseRules
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import Senses, WorldSenses
@@ -25,6 +26,8 @@ __all__ = [
     "Animal",
     "AttackRules",
     "Bounds",
+    "Corpse",
+    "CorpseRules",
     "DayCycle",
     "Pacer",
     "Plant",
