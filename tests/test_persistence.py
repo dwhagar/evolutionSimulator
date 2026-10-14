@@ -399,3 +399,22 @@ def test_founder_genomes_survive_the_trip():
 def test_gzip_files_are_plain_gzip_json(tmp_path):
     path = save_world(rich_world_at(5), tmp_path / "w.json.gz")
     assert json.loads(gzip.decompress(path.read_bytes()))["world"]["tick"] == 5
+
+
+# --- the digest sees what a save has to keep ----------------------------------------------------
+
+
+def test_the_digest_sees_pregnancies_sleep_and_what_has_been_learned():
+    world = rich_world_at(SAVE_TICK)
+    base = world.state_digest()
+    mother = next(a for a in world.animals if a.traits.pregnancy)
+    mother.traits.pregnancy.remaining -= 1.0
+    changed = world.state_digest()
+    assert changed != base
+    learner = next(a.traits.learner for a in world.animals if a.traits.learner)
+    weights, biases = learner.offsets
+    learner.offsets = (weights, (biases[0] + 0.25, *biases[1:]))
+    assert world.state_digest() != changed
+    asleep = world.state_digest()
+    world.animals[0].asleep = not world.animals[0].asleep
+    assert world.state_digest() != asleep

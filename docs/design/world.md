@@ -79,7 +79,8 @@ tick in world units. Walls stop an animal at the edge; its heading is unchanged.
 A run is pure: the same `WorldConfig` (including `seed`), the same organisms added in the same order
 and the same calls give the same world. One `random.Random(seed)` feeds everything, organisms are
 visited in id order, neighbour searches return ids in order, ties break on id, and no clock or global
-state is read. `World.state_digest()` hashes the whole state (including the random generator) so a
+state is read. `World.state_digest()` hashes the state that decides what happens next (the random generator, and each organism's place,
+energy, health, age, sleep, pregnancy, learned changes and genome; `UX.9` widened it) so a
 test or a user can check two runs match.
 
 ## Saving and loading (UX.9)
