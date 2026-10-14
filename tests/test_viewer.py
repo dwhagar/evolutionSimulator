@@ -185,6 +185,8 @@ def test_the_local_backend_reports_events_once(clock):
     batch = backend.poll()
     assert isinstance(batch, Batch) and batch.events and not batch.empty
     assert not backend.poll().events
+    session.handle(Step(40))  # events after the first poll are heard too
+    assert backend.poll().events
     backend.close()
 
 

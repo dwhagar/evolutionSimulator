@@ -15,6 +15,7 @@ from evolution_simulator.session import (
     Command,
     CommandError,
     Frame,
+    RunStarted,
     Status,
     StatusChanged,
 )
@@ -36,7 +37,8 @@ class ViewerController(QObject):
     status_changed = Signal(object)
     """A ``Status``, when anything in it differs from the last one heard (the measured speed too)."""
     event_received = Signal(object)
-    """A world event (``Born``, ``Died``, ``Mated``)."""
+    """A world event (``Born``, ``Died``, ``Mated``), or ``RunStarted`` when a new run replaced the
+    world (the controller has by then forgotten the old frame, plants and detail)."""
     history_received = Signal(object)
     """The ``HistorySamples`` so far, each time a new sample has been taken (once per simulated day)."""
     command_failed = Signal(str)
@@ -112,6 +114,8 @@ class ViewerController(QObject):
             if isinstance(event, StatusChanged):
                 self._set_status(event.status)
             else:
+                if isinstance(event, RunStarted):  # nothing held about the old run is true now
+                    self.frame = self.detail = self.plants = None
                 self.event_received.emit(event)
         if batch.frame is not None:
             frame = batch.frame

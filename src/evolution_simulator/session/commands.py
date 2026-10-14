@@ -5,13 +5,16 @@ the simulation process, a headless script) carries every command the same way. A
 new command type here and a handler in ``Session``, never a new channel. Commands are immutable and
 hold only numbers and strings, so they pickle and could go over a socket as JSON.
 
-Still to come in later items: ``new_run`` (UX.17), ``save`` and ``load`` (UX.9, UX.18),
+``NewRun`` (UX.17) carries a whole ``WorldConfig``, a tree of frozen dataclasses of numbers, strings
+and booleans, so it too pickles. Still to come in later items: ``save`` and ``load`` (UX.9, UX.18),
 ``set_snapshot_rate`` / ``want`` and ``shutdown`` (UX.7), and the interventions (UX.20).
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+
+from evolution_simulator.world.world import WorldConfig
 
 
 class CommandError(ValueError):
@@ -73,4 +76,35 @@ class Deselect:
     """Stop sending an animal's details."""
 
 
-Command = Play | Pause | Step | SetSpeed | Select | Deselect
+@dataclass(frozen=True, slots=True)
+class NewRun:
+    """Throw the current world away and start a new one (UX.17): a world built from ``config``,
+    filled with ``animals`` founders and ``plants`` plants (the founders carry the seeded brains
+    unless ``seeded`` is False), paused at tick 0. The run being replaced is not saved. The speed
+    the viewer had set stays, unless ``config.traits.time.speed`` was changed from its default,
+    which then becomes the speed."""
+
+    config: WorldConfig
+    animals: int = 0
+    plants: int = 0
+    seeded: bool = True
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.config, WorldConfig):
+            raise CommandError(f"NewRun needs a WorldConfig, got {self.config!r}.")
+        for name, cap in (("animals", self.config.max_animals), ("plants", self.config.max_plants)):
+            count = getattr(self, name)
+            if not isinstance(count, int) or isinstance(count, bool) or count < 0:
+                raise CommandError(
+                    f"A run needs a whole number of {name}, zero or more, got {count!r}."
+                )
+            if count > cap:
+                raise CommandError(f"A run can start with at most {cap:,} {name}, got {count:,}.")
+
+    @property
+    def label(self) -> str:
+        """A few words for a title bar: ``world, seed 7``."""
+        return f"world, seed {self.config.seed}"
+
+
+Command = Play | Pause | Step | SetSpeed | Select | Deselect | NewRun

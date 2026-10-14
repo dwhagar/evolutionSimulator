@@ -16,6 +16,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Literal
 
+from PySide6.QtCore import QSettings
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QWidget
 
@@ -43,6 +44,7 @@ class ViewerContext:
         show_message: Callable[[str, int], None],
         add_menu_action: Callable[[MenuName, QAction], None] | None = None,
         set_run_label: Callable[[str], None] | None = None,
+        settings: QSettings | None = None,
     ) -> None:
         self.controller = controller
         self.actions = actions
@@ -51,6 +53,9 @@ class ViewerContext:
         self._show_message = show_message
         self._add_menu_action = add_menu_action
         self._set_run_label = set_run_label
+        self.settings = settings
+        """Where the window keeps its settings, for a screen that has some of its own to remember
+        (keep to your own key prefix); ``None`` when the window has none."""
 
     def send(self, command: Command) -> bool:
         return self.controller.send(command)

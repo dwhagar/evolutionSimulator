@@ -76,7 +76,8 @@ class LocalBackend:
 
     def poll(self) -> Batch:
         update = self.session.update()
-        events, self._events = tuple(self._events), []
+        events = tuple(self._events)
+        self._events.clear()  # not rebound: the session's subscription holds this very list
         return Batch(update.frame, update.detail, events, self._new_history())
 
     def _new_history(self) -> HistorySamples | None:

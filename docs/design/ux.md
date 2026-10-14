@@ -545,6 +545,39 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
   the checklist in the UX.19 pull request (a real build, the SmartScreen flow, and the pipe-block finding:
   a hung viewer holding four unacknowledged frames must not stall the host's `Pipe.send`).
 
+### As built: the setup screen (`UX.17`)
+
+File > New run (Ctrl+N) opens the **New run** dock (`viewer/panels/setup.py`, left, closed at first).
+From the top: a preset box (Default, Small and quick, Large world, No night, No learning, and the
+user's own), the counts, the seed with a Random button, the seeded-brain switch, a filter box, the
+settings form, a line that says what is wrong (Start is disabled until nothing is), and Start run.
+
+- **The form is generated.** `viewer/config_form.py` builds a `ConfigForm` from any frozen dataclass
+  instance: a check box for a `bool`, a text box for numbers, text and tuples, a collapsible section for
+  a nested dataclass, and a section with an *on* box for `X | None` (day cycle, learning). Nothing names
+  a field, so what TRAIT.11 moves into `TraitRules` (or any later field) appears without editing the
+  screen. The tooltip is the one-line text under the field in the source (read by `viewer/configdata.py`
+  from the class source, so a frozen build without source shows only the default), a bold label means the
+  value differs from the default and a section header counts its changes. `value()` builds the dataclass
+  with the classes' own checks and raises `ConfigError` with the dotted path of the bad field. The seed
+  is left out of the form (`skip`) and has its own box.
+- **The command.** `NewRun(config, animals, plants, seeded)` is a new `Command` (`session/commands.py`);
+  `Session.handle` builds the world with `build_world` (or the `new_run=` factory a test passes), swaps it
+  in and publishes `RunStarted(label, animals, plants)`. The new run is paused at tick 0, nothing is
+  selected, and the next frame carries the plants. The speed the viewer had set stays unless the config's
+  own `traits.time.speed` was changed from its default. A world that cannot be built raises
+  `CommandError` and changes nothing. The frame counter (`seq`) goes on rising. The counts are checked
+  against the config's `max_animals` and `max_plants`. `ViewerController` drops its frame, plants and
+  detail on `RunStarted` (and forwards the event), and the window renames itself from it.
+- **Presets** are `RunSetup` values (`viewer/presets.py`: counts, seeded, `WorldConfig`) saved as JSON
+  (`configdata.to_data` and `from_data`; a missing field keeps its default and an unknown one is ignored,
+  so old presets survive a changed config). The user's presets and the last run started live in the
+  viewer settings under `setup/presets` and `setup/last`; a panel reaches the settings through
+  `ViewerContext.settings`.
+- **Not saved.** Starting a run throws the old one away; if it has run (tick above 0) the screen asks
+  first. Saving and loading runs is UX.9, UX.10 and UX.18. The world is built in the calling process, so
+  a large world freezes the window for a moment until the process host (UX.7) runs it elsewhere.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

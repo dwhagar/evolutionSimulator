@@ -1,8 +1,9 @@
 """The command line and ``main`` (UX.11).
 
 ``evolution-simulator-gui`` (or ``python -m evolution_simulator.viewer``) opens the window. Until the
-process host (UX.7) and the setup screen (UX.17) exist the simulation runs in this process, and by
-default it is the made-up ``FakeSimulation``; ``--world`` runs the real one.
+process host (UX.7) exists the simulation runs in this process, and by default it is the made-up
+``FakeSimulation``; ``--world`` runs the real one. File > New run (the setup screen, UX.17) replaces
+either with a real world of the user's choosing.
 """
 
 from __future__ import annotations
