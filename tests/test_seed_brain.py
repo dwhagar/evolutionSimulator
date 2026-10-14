@@ -198,7 +198,7 @@ def test_seeded_founders_outlive_random_ones():
         total = 0
         for seed in range(3):
             world = populated(seed, seeded)
-            world.run(150)
+            world.run(300)  # long enough for random brains to starve (150 ticks lost nobody)
             total += len(world.animals)
         return total
 
