@@ -9,7 +9,7 @@ projected on two fixed random directions. A projection is the same for the same 
 little for a few changed digits (a child of two parents sits between them, a mutant next to its
 original) and spreads unrelated genomes about it by one unit (the standard deviation over random
 genomes is 1 on each). It is a pure function of the genome, so it is nothing to save: a loaded world
-recomputes the same keys. Each animal computes it once, the first time it is asked.
+recomputes the same keys. Each animal works it out once, when it is made.
 
 The keys of a real population are far closer together than one unit, since its members share most of
 their genes: a viewer should stretch the range it finds in the frame over its colour scale (for

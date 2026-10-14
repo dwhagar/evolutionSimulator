@@ -242,7 +242,8 @@ class AnimalTraits(BaseTraits):
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
         self.trace_brain: bool = False
-        self._family_key: tuple[float, float] | None = None
+        self.family_key: tuple[float, float] = family_key(dna)
+        """Two numbers that stay close for relatives (``lineage.family_key``), worked out once."""
         """Keep ``brain_trace`` up to date; the world turns it on for the selected animal only."""
         self.brain_trace: BrainTrace | None = None
         """The inputs, hidden values and outputs of the last brain run, while ``trace_brain``."""
@@ -596,15 +597,6 @@ class AnimalTraits(BaseTraits):
         self._decision = decision
         self._ticks_since_decision = 1
         return decision
-
-    @property
-    def family_key(self) -> tuple[float, float]:
-        """Two numbers that stay close for relatives (``lineage.family_key``), worked out once from
-        the genome the first time they are asked for."""
-        key = self._family_key
-        if key is None:
-            key = self._family_key = family_key(self.dna)
-        return key
 
     @property
     def brain_slots(self) -> tuple[int, ...]:

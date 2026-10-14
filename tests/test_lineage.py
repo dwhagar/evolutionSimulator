@@ -70,12 +70,11 @@ def test_a_diploid_genome_is_the_mean_of_its_strands():
     assert family_key(DiploidDNA.from_haploid(first)) == pytest.approx(family_key(first))
 
 
-def test_an_animal_works_its_key_out_once_and_the_view_and_frame_carry_it():
+def test_an_animal_keeps_its_key_and_the_view_and_frame_carry_it():
     world = World(WorldConfig(seed=1))
     animal = world.add_animal(animal_dna(), Vec.of(500, 500))
     key = animal.traits.family_key
     assert key == family_key(animal.traits.dna)
-    assert animal.traits.family_key is key  # cached
     view = world.animal_views()[0]
     assert (view.family_a, view.family_b) == key
     assert ANIMAL_FIELDS[-2:] == ("family_a", "family_b")
