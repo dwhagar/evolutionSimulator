@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `WORLD.11`: Plants can reach full size and seed again: soil limits count only neighbours, and founder plants that could not pay their own upkeep are redrawn, so plant populations now settle at hundreds to thousands instead of dying out. Founder animals still do not breed (`WORLD.15`). [#167](https://github.com/dwhagar/evolutionSimulator/pull/167)
 - `UX.13`: Time and speed controls in the viewer: play, pause, step, step a day, speed presets and a custom speed, the speed asked for next to the speed achieved, elapsed time and day or night, and keyboard shortcuts. [#165](https://github.com/dwhagar/evolutionSimulator/pull/165)
 - `UX.22`, `INFRA.5`: A headless run command (`python -m evolution_simulator run --until 100y`) that runs a world with no window, records history and checkpoints, and resumes a run exactly; and `ruff format` no longer rewrites Markdown. [#164](https://github.com/dwhagar/evolutionSimulator/pull/164), [#163](https://github.com/dwhagar/evolutionSimulator/pull/163)
 - `UX.7`: The simulation can run in its own process: a host that runs the session, a client with process, in-process and fake versions, back-pressure so a slow window never makes the simulation queue frames, a crash report and tests with real spawned processes. [#154](https://github.com/dwhagar/evolutionSimulator/pull/154)
