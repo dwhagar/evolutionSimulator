@@ -8,6 +8,7 @@ Written 2026-10-14 by the Foundations 1 thread.
 | Module | Contents |
 | --- | --- |
 | `dna.py` | `DNA` (immutable genome), `GenomeLayout`, `GeneSpec` and `BlockSpec` (the gene table); knows gene IDs only |
+| `diploid.py` | `DiploidDNA` (two `DNA` strands read through a `DominanceModel`), `DominanceModel`, `CODOMINANT` |
 | `layouts.py` | `ANIMAL_LAYOUT` (461 digits: 65 body, 396 brain) and `PLANT_LAYOUT` (24 digits) as plain data, and `dna_from_dict` |
 | `brain.py`, `brain_adapter.py` | The `Brain` network and the world-side inputs and outputs; see [brain.md](brain.md) |
 | `trait_defs.py` | `TraitDef` and `TraitSet`: what each trait reads from DNA, its range, scale and mutation step; `ANIMAL_TRAITS`, `PLANT_TRAITS` |
@@ -20,7 +21,7 @@ open questions in issues #2 to #11 by example; those answers are used here and l
 
 ## DNA
 
-- A genome is an **immutable** tuple of base-4 digits (0 to 3). Haploid, fixed length.
+- A genome is an **immutable** tuple of base-4 digits (0 to 3), fixed length. `DNA` is one strand (haploid); a diploid genome is two of them, see [Diploid genomes](#diploid-genomes).
 - A **gene** is a run of consecutive digits read as a big-endian base-4 number and scaled to a float
   from 0.0 to 1.0 (`dna.value(gene_id)`). A single-digit gene can instead be read as a raw category
   (`dna.digit(gene_id)`, used for `sex_strategy`).
@@ -69,6 +70,37 @@ give the 396-digit brain about 4 changes per child on its own, so the animal lay
 [#14](https://github.com/dwhagar/evolutionSimulator/issues/14) and [#15](https://github.com/dwhagar/evolutionSimulator/issues/15)
 change numbers, not code.
 
+## Diploid genomes
+
+Owner's answer to [#3](https://github.com/dwhagar/evolutionSimulator/issues/3) (`DNA.13`): every gene comes in
+two copies. `DiploidDNA(first, second, dominance=CODOMINANT)` in `diploid.py` holds two ordinary `DNA` strands
+with the same layout. Haploid is kept as an option by simply using `DNA`; both satisfy the `Genome`
+protocol in `dna.py` (`layout`, `ploidy`, `value`, `digit`, `values`, `distance`, `reproduce`), so
+`TraitSet.express`, `AnimalTraits` and `PlantTraits` take either and nothing in the trait tables changes.
+
+- **Reading.** For each gene the two strands' decoded values `a` and `b` are blended by the
+  `DominanceModel`: `(a + b) / 2 + c * |a - b| / 2`. The coefficient `c` runs from -1 to 1. `0` is
+  codominant, the plain average, and is the default; `1` makes the higher strand fully dominant, `-1` the
+  lower, and values between are partial dominance. `DominanceModel(default, {gene_id: c})` sets it per
+  gene. A single-digit category gene (`sex_strategy`) blends its digits and rounds half up. The brain
+  block blends weight by weight, so the brain is built from the decoded expressed values. A
+  homozygous genome (`DiploidDNA.from_haploid`) expresses exactly as the haploid one, whatever the model.
+- **Making a child.** `reproduce(partner, rng, ...)` follows meiosis: each parent makes a gamete
+  (`gamete(rng)`: its own two strands recombined with `crossover_linked`, or any strategy passed as
+  `crossover=`), each gamete is mutated, and the child takes one from each parent. With no partner the
+  two strands are copied and mutated separately (asexual; `DiploidDNA(g, g)` with `g = parent.gamete(rng)`
+  is selfing). The child inherits the first parent's dominance model.
+- **Mutation counts.** Expected changes per segment (the layout defaults and `mutations_per_segment`)
+  stay *per child*, so each of the two strands gets half; a per-digit `mutation_rate` applies to every
+  digit of both strands as it stands. All other mutation settings (`position_bias`, `locality`,
+  `gene_biases`) pass straight through.
+- **Other behaviour.** `distance` is the mean fraction of differing digits over the closer pairing of
+  strands (the order does not matter, which suits mate choice, `REPRO.4`). Equality and hash ignore strand
+  order. `to_dict` / `DiploidDNA.from_dict` save both strands (each checks its layout version) and the
+  dominance model.
+- **Not decided.** Which species are diploid. Nothing creates diploid organisms yet; the world loop picks
+  `DNA` or `DiploidDNA` when it creates the first generation.
+
 ## Traits
 
 Trait definitions are data (`trait_defs.py`): each `TraitDef` names the genes it reads, its range, scale
@@ -110,7 +142,7 @@ way and is easy to change.
 | Issue | Research default | Built | How to change |
 | --- | --- | --- | --- |
 | #2 genome detail | Gene-level | Base-4 digit sequence with genes as slices (closest to the "sequence" level) | Traits read genes only through `value` / `digit`, so another encoding changes `decode_*` only |
-| #3 ploidy | Diploid, haploid option | Haploid | A diploid genome would hold two `DNA` and add gamete and fertilise steps; traits read through `TraitDef.express` and would not change |
+| #3 ploidy | Diploid, haploid option | Both: `DNA` is haploid, `DiploidDNA` is diploid (`DNA.13`, owner chose diploid) | See [Diploid genomes](#diploid-genomes); traits read through the `Genome` protocol and did not change |
 | #4 reproduction | Both modes, no sexes | Both modes, plus a `sex_strategy` digit that shifts temperament and mating cost | The digit is read in one place in `AnimalTraits.__init__` and `consume_mating_cost` |
 | #5 length | Fixed | Fixed | Gene IDs are not reserved yet; layout position is the identity |
 | #6 trait set | Fixed | Fixed (16 animal genes plus the brain block, 6 plant genes) | Add a `GeneSpec` row to the layout and a `TraitDef` row that reads it |
