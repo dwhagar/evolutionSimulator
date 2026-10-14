@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "evolution-simulator"
+version = "0.1.0"
+description = "An evolution simulator written in Python."
+readme = "README.md"
+license = "CC0-1.0"
+license-files = ["LICENSE"]
+requires-python = ">=3.11"
+authors = [{ name = "dwhagar" }]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff>=0.6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/evolution_simulator"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
