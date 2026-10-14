@@ -14,6 +14,12 @@ The rules that keep the window alive (``docs/design/ux.md``, "Frame pacing"):
   held. A slow window therefore slows nothing but itself. A dead animal's last detail is always sent.
 - **Events are capped.** At most ``max_events_per_second`` world events are kept in a second (the
   rest are counted in ``EventBatch.dropped``), and are sent in batches ``event_interval`` apart.
+- **History and the run (UX.31).** The host keeps the statistics ``Recorder`` of its world and tells
+  the viewer about it with ``HistoryBatch`` messages: the whole history first (and again on
+  ``RequestHistory``, or when the viewer fell too far behind to be sent every sample), then the new
+  single-day samples at most every ``history_interval``. They wait, never get lost, while the viewer
+  is behind. With a ``Run`` (a ``Prepared`` recipe) the host also autosaves checkpoints into the run
+  folder, saves on ``SaveNow`` and once more when it shuts down, and says so in ``RunNotice``.
 - **Failures are reported, not swallowed.** An exception in the simulation becomes a ``Crashed``
   message with the traceback, then the host stops. A command the session refuses becomes a
   ``CommandRejected``.
@@ -27,22 +33,29 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from multiprocessing.connection import Connection
 
+from evolution_simulator.history import Recorder, Sample
+from evolution_simulator.runs import Autosaver, Run
 from evolution_simulator.session.commands import CommandError
 from evolution_simulator.session.messages import (
     Ack,
     CommandRejected,
     Crashed,
     EventBatch,
+    HistoryBatch,
     HostInfo,
     Outgoing,
     Ready,
+    RequestHistory,
     RequestPlants,
+    RunNotice,
+    SaveNow,
     SetFrameRate,
     Shutdown,
     Stopped,
 )
 from evolution_simulator.session.protocol import Simulation
 from evolution_simulator.session.session import Session, SessionEvent, SessionRules, StatusChanged
+from evolution_simulator.session.specs import Prepared
 
 
 @dataclass(frozen=True)
@@ -55,6 +68,13 @@ class HostRules:
     max_buffered_events: int = 1000
     """Events held while the viewer is behind; more are dropped."""
     info_interval: float = 1.0
+    record: bool = True
+    """Keep a statistics ``Recorder`` for the world (one is used as given if the recipe made one)
+    and send its history to the viewer."""
+    history_interval: float = 0.25
+    """Least real time between history batches."""
+    max_pending_samples: int = 400
+    """New samples held for a viewer that is behind; past this the next batch is a full history."""
     idle_wait: float = 0.005
     """How long the process loop sleeps (waking at once for a command) when nothing was due."""
     session: SessionRules = field(default_factory=SessionRules)
@@ -66,6 +86,8 @@ class HostRules:
             )
         if self.event_interval < 0.0 or self.info_interval <= 0.0 or self.idle_wait < 0.0:
             raise ValueError("Intervals must not be negative (info_interval must be positive).")
+        if self.history_interval < 0.0 or self.max_pending_samples < 1:
+            raise ValueError("history_interval must not be negative; max_pending_samples 1+.")
 
 
 class Host:
@@ -74,6 +96,9 @@ class Host:
         session: Session,
         rules: HostRules | None = None,
         clock: Callable[[], float] = time.monotonic,
+        recorder: Recorder | None = None,
+        run: Run | None = None,
+        resumed_from: str | None = None,
     ) -> None:
         self.session = session
         self.rules = rules if rules is not None else HostRules()
@@ -96,6 +121,22 @@ class Host:
         self.busy = False
         """The last ``step`` ran ticks or sent something, so the loop should not sleep."""
         session.subscribe(self._on_event)
+        # History and the run (UX.31).
+        if recorder is None and self.rules.record:
+            recorder = Recorder(session.simulation)  # type: ignore[arg-type]
+        self.recorder = recorder
+        self.run = run
+        self._resumed_from = resumed_from
+        self._pending_samples: list[Sample] = []
+        self._need_full = recorder is not None
+        self._last_history_at = float("-inf")
+        if recorder is not None:
+            recorder.add_sample_listener(self._on_sample)
+        self._autosaver: Autosaver | None = None
+        if run is not None:
+            self._autosaver = run.autosave(session.simulation, recorder)  # type: ignore[arg-type]
+        self._manual_saves = 0
+        self._noticed_saves: int | None = None
 
     # -------------------------------------------------------------------------
     # From the viewer
@@ -111,6 +152,19 @@ class Host:
                 self._rejected.append(CommandRejected(message, str(error)))
         elif isinstance(message, RequestPlants):
             self.session.request_plants()
+        elif isinstance(message, RequestHistory):
+            if self.recorder is None:
+                self._rejected.append(CommandRejected(message, "No history is being recorded."))
+            else:
+                self._need_full = True
+        elif isinstance(message, SaveNow):
+            if self.run is None:
+                self._rejected.append(
+                    CommandRejected(message, "This simulation is not saved into a run.")
+                )
+            else:
+                self.run.checkpoint(self.session.simulation, self.recorder)  # type: ignore[arg-type]
+                self._manual_saves += 1
         elif isinstance(message, Shutdown):
             self._stopping = True
         else:
@@ -144,6 +198,46 @@ class Host:
             return
         self._events.append(event)
 
+    def _on_sample(self, sample: Sample) -> None:
+        self._pending_samples.append(sample)
+        if len(self._pending_samples) > self.rules.max_pending_samples:
+            self._pending_samples.clear()
+            self._need_full = True  # too far behind to send them one by one
+
+    def _saves(self) -> int:
+        return self._manual_saves + (self._autosaver.written if self._autosaver else 0)
+
+    def _history_batch(self) -> HistoryBatch:
+        assert self.recorder is not None
+        if self._need_full:
+            self._need_full = False
+            self._pending_samples.clear()
+            return HistoryBatch(self.recorder.rules, (), self.recorder.history())
+        samples = tuple(self._pending_samples)
+        self._pending_samples.clear()
+        return HistoryBatch(self.recorder.rules, samples)
+
+    def _run_notice(self) -> RunNotice:
+        assert self.run is not None
+        checkpoints = self.run.checkpoints()
+        return RunNotice(
+            self.run.id,
+            self.run.name,
+            str(self.run.path),
+            len(checkpoints),
+            checkpoints[-1].name if checkpoints else "",
+            self._saves(),
+            self._resumed_from,
+        )
+
+    def shutdown(self) -> None:
+        """Leave the run with a last checkpoint and stop listening. Safe to call twice."""
+        autosaver, self._autosaver = self._autosaver, None
+        if autosaver is not None:
+            autosaver.finish()
+        if self.recorder is not None:
+            self.recorder.remove_sample_listener(self._on_sample)
+
     def first_message(self) -> Ready:
         """The message that tells the viewer the simulation is up, with a first full frame."""
         self._sent += 1
@@ -153,11 +247,14 @@ class Host:
         """One pass of the loop. Returns what to send, in order."""
         out: list[Outgoing] = []
         if self._stopping:
+            self.shutdown()
             self.stopped = True
             self.busy = False
             return [Stopped()]
         allow = self._can_send()
         update = self.session.update(frames=allow)
+        if self.recorder is not None:
+            self.recorder.observe()  # a simulation with no step listener is sampled here
         now = self._clock()
         if self._rejected:
             out.extend(self._rejected)
@@ -181,6 +278,19 @@ class Host:
             self._last_batch_at = now
             out.append(EventBatch(tuple(self._events), self._events_dropped))
             self._events.clear()
+        if (
+            self.recorder is not None
+            and (self._need_full or self._pending_samples)
+            and now - self._last_history_at >= self.rules.history_interval
+            and self._can_send()
+        ):
+            self._sent += 1
+            self._last_history_at = now
+            out.append(self._history_batch())
+        if self.run is not None and self._noticed_saves != self._saves() and self._can_send():
+            self._sent += 1
+            self._noticed_saves = self._saves()
+            out.append(self._run_notice())
         if now - self._last_info_at >= self.rules.info_interval:
             self._last_info_at = now
             out.append(
@@ -195,8 +305,29 @@ class Host:
         return out
 
 
+def make_host(
+    made: Simulation | Prepared,
+    rules: HostRules | None = None,
+    clock: Callable[[], float] | None = None,
+) -> Host:
+    """A ``Host`` for what a recipe made: a bare simulation, or a ``Prepared`` one with its recorder
+    and run."""
+    rules = rules if rules is not None else HostRules()
+    kwargs = {} if clock is None else {"clock": clock}
+    prepared = made if isinstance(made, Prepared) else Prepared(made)
+    session = Session(prepared.simulation, rules=rules.session, **kwargs)  # type: ignore[arg-type]
+    return Host(
+        session,
+        rules,
+        recorder=prepared.recorder,
+        run=prepared.run,
+        resumed_from=prepared.resumed_from,
+        **kwargs,  # type: ignore[arg-type]
+    )
+
+
 def run_host(
-    recipe: Callable[[], Simulation],
+    recipe: Callable[[], Simulation | Prepared],
     connection: Connection,
     rules: HostRules | None = None,
 ) -> None:
@@ -209,7 +340,7 @@ def run_host(
     rules = rules if rules is not None else HostRules()
     try:
         try:
-            host = Host(Session(recipe(), rules=rules.session), rules)
+            host = make_host(recipe(), rules)
             connection.send(host.first_message())
             while not host.stopped:
                 while connection.poll(0):

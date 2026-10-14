@@ -390,7 +390,7 @@ def calling_world(**config):
 
 
 def test_calls_can_be_turned_off():
-    world = World(WorldConfig(calls_enabled=False))
+    world = World(world_config(calls_enabled=False))
     add_caller(world)
     listener = world.add_animal(animal_dna(**EARS), Vec.of(515, 500), heading=0.0)
     world.run(3)
@@ -450,7 +450,8 @@ def test_an_alarm_call_wakes_a_sleeper_who_hears_it():
 
 def test_a_disturbed_animal_stays_up_all_night_and_sleeps_again_the_next():
     world, listener = night_with_alarm(Vec.of(508, 500))
-    world.config = replace(world.config, calls_enabled=False)  # the caller falls silent
+    silent = replace(world.config.traits.world, calls_enabled=False)
+    world.config = world.config.with_rules(world=silent)  # the caller falls silent
     world.run(20)
     assert world.is_night and not listener.asleep
     world.run(40)  # day

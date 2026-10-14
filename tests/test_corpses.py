@@ -31,6 +31,10 @@ def test_the_rules_are_checked():
         CorpseRules(scent_meat=float("nan"))
 
 
+def test_a_corpse_holds_the_meat_share_of_the_energy_store():
+    assert CorpseRules(meat_share=0.25).meat(80.0) == 20.0
+
+
 def test_a_dead_animal_leaves_a_corpse_with_meat():
     world = make()
     prey = world.add_animal(animal_dna(brain=STILL, size=SMALL), HERE, heading=0.0)

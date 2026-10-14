@@ -37,6 +37,8 @@ from dataclasses import dataclass, field, replace
 
 from evolution_simulator.config import (
     DEFAULT_RULES,
+    AttackRules,
+    CorpseRules,
     DayCycle,
     LearningRules,
     PlantRules,
@@ -52,8 +54,7 @@ from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
-from evolution_simulator.world.combat import AttackRules
-from evolution_simulator.world.corpses import Corpse, CorpseRules
+from evolution_simulator.world.corpses import Corpse
 from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
@@ -92,28 +93,43 @@ class WorldConfig:
 
     bounds: Bounds = field(default_factory=Bounds)
     seed: int = 0
-    graze_amount: float = 5.0
-    """Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer
-    tick takes proportionally less or more."""
-    mating_reach: float = 3.0
-    """Two animals mate only if their centres are this close or closer."""
-    birth_scatter: float = 1.0
-    """A litter appears within this distance of its mother."""
-    attack: AttackRules = field(default_factory=AttackRules)
-    """Bites (``BRAIN.10``)."""
-    corpses: CorpseRules = field(default_factory=CorpseRules)
-    """What the dead leave: meat that rots and that meat eaters smell and eat (``WORLD.12``)."""
-    calls_enabled: bool = True
-    """Whether animals can call (their brains' call outputs, paid for with ``call_energy_cost``).
-    A call is made only by an animal with a call radius (the encoder gene) that can afford it,
-    so a brain that calls on every tick starves itself; seeded founders do not call at all and
-    calling has to be evolved. Turn it off to study a silent world."""
     traits: TraitRules = DEFAULT_RULES
-    """The tuning constants of the organisms' formulas (``TRAIT.3``): body, behaviour, brain costs,
-    reproduction, recovery, plants and sense costs."""
+    """The tuning constants of a run (``TRAIT.3``, ``TRAIT.10``, ``TRAIT.11``): body, behaviour,
+    brain costs, reproduction, recovery, plants, sense costs, time, day and sleep, learning, bites,
+    corpses and the world's grazing, mating reach, birth scatter and calls."""
     max_animals: int = 1000
     max_plants: int = 5000
     """Safety caps so a run cannot grow without limit; births stop at the cap."""
+
+    @property
+    def graze_amount(self) -> float:
+        """Biomass an animal can take from a plant in one reference tick (``traits.world``)."""
+        return self.traits.world.graze_amount
+
+    @property
+    def mating_reach(self) -> float:
+        """Two animals mate only if their centres are this close (``traits.world``)."""
+        return self.traits.world.mating_reach
+
+    @property
+    def birth_scatter(self) -> float:
+        """A litter appears within this distance of its mother (``traits.world``)."""
+        return self.traits.world.birth_scatter
+
+    @property
+    def calls_enabled(self) -> bool:
+        """Whether animals can call (``traits.world``); off studies a silent world."""
+        return self.traits.world.calls_enabled
+
+    @property
+    def attack(self) -> AttackRules:
+        """Bites (``BRAIN.10``). Part of the trait rules (``TRAIT.11``)."""
+        return self.traits.attack
+
+    @property
+    def corpses(self) -> CorpseRules:
+        """What the dead leave (``WORLD.12``). Part of the trait rules (``TRAIT.11``)."""
+        return self.traits.corpses
 
     @property
     def sensing(self) -> SensingRules:
@@ -165,10 +181,6 @@ class WorldConfig:
         return self.with_rules(time=time)
 
     def __post_init__(self) -> None:
-        for name in ("graze_amount", "mating_reach", "birth_scatter"):
-            value = getattr(self, name)
-            if not math.isfinite(value) or value < 0.0:
-                raise ValueError(f"{name} must be zero or more, got {value}.")
         if self.max_animals < 0 or self.max_plants < 0:
             raise ValueError("Population caps must not be negative.")
 

@@ -4,41 +4,16 @@ Every animal that dies leaves a corpse at the place it died: a store of meat tha
 that animals able to digest meat eat from when their brain says "eat or attack" and no plant is
 underfoot. A corpse is smelled (and seen) by meat eaters as something to eat, so a hunter finds its
 kill again and a scavenger finds what others left. Corpses make no sound and do not crowd.
+
+``CorpseRules`` lives in ``config.py`` (``TRAIT.11``) and is re-exported here.
 """
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
-
+from evolution_simulator.config import CorpseRules
 from evolution_simulator.world.vector import Vec
 
-
-@dataclass(frozen=True)
-class CorpseRules:
-    meat_share: float = 0.5
-    """Share of a dead animal's maximum energy that is left as meat."""
-    bite: float = 25.0
-    """Meat one animal can take from a corpse in one reference tick (an hour)."""
-    rot_halflife: float = 72.0
-    """Reference ticks (hours) for half the meat to rot away."""
-    scent_meat: float = 100.0
-    """A corpse with this much meat or more can be smelled as far as a meat eater's smell reaches;
-    one with less is smelled from proportionally closer, like a plant's biomass."""
-    gone_below: float = 1.0
-    """A corpse with less meat than this is removed."""
-
-    def __post_init__(self) -> None:
-        for name in ("meat_share", "bite", "rot_halflife", "scent_meat", "gone_below"):
-            value = getattr(self, name)
-            if not math.isfinite(value) or value < 0.0:
-                raise ValueError(f"{name} must be zero or more, got {value}.")
-        if self.rot_halflife == 0.0 or self.scent_meat == 0.0:
-            raise ValueError("rot_halflife and scent_meat must be above zero.")
-
-    def meat(self, max_energy: float) -> float:
-        """The meat a dead animal with this energy store leaves."""
-        return self.meat_share * max_energy
+__all__ = ["Corpse", "CorpseRules"]
 
 
 class Corpse:

@@ -10,7 +10,9 @@ or under a test, and the core never imports Qt or numpy. The pieces:
 - ``Simulation``: what the session needs from a world (``World`` has all of it).
 - ``SimClient`` (``ProcessClient``, ``InProcessClient``, ``fake_client``), ``Host`` and ``run_host``:
   the simulation in its own process, the viewer's one way to reach it (UX.7); ``messages`` holds
-  what they say to each other and ``WorldSpec`` / ``FakeSpec`` are picklable recipes for a simulation.
+  what they say to each other and ``WorldSpec`` / ``FakeSpec`` / ``NewRunSpec`` / ``ResumeSpec`` are
+  picklable recipes for a simulation. The host also keeps the statistics history (``HistoryBatch``) and
+  the run folder (``RunNotice``, ``SaveNow``) of its world (UX.31).
 """
 
 from evolution_simulator.session.client import (
@@ -32,15 +34,19 @@ from evolution_simulator.session.commands import (
     Step,
 )
 from evolution_simulator.session.fake import FakeSimulation
-from evolution_simulator.session.host import Host, HostRules, run_host
+from evolution_simulator.session.host import Host, HostRules, make_host, run_host
 from evolution_simulator.session.messages import (
     Ack,
     CommandRejected,
     Crashed,
     EventBatch,
+    HistoryBatch,
     HostInfo,
     Ready,
+    RequestHistory,
     RequestPlants,
+    RunNotice,
+    SaveNow,
     SetFrameRate,
     Shutdown,
     Stopped,
@@ -64,7 +70,7 @@ from evolution_simulator.session.snapshot import (
     Frame,
     Status,
 )
-from evolution_simulator.session.specs import FakeSpec, WorldSpec
+from evolution_simulator.session.specs import FakeSpec, NewRunSpec, Prepared, ResumeSpec, WorldSpec
 
 __all__ = [
     "ANIMAL_COLUMNS",
@@ -85,16 +91,23 @@ __all__ = [
     "FakeSimulation",
     "FakeSpec",
     "Frame",
+    "HistoryBatch",
     "Host",
     "HostInfo",
     "HostRules",
     "InProcessClient",
     "Inbox",
+    "NewRunSpec",
     "Pause",
     "Play",
+    "Prepared",
     "ProcessClient",
     "Ready",
+    "RequestHistory",
     "RequestPlants",
+    "ResumeSpec",
+    "RunNotice",
+    "SaveNow",
     "Select",
     "Session",
     "SessionEvent",
@@ -111,5 +124,6 @@ __all__ = [
     "Update",
     "WorldSpec",
     "fake_client",
+    "make_host",
     "run_host",
 ]

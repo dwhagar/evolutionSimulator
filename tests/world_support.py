@@ -1,5 +1,7 @@
 """Helpers for the world tests: genomes with chosen genes and brains with fixed behaviour."""
 
+from dataclasses import replace
+
 from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, BRAIN_GENE, PLANT_LAYOUT
@@ -53,8 +55,10 @@ TEST_RULES = DEFAULT_RULES
 
 def world_config(**kwargs) -> WorldConfig:
     """A ``WorldConfig`` that also takes the settings that now live in the trait rules
-    (``TRAIT.10``): ``day_cycle``, ``learning``, ``sleep``, ``plants`` (the plant limits) and
-    ``time_scale``, so tests can name them the way they always did."""
+    (``TRAIT.10``, ``TRAIT.11``): ``day_cycle``, ``learning``, ``sleep``, ``plants`` (the plant
+    limits), ``attack``, ``corpses`` and ``time_scale``, and ``graze_amount``, ``mating_reach``,
+    ``birth_scatter`` and ``calls_enabled`` (the ``world`` section), so tests can name them the way
+    they always did."""
     rules = {
         new: kwargs.pop(old)
         for old, new in (
@@ -62,11 +66,20 @@ def world_config(**kwargs) -> WorldConfig:
             ("learning", "learning"),
             ("sleep", "sleep"),
             ("plants", "plant_limits"),
+            ("attack", "attack"),
+            ("corpses", "corpses"),
         )
         if old in kwargs
     }
+    world = {
+        name: kwargs.pop(name)
+        for name in ("graze_amount", "mating_reach", "birth_scatter", "calls_enabled")
+        if name in kwargs
+    }
     time_scale = kwargs.pop("time_scale", None)
     config = WorldConfig(**kwargs).with_rules(**rules)
+    if world:
+        config = config.with_rules(world=replace(config.traits.world, **world))
     return config if time_scale is None else config.with_time_scale(time_scale)
 
 

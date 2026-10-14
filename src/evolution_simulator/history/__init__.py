@@ -5,6 +5,7 @@ buffers; ``recorder.history()`` is a ``HistorySamples`` that a viewer reads. No 
 dependencies. See ``recorder.py``.
 """
 
+from evolution_simulator.history.mirror import HistoryMirror
 from evolution_simulator.history.recorder import (
     DEFAULT_TIERS,
     Observable,
@@ -12,6 +13,7 @@ from evolution_simulator.history.recorder import (
     RecorderRules,
     TierRule,
     load_history_data,
+    push_sample,
     save_history,
 )
 from evolution_simulator.history.samples import (
@@ -26,6 +28,7 @@ from evolution_simulator.history.samples import (
 __all__ = [
     "DEFAULT_TIERS",
     "HISTORY_FORMAT",
+    "HistoryMirror",
     "HistorySamples",
     "Observable",
     "Recorder",
@@ -36,5 +39,6 @@ __all__ = [
     "TierRule",
     "is_flow",
     "load_history_data",
+    "push_sample",
     "save_history",
 ]

@@ -482,6 +482,40 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 - **Tests.** `tests/test_charts.py`: the helpers, the history path (backend, controller), and every
   tab against a real ten-day world history and made-up ones, offscreen.
 
+### As built: history and the run through the host (`UX.31`)
+
+- **Messages added** (`session/messages.py`; `Frame`, `Status` and the commands are unchanged). Viewer to
+  host: `RequestHistory` (send the whole history again) and `SaveNow` (checkpoint the run now; refused
+  when there is no run). Host to viewer: `HistoryBatch(rules, samples, full)` and
+  `RunNotice(run_id, name, path, checkpoints, last_checkpoint, saved, resumed_from)`. Both count as in
+  flight and are acknowledged like frames, so a slow window holds them back and loses nothing.
+- **History.** `Host` keeps a `Recorder` (UX.8) for its world: one the recipe made, or its own unless
+  `HostRules.record` is false. The first step after `Ready` sends `HistoryBatch(full=...)`, the whole
+  `HistorySamples` (empty for a new run, the recorded past for a resumed one). After that every new
+  single-day sample goes out in a batch at most every `history_interval` (0.25 s), a few at a time at high
+  speed. A viewer that has fallen more than `max_pending_samples` (400) behind is sent the whole history
+  instead (the same message with `full`), as is one that sends `RequestHistory`. A `Sample` is about 2 KB
+  and a full history up to about 800 KB (230 KB after 95 days), so the whole history is the rare case.
+- **The viewer's copy.** `history.HistoryMirror` merges the new samples into the same ring buffers the
+  recorder uses (`history.push_sample`), so after any number of samples its `history()` equals the
+  recorder's. The clients do this: `Inbox.history` is that `HistorySamples`, set in the poll that brought
+  news and `None` otherwise, which is exactly what `Batch.history` carries in `viewer.backend`; an
+  adapter from `Inbox` to `Batch` copies it across. `Inbox.run` is the newest `RunNotice`.
+  `Recorder.add_sample_listener` is the hook that lets the host see each sample.
+- **A run.** A recipe may return `Prepared(simulation, recorder, run, resumed_from)` instead of a bare
+  simulation. `NewRunSpec(root, config, animals, plants, name)` creates a world and a run folder in the run
+  store (UX.10) with its first checkpoint; `ResumeSpec(root, run_id="latest", checkpoint=None)` restores a
+  run's newest readable checkpoint with its recorder. With a run the host autosaves (the store's own rules:
+  every few simulated days and no oftener than a minimum of real time), checkpoints on `SaveNow`, and
+  writes one last checkpoint when it shuts down (a `Shutdown` message, or closing an `InProcessClient`),
+  and sends a `RunNotice` at the start and after each checkpoint. A `ProcessClient` that is closed waits
+  `join_timeout` (5 s) for that last checkpoint before it ends the process; a checkpoint is written to a
+  scratch folder and moved into place, so one cut off then leaves the previous one intact.
+- **Tests.** `tests/test_host_history.py` (the batches, back-pressure, the overflow, a hand-made
+  recorder, a run saved and resumed in process and over a real pipe) and
+  `tests/test_history_mirror.py` (the mirror equals the recorder through every tier, including the last
+  one's merging).
+
 ### As built: the Windows package (`UX.19`)
 
 - **Files.** `packaging/entry.py` is the program PyInstaller freezes; `packaging/evolutionSimulator.spec`
