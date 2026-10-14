@@ -157,10 +157,9 @@ def test_a_config_with_nothing_switched_on_round_trips():
         seed=4,
         bounds=Bounds((80.0, 90.0)),
         day_cycle=None,
-        learning=None,
         calls_enabled=False,
         max_animals=7,
-    )
+    ).with_rules(learning=None)
     world = World(config)
     world.populate(animals=5, plants=20)
     world.run(30)
@@ -359,6 +358,17 @@ def test_an_older_format_is_upgraded_by_the_migration_chain(monkeypatch):
     monkeypatch.setattr(saves, "_MIGRATIONS", {FORMAT_VERSION: one_to_two})
     restored = world_from_dict(old)
     assert_same_world(restored, world)
+
+
+def test_a_format_1_save_has_its_learning_rules_moved_into_the_trait_rules():
+    world = rich_world_at(10)
+    old = world_to_dict(world)
+    config = old["world"]["config"]
+    config["learning"] = config["traits"].pop("learning")  # where format 1 kept it
+    old["format_version"] = 1
+    restored = world_from_dict(old)
+    assert_same_world(restored, world)
+    assert restored.config.learning == world.config.learning
 
 
 def test_an_older_format_with_no_migration_is_refused(monkeypatch):

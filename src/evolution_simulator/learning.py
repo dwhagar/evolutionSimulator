@@ -8,7 +8,7 @@ lost when it dies (owner answer to question 5 of issue 36).
 Nothing here knows about the world or the traits: ``Learner`` is told the creature's state each tick
 (``State``) and each decision (``record``), and ``nightly_update`` is a pure function. The pieces:
 
-* ``LearningRules``: the log size, the reward window and weights, the cap on one night's change.
+* ``LearningRules`` (now in ``config.py``, ``TraitRules.learning``): the log size, the reward window and weights, the cap on one night's change.
   Starting values from the design note to calibrate (``TRAIT.3``, ``WORLD.2``).
 * ``reward``: a weighted sum of what happened over the window after a decision (energy gained,
   health lost, matings, a threat falling away), minus the usual level at night.
@@ -20,57 +20,17 @@ Nothing here knows about the world or the traits: ``Learner`` is told the creatu
 
 from __future__ import annotations
 
-import math
 import statistics
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from evolution_simulator.config import LearningRules
+
 if TYPE_CHECKING:
     from evolution_simulator.world.organisms import Animal
     from evolution_simulator.world.world import World
-
-
-@dataclass(frozen=True)
-class LearningRules:
-    """The world's settings for learning; move into the constants config with ``TRAIT.3``."""
-
-    log_size: int = 64
-    """Decisions kept in the day log; the oldest are dropped when it is full."""
-    reward_window: float = 10.0
-    """Reference ticks (hours) after a decision over which its outcome is counted; the learner
-    turns it into ticks with the world's ``dt`` (at least one), so the length of a tick does not
-    change what an animal learns from (``WORLD.16``)."""
-    energy_weight: float = 1.0
-    """Reward per unit of energy-store fraction gained (a fall counts against)."""
-    health_weight: float = 2.0
-    """Penalty per unit of damage-capacity fraction lost."""
-    mating_weight: float = 1.0
-    """Reward for each mating achieved."""
-    safety_weight: float = 0.5
-    """Reward per unit that the threat input falls after a threat was sensed."""
-    night_cap: float = 0.5
-    """The most any one number may change in one night (an eighth of a weight's range)."""
-    fade: float = 0.0
-    """Share of the learned offsets lost each night (forgetting); off by default."""
-    max_offset: float = 2.0
-    """The most a number's total learned change may reach, so repeated nights cannot run away."""
-
-    def __post_init__(self) -> None:
-        if self.log_size < 1:
-            raise ValueError("log_size must be at least 1.")
-        if not (math.isfinite(self.reward_window) and self.reward_window > 0.0):
-            raise ValueError(f"reward_window must be above zero, got {self.reward_window}.")
-        for name in ("energy_weight", "health_weight", "mating_weight", "safety_weight"):
-            if not math.isfinite(getattr(self, name)):
-                raise ValueError(f"{name} must be a finite number.")
-        for name in ("night_cap", "max_offset"):
-            value = getattr(self, name)
-            if not (math.isfinite(value) and value >= 0.0):
-                raise ValueError(f"{name} must be zero or more, got {value}.")
-        if not 0.0 <= self.fade <= 1.0:
-            raise ValueError(f"fade must be between 0 and 1, got {self.fade}.")
 
 
 @dataclass(frozen=True)

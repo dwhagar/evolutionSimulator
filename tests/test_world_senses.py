@@ -481,7 +481,7 @@ def test_the_world_senses_only_when_the_brain_will_look():
             return super().perceive(world, animal)
 
     senses = Counting()
-    world = World(WorldConfig(day_cycle=None, learning=None), senses=senses)
+    world = World(WorldConfig(day_cycle=None).with_rules(learning=None), senses=senses)
     animal = world.add_animal(animal_dna(brain={}), HERE, heading=0.0)
     animal.traits.decision_interval = 3
     world.run(9)

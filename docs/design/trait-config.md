@@ -29,10 +29,12 @@ on 60 random genomes over 40 ticks).
   layout depends on them. Changing a range is a decision about the genes, not a tuning of a run.
 - **The fixed shape of a formula**: half of a care fraction per parent, the one half in a half-life, a
   square in the cost of a sense. Only numbers somebody might want to retune are fields.
-- **Settings that already have their own object**: `LearningRules` (`learning.py`), `SleepRules`
-  (`world/sleep.py`), `DayCycle`, `TimeScale`, `PlantRules` (the world's seeding rules) and the
-  `WorldConfig` fields such as `graze_amount`. They keep their own place; moving them is a later,
-  separate decision.
+- **Settings that still have their own object** (`TRAIT.10` is moving them in, one group per change):
+  `SleepRules` (`world/sleep.py`), `DayCycle`, `TimeScale`, `PlantRules` (the world's soil and shade
+  limits) and the `WorldConfig` fields such as `graze_amount`. `LearningRules` has moved: it lives in
+  `config.py` as `TraitRules.learning` (`None` turns learning off), `WorldConfig.learning` reads it and
+  `AnimalTraits.learning_rules` starts from it. `WorldConfig.with_rules(**sections)` gives a config
+  with some sections replaced.
 
 ## Where each old name went
 
@@ -242,3 +244,19 @@ The constants of the sensing step: starting values from the design note, for cal
 | `weak_smell` | `0.5` | Fraction of the smell range at which prey and threats can be smelled (a presence, not a precise report). A placeholder: the design note gives no number. |
 | `crowding_reference` | `8` | This many animals in reach gives a crowding input of 1. |
 | `closeness_noise` | `0.03` | Standard deviation of the error on every closeness report (input units). |
+
+### `learning` (`LearningRules`, or `None`)
+
+Learning during life (`BRAIN.24`): the log, the reward and the size of a night's change. `None` turns learning off. Moved here from `learning.py` by `TRAIT.10` (`learning.py` still re-exports the name through its import).
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `log_size` | `64` | Decisions kept in the day log; the oldest are dropped when it is full. |
+| `reward_window` | `10.0` | Reference ticks (hours) after a decision over which its outcome is counted. |
+| `energy_weight` | `1.0` | Reward per unit of energy-store fraction gained. |
+| `health_weight` | `2.0` | Penalty per unit of damage-capacity fraction lost. |
+| `mating_weight` | `1.0` | Reward for each mating achieved. |
+| `safety_weight` | `0.5` | Reward per unit that the threat input falls after a threat was sensed. |
+| `night_cap` | `0.5` | The most any one number may change in one night. |
+| `fade` | `0.0` | Share of the learned offsets lost each night (forgetting). |
+| `max_offset` | `2.0` | The most a number's total learned change may reach. |

@@ -73,7 +73,7 @@ def test_the_rules_are_frozen_hashable_and_compare_by_value():
 
 def test_every_organism_rule_is_read_by_the_formulas():
     # A rule nobody reads is a constant left behind: each field of the organism sections is read
-    # by traits.py, sense_genes.py or the world's senses (the sensing section is exercised by the sensing tests).
+    # by traits.py, sense_genes.py or the world's senses (the sensing and learning sections are exercised by their own tests).
     import pathlib
 
     source = ""
@@ -83,7 +83,7 @@ def test_every_organism_rule_is_read_by_the_formulas():
     unused = []
     for section in dataclasses.fields(TraitRules):
         for item in dataclasses.fields(getattr(DEFAULT_RULES, section.name)):
-            if item.name not in source and section.name not in ("time", "sensing"):
+            if item.name not in source and section.name not in ("time", "sensing", "learning"):
                 unused.append(f"{section.name}.{item.name}")
     assert unused == []
 

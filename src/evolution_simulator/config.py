@@ -10,14 +10,17 @@ arrives. ``DEFAULT_RULES`` is what everything uses unless it is given another.
 * An ``AnimalTraits`` or ``PlantTraits`` takes ``rules=`` and keeps it, so two runs with different
   rules can sit side by side and a test can change one number: ``replace(rules.life, wear_base=0.05)``
   and ``replace(DEFAULT_RULES, life=...)`` give a new tree without touching the default.
-* ``WorldConfig.traits`` holds the rules for a run, next to the other settings of the world
-  (``sensing``, ``learning``, ``sleep``, ``day_cycle``, ``time_scale``).
+* ``WorldConfig.traits`` holds the rules for a run. The settings of the world that used to sit
+  beside it are moving into the tree (``TRAIT.10``): ``learning`` is there now, and ``sleep``,
+  ``day_cycle``, ``time_scale`` and the plants' soil and shade limits follow. ``WorldConfig`` reads
+  them from the tree, so a run has one source of tuning constants.
 * What is **not** here: the ranges of the traits (how far a gene stretches a trait, such as
   ``SIGHT_REACH`` or ``COOLDOWN_DAYS_RANGE``), which are the trait table's data (``trait_defs.py``);
   the fixed structure of a formula (half of a care fraction per parent, a half-life's one half); and
-  the settings that already have their own rules object (``LearningRules``, ``SleepRules``,
-  ``DayCycle``, ``TimeScale``). ``SensingRules`` (the sensing step's light, sleep, smell and noise
-  numbers) lives here as ``TraitRules.sensing``; ``WorldConfig.sensing`` reads it from there.
+  the settings that still have their own rules object (``SleepRules``, ``DayCycle``, ``TimeScale``).
+  ``SensingRules`` (the sensing step's light, sleep, smell and noise numbers) lives here as
+  ``TraitRules.sensing`` and ``LearningRules`` as ``TraitRules.learning``; ``WorldConfig.sensing`` and
+  ``WorldConfig.learning`` read them from there.
 
 Each field's meaning is next to it. Time is in **reference ticks** (an hour of simulated time) and
 rates are per reference tick; the world multiplies them by its ``dt`` (``TimeRules``).
@@ -338,6 +341,50 @@ class SensingRules:
 
 
 @dataclass(frozen=True)
+class LearningRules:
+    """Learning during life (``BRAIN.24``): the log, the reward and the size of a night's change.
+
+    ``TraitRules.learning`` holds them for a run; ``None`` there turns learning off.
+    """
+
+    log_size: int = 64
+    """Decisions kept in the day log; the oldest are dropped when it is full."""
+    reward_window: float = 10.0
+    """Reference ticks (hours) after a decision over which its outcome is counted; the learner
+    turns it into ticks with the world's ``dt`` (at least one), so the length of a tick does not
+    change what an animal learns from (``WORLD.16``)."""
+    energy_weight: float = 1.0
+    """Reward per unit of energy-store fraction gained (a fall counts against)."""
+    health_weight: float = 2.0
+    """Penalty per unit of damage-capacity fraction lost."""
+    mating_weight: float = 1.0
+    """Reward for each mating achieved."""
+    safety_weight: float = 0.5
+    """Reward per unit that the threat input falls after a threat was sensed."""
+    night_cap: float = 0.5
+    """The most any one number may change in one night (an eighth of a weight's range)."""
+    fade: float = 0.0
+    """Share of the learned offsets lost each night (forgetting); off by default."""
+    max_offset: float = 2.0
+    """The most a number's total learned change may reach, so repeated nights cannot run away."""
+
+    def __post_init__(self) -> None:
+        if self.log_size < 1:
+            raise ValueError("log_size must be at least 1.")
+        if not (math.isfinite(self.reward_window) and self.reward_window > 0.0):
+            raise ValueError(f"reward_window must be above zero, got {self.reward_window}.")
+        for name in ("energy_weight", "health_weight", "mating_weight", "safety_weight"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be a finite number.")
+        for name in ("night_cap", "max_offset"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(f"{name} must be zero or more, got {value}.")
+        if not 0.0 <= self.fade <= 1.0:
+            raise ValueError(f"fade must be between 0 and 1, got {self.fade}.")
+
+
+@dataclass(frozen=True)
 class TraitRules:
     """All the organism constants of a run."""
 
@@ -351,6 +398,8 @@ class TraitRules:
     plant: PlantTraitRules = field(default_factory=PlantTraitRules)
     organs: OrganRules = field(default_factory=OrganRules)
     sensing: SensingRules = field(default_factory=SensingRules)
+    learning: LearningRules | None = field(default_factory=LearningRules)
+    """Learning during life (``BRAIN.24``, ``TRAIT.10``); ``None`` turns it off."""
 
 
 DEFAULT_RULES = TraitRules()
