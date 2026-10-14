@@ -23,7 +23,7 @@ Done:
 
 Still to build, now that the owner has answered the open questions:
 - Plants asexual, slower to mutate and longer lived, `REPRO.3`; animal mate choice by genetic closeness, `REPRO.4`.
-- The reproduction genes, `REPRO.5`, built together with longevity traded against reproduction, `TRAIT.6`. The owner's answers changed the gene set (drive, cooldown, fertility with litter size and gestation, parenting, a recovery gene, plant lifespans), so the design is revised first, `REPRO.7` (the first design is `REPRO.6`, [#49](https://github.com/dwhagar/evolutionSimulator/pull/49)), with traits that read clusters of genes, `DNA.14`.
+- The reproduction genes: the first three are built (`REPRO.5`, `TRAIT.6`, [#74](https://github.com/dwhagar/evolutionSimulator/pull/74)) and mate choice by genetic closeness (`REPRO.4`). The owner's answers changed the gene set, so the design was revised (`REPRO.7`, [#77](https://github.com/dwhagar/evolutionSimulator/pull/77)); the build is `REPRO.8` (drive, cooldown, fertility with litters and gestation, parenting, the sex digit, a recovery gene, per-second charging), then plants, `REPRO.3` with `TRAIT.8`. Traits that read clusters of genes: `DNA.14`.
 - Prototype quirk fixes, `TRAIT.5`; and one constants config, `TRAIT.3`.
 
 ## Next: world, senses and the thinking brain
