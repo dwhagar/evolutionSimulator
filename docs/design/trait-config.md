@@ -69,7 +69,7 @@ The reference tick every per-tick rate is written for.
 | --- | --- | --- |
 | `reference_tick_seconds` | `3600.0` | Simulated seconds in one reference tick. The world's `dt` is its tick length over this. |
 | `ticks_per_day` | `24.0` | Reference ticks in a simulated day. |
-| `seconds_per_tick` | `3600.0` | Simulated seconds in one tick of this run (`TRAIT.10`; was `TimeScale.seconds_per_tick`). A tick of the reference length gives the world a `dt` of 1. |
+| `seconds_per_tick` | `3600.0` | Simulated seconds in one tick of this run (`TRAIT.10`; was `TimeScale`). A tick of the reference length gives the world a `dt` of 1. |
 | `speed` | `1.0` | Simulated seconds that pass for each real second; how fast a viewer asks the run to go. |
 
 ### `body` (`BodyRules`)
@@ -218,6 +218,7 @@ A plant's body, growth and seeding (`REPRO.3`, `TRAIT.8`).
 | `seed_ready_vitality` | `0.4` | ...and its vitality is above this. |
 | `longevity_growth` | `0.3` | Growth is multiplied by `1 - longevity_growth * longevity`. |
 | `longevity_seeds` | `0.4` | The seed budget share is multiplied by `1 - longevity_seeds * longevity`. |
+| `founder_upkeep_share` | `0.3` | A first generation's plants must be able to pay their way: `World.populate` redraws a random plant whose full-size upkeep is more than this share of its growth (`WORLD.11`). Measured: of random plants, those above 0.4 all died as seedlings and those below 0.3 mostly lived (about 40% of random plants were above 0.4). |
 
 ### `organs` (`OrganRules`)
 
@@ -251,50 +252,50 @@ The constants of the sensing step: starting values from the design note, for cal
 | `crowding_reference` | `8` | This many animals in reach gives a crowding input of 1. |
 | `closeness_noise` | `0.03` | Standard deviation of the error on every closeness report (input units). |
 
-### `learning` (`LearningRules`, or `None`)
+### `day_cycle` (`DayCycle`)
 
-Learning during life (`BRAIN.24`): the log, the reward and the size of a night's change. `None` turns learning off. Moved here from `learning.py` by `TRAIT.10` (`learning.py` still re-exports the name through its import).
+One day of light and dark (`WORLD.5`, `TraitRules.day_cycle`); the module docstring of `world/daycycle.py` describes the curve.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `log_size` | `64` | Decisions kept in the day log; the oldest are dropped when it is full. |
-| `reward_window` | `10.0` | Reference ticks (hours) after a decision over which its outcome is counted. |
-| `energy_weight` | `1.0` | Reward per unit of energy-store fraction gained. |
-| `health_weight` | `2.0` | Penalty per unit of damage-capacity fraction lost. |
-| `mating_weight` | `1.0` | Reward for each mating achieved. |
-| `safety_weight` | `0.5` | Reward per unit that the threat input falls after a threat was sensed. |
-| `night_cap` | `0.5` | The most any one number may change in one night. |
-| `fade` | `0.0` | Share of the learned offsets lost each night (forgetting). |
-| `max_offset` | `2.0` | The most a number's total learned change may reach. |
+| `length_seconds` | `86400.0` |  |
+| `start_phase` | `0.5` |  |
+| `night_below` | `0.3` |  |
+
+### `plant_limits` (`PlantRules`)
+
+How neighbouring plants limit each other's growth (WORLD.8, `TraitRules.plant_limits`). **Soil.** Within `neighbourhood` units of a plant, its neighbours (not the plant itself) hold some biomass per unit of ground. Once that reaches `capacity` the soil can feed no more: the plant keeps `1 - density / capacity` of its soil access (nothing, and so in practice starvation, at or above capacity). This is a logistic limit, and what keeps a population from running to the cap however fast the plants grow. It is the same for every plant on purpose: if root reach set the neighbourhood, evolution would shrink roots to dodge it. A plant's own biomass is left out so a lone plant of any size can grow to full size and seed (`WORLD.11`): counted in, a default plant (80 biomass) stalled at about 22 and no big plant ever seeded. **Light.** Each heavier neighbour whose canopy covers the plant adds `1 - distance / canopy radius` to its shade load, and the plant keeps `1 / (1 + shade_strength * load)` of the light, so tall plants shade seedlings. The effects are refreshed for one in every `refresh_interval` plants each tick, because plants do not move and the loads change slowly.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `neighbourhood` | `25.0` |  |
+| `capacity` | `0.015` | Biomass per unit of ground that the soil can feed. |
+| `shade_strength` | `1.0` |  |
+| `refresh_interval` | `10` |  |
 
 ### `sleep` (`SleepRules`)
 
-Sleep (`WORLD.5`): who stays awake, what a sleeper burns and regains, what wakes it. Moved here from `world/sleep.py` by `TRAIT.10`.
+Sleep (`WORLD.5`): who stays awake, what a sleeper burns and regains, what wakes it. `TraitRules.sleep` holds them for a run (`TRAIT.10`).
 
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `starving_below` | `0.15` | An animal with less than this fraction of its energy store stays awake to find food. |
 | `metabolism_factor` | `0.4` | Fraction of its basal metabolism an animal burns while asleep. |
-| `energy_regain` | `0.002` | Fraction of its energy store regained each reference tick (hour) of sleep, at average `recovery`. |
-| `alarm_wakes_above` | `0.2` | An alarm call heard at least this strongly wakes a sleeper, and it stays awake until the next day (`SENSE.7`). |
+| `energy_regain` | `0.002` | Fraction of its energy store an animal regains each reference tick (hour) of sleep, at average `recovery`, on top of burning less. |
+| `alarm_wakes_above` | `0.2` | An alarm call heard at least this strongly (1 at the caller, 0 at the edge of its radius) wakes a sleeper, and it stays awake until the next day (SENSE.7). |
 
-### `day_cycle` (`DayCycle`, or `None`)
+### `learning` (`LearningRules`)
 
-One day of light and dark (`WORLD.5`); `None` means permanent full daylight and no sleep. Moved here from `world/daycycle.py`.
-
-| Field | Default | Meaning |
-| --- | --- | --- |
-| `length_seconds` | `86400.0` | Simulated seconds in a day (24 hours). |
-| `start_phase` | `0.5` | Fraction of the day gone at tick 0 (0.5 is noon). |
-| `night_below` | `0.3` | It is night while daylight is below this. |
-
-### `plant_limits` (`PlantRules`)
-
-How neighbouring plants limit each other's growth (`WORLD.8`). Moved here from `world/world.py`.
+Learning during life (`BRAIN.24`): the log, the reward and the size of a night's change. `TraitRules.learning` holds them for a run; `None` there turns learning off.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `neighbourhood` | `25.0` | Units around a plant within which neighbours hold soil. |
-| `capacity` | `0.015` | Biomass per unit of ground that the soil can feed. |
-| `shade_strength` | `1.0` | How strongly shade from a heavier neighbour cuts the light. |
-| `refresh_interval` | `10` | One in this many plants has its soil and shade refreshed each tick. |
+| `log_size` | `64` | Decisions kept in the day log; the oldest are dropped when it is full. |
+| `reward_window` | `10.0` | Reference ticks (hours) after a decision over which its outcome is counted; the learner turns it into ticks with the world's `dt` (at least one), so the length of a tick does not change what an animal learns from (`WORLD.16`). |
+| `energy_weight` | `1.0` | Reward per unit of energy-store fraction gained (a fall counts against). |
+| `health_weight` | `2.0` | Penalty per unit of damage-capacity fraction lost. |
+| `mating_weight` | `1.0` | Reward for each mating achieved. |
+| `safety_weight` | `0.5` | Reward per unit that the threat input falls after a threat was sensed. |
+| `night_cap` | `0.5` | The most any one number may change in one night (an eighth of a weight's range). |
+| `fade` | `0.0` | Share of the learned offsets lost each night (forgetting); off by default. |
+| `max_offset` | `2.0` | The most a number's total learned change may reach, so repeated nights cannot run away. |

@@ -276,6 +276,11 @@ class PlantTraitRules:
     """Growth is multiplied by ``1 - longevity_growth * longevity``."""
     longevity_seeds: float = 0.4
     """The seed budget share is multiplied by ``1 - longevity_seeds * longevity``."""
+    founder_upkeep_share: float = 0.3
+    """A first generation's plants must be able to pay their way: ``World.populate`` redraws a
+    random plant whose full-size upkeep is more than this share of its growth (``WORLD.11``).
+    Measured: of random plants, those above 0.4 all died as seedlings and those below 0.3 mostly
+    lived (about 40% of random plants were above 0.4)."""
 
 
 @dataclass(frozen=True)
@@ -463,12 +468,14 @@ class DayCycle:
 class PlantRules:
     """How neighbouring plants limit each other's growth (WORLD.8, ``TraitRules.plant_limits``).
 
-    **Soil.** Within ``neighbourhood`` units of a plant, the plants (itself included) hold some
-    biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the plant
-    keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice starvation,
-    at or above capacity). This is a logistic limit, and what keeps a population from running to
-    the cap however fast the plants grow. It is the same for every plant on purpose: if root
-    reach set the neighbourhood, evolution would shrink roots to dodge it.
+    **Soil.** Within ``neighbourhood`` units of a plant, its neighbours (not the plant itself) hold
+    some biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the
+    plant keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice
+    starvation, at or above capacity). This is a logistic limit, and what keeps a population from
+    running to the cap however fast the plants grow. It is the same for every plant on purpose: if
+    root reach set the neighbourhood, evolution would shrink roots to dodge it. A plant's own
+    biomass is left out so a lone plant of any size can grow to full size and seed (``WORLD.11``):
+    counted in, a default plant (80 biomass) stalled at about 22 and no big plant ever seeded.
 
     **Light.** Each heavier neighbour whose canopy covers the plant adds ``1 - distance / canopy
     radius`` to its shade load, and the plant keeps ``1 / (1 + shade_strength * load)`` of the

@@ -932,6 +932,13 @@ class PlantTraits(BaseTraits):
         self._update_needs_and_drives()
 
     @property
+    def upkeep_share(self) -> float:
+        """Full-size upkeep as a share of the base growth: above about 0.4 a plant cannot pay its
+        way as a seedling (``WORLD.11``); a first generation is drawn below
+        ``founder_upkeep_share``."""
+        return self.basal_metabolism / self.base_growth_rate
+
+    @property
     def lifespan_ticks(self) -> float:
         """Reference ticks (hours) a plant lives if nothing kills it: the ``longevity`` gene in days."""
         return self.phenotype["lifespan_days"] * self.rules.time.ticks_per_day
