@@ -28,23 +28,36 @@ import hashlib
 import math
 import random
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.learning import LearningRules, NightlyLearning
+from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
-from evolution_simulator.world.senses import BasicSenses, Senses, wrap_angle
+from evolution_simulator.world.senses import Senses, WorldSenses, wrap_angle
 from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.vector import Vec
 
-INDEX_CELL_SIZE: float = 64.0
-"""Grid cell for neighbour searches, about the longest sight range (60 units)."""
+if TYPE_CHECKING:
+    from evolution_simulator.sensing import SensingRules
+
+
+def _default_sensing_rules() -> SensingRules:
+    # Imported here because ``sensing`` itself imports from this package.
+    from evolution_simulator.sensing import SensingRules
+
+    return SensingRules()
+
+
+INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
+"""Grid cell for neighbour searches: the longest sense range any animal can have (100 units)."""
 
 
 @dataclass(frozen=True)
@@ -99,6 +112,13 @@ class WorldConfig:
     day_cycle: DayCycle | None = field(default_factory=DayCycle)
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     sleep: SleepRules = field(default_factory=SleepRules)
+    calls_enabled: bool = False
+    """Whether animals can call (their brains' call outputs, paid for with ``call_energy_cost``).
+    Off by default: a random founder's brain calls on most ticks, a call costs several times an
+    animal's basal metabolism, and every call wakes sleepers, so founders die out or never
+    sleep. Turn it on once seeded brains (BRAIN.9) and the call rules (BRAIN.10) exist."""
+    sensing: SensingRules = field(default_factory=_default_sensing_rules)
+    """The constants of the sensing step: light and sleep factors, weak smell, noise."""
     learning: LearningRules | None = field(default_factory=LearningRules)
     """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
     ``None`` turns it off."""
@@ -139,7 +159,7 @@ class StepReport:
 class World:
     def __init__(self, config: WorldConfig | None = None, senses: Senses | None = None) -> None:
         self.config = config if config is not None else WorldConfig()
-        self.senses: Senses = senses if senses is not None else BasicSenses()
+        self.senses: Senses = senses if senses is not None else WorldSenses()
         self.rng = random.Random(self.config.seed)
         self.tick: int = 0
         self._next_id: int = 1
@@ -152,6 +172,8 @@ class World:
         self.max_body: float = 0.0
         """Largest body radius of any animal added so far."""
         self._sleep_listeners: list[SleepListener] = []
+        self.calls: dict[int, tuple[float, float]] = {}
+        """Animals calling this tick, by id: (alarm call radius, mating call radius), 0 for none."""
         if self.config.learning is not None:
             self.add_sleep_listener(NightlyLearning())
 
@@ -192,6 +214,10 @@ class World:
         """Midnights passed since the start (0 on the first day)."""
         cycle = self.config.day_cycle
         return 0 if cycle is None else cycle.day_number(self.simulated_seconds)
+
+    def edge_distance(self, position: Vec) -> float:
+        """Distance from ``position`` to the nearest wall."""
+        return min(min(c, size - c) for c, size in zip(position.coords, self.bounds.size))
 
     def add_sleep_listener(self, listener: SleepListener) -> None:
         """Be told, in id order, when an animal falls asleep or wakes (the hook for BRAIN.24)."""
@@ -305,6 +331,7 @@ class World:
         animals = self.animals
         plants = self.plants
         self._refresh_animal_index()
+        self._collect_calls(animals)
         self._update_sleep(animals)
         sunlight = self.daylight
         self._refresh_competition(plants)
@@ -384,16 +411,65 @@ class World:
             plant.soil = max(0.0, 1.0 - biomass / (ground * rules.capacity))
             plant.shade = 1.0 / (1.0 + rules.shade_strength * shade_load)
 
+    def _collect_calls(self, animals: list[Animal]) -> None:
+        """Work out who calls this tick, from the decisions of the last one, and charge them.
+
+        An awake animal whose brain said "alarm call" or "mating call" and that has a call radius
+        (the encoder gene) and the energy pays ``call_energy_cost`` per call and is heard this
+        tick by the animals whose hearing reaches it. Acting on the rest of the brain's outputs is
+        ``BRAIN.10``. Does nothing unless ``WorldConfig.calls_enabled``.
+        """
+        self.calls = {}
+        if not self.config.calls_enabled:
+            return
+        for animal in animals:
+            decision = animal.last_decision
+            traits = animal.traits
+            if animal.asleep or decision is None or not animal.is_alive:
+                continue
+            if traits.call_radius <= 0.0:
+                continue
+            alarm = traits.call_radius if decision.calls_alarm else 0.0
+            mating = traits.call_radius if decision.calls_for_mate else 0.0
+            cost = traits.call_energy_cost * ((alarm > 0.0) + (mating > 0.0))
+            if cost > 0.0 and traits.current_energy > cost:
+                traits.current_energy -= cost
+                self.calls[animal.id] = (alarm, mating)
+
+    def _wake_by_alarm(self) -> None:
+        """Sleepers who hear an alarm call loudly enough are disturbed and stay awake until the
+        next day (SENSE.7: a sleeper's hearing works at the sleep factor)."""
+        threshold = self.config.sleep.alarm_wakes_above
+        hearing_factor = self.config.sensing.sleep_factor("hearing")
+        for caller_id, (alarm, _) in self.calls.items():
+            if alarm <= 0.0:
+                continue
+            caller = self._animals[caller_id]
+            for other, centre in self.animals_within(
+                caller.position, alarm + caller.radius + self.max_body
+            ):
+                if not other.asleep or other.disturbed:
+                    continue
+                surface = centre - caller.radius - other.radius
+                hears = other.traits.current_hearing_range * hearing_factor
+                if surface <= hears and surface < alarm and 1.0 - surface / alarm >= threshold:
+                    other.disturbed = True
+
     def _update_sleep(self, animals: list[Animal]) -> None:
-        """Put animals to sleep at night and wake them in the morning (or when starving)."""
+        """Put animals to sleep at night and wake them in the morning, when starving, or when an
+        alarm call disturbs them."""
         night = self.is_night
         starving_below = self.config.sleep.starving_below
+        if night:
+            self._wake_by_alarm()
         for animal in animals:
             if not animal.is_alive:
                 continue
             traits = animal.traits
+            if not night:
+                animal.disturbed = False
             hungry = traits.current_energy < starving_below * traits.max_energy
-            should_sleep = night and not hungry
+            should_sleep = night and not hungry and not animal.disturbed
             if should_sleep and not animal.asleep:
                 animal.asleep = True
                 animal.last_decision = None
