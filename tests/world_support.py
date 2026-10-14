@@ -31,3 +31,11 @@ def plant_dna(**genes: str) -> DNA:
     for gene_id, digits in genes.items():
         dna = dna.replaced(gene_id, digits)
     return dna
+
+
+def grown(*animals):
+    """Let animals breed now: a newborn waits one birth interval first (`REPRO.5`)."""
+    for animal in animals:
+        animal.traits.mating_cooldown = 0
+        animal.traits._update_needs_and_drives()
+    return animals

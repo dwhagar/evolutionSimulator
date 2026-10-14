@@ -3,7 +3,7 @@
 import math
 
 import pytest
-from world_support import animal_dna, plant_dna
+from world_support import animal_dna, grown, plant_dna
 
 from evolution_simulator.world import Bounds, TimeScale, Vec, World, WorldConfig
 
@@ -205,6 +205,7 @@ def test_two_willing_animals_close_together_have_a_child():
     world = make()
     a = world.add_animal(animal_dna(brain={**STILL, **LOVER}), HERE, heading=0.0)
     b = world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(501, 500), heading=0.0)
+    grown(a, b)
     report = world.step()
     assert report.animal_births == 1
     assert len(world.animals) == 3
@@ -215,29 +216,63 @@ def test_two_willing_animals_close_together_have_a_child():
     assert a.traits.mating_cooldown > 0 and b.traits.mating_cooldown > 0
 
 
+def test_a_newborn_starts_with_the_energy_its_parents_gave_it():
+    world = make()
+    a = world.add_animal(animal_dna(brain={**STILL, **LOVER}), HERE, heading=0.0)
+    b = world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(501, 500), heading=0.0)
+    grown(a, b)
+    before = a.traits.current_energy + b.traits.current_energy
+    world.step()
+    child = world.animals[-1]
+    paid = before - (a.traits.current_energy + b.traits.current_energy)
+    # Both parents paid more than the newborn received (the repair surcharge is lost), and the
+    # newborn got the mean care fraction of its own energy store.
+    care = 0.5 * (a.traits.phenotype["care_fraction"] + b.traits.phenotype["care_fraction"])
+    assert child.traits.current_energy == pytest.approx(care * child.traits.max_energy)
+    assert paid > care * child.traits.max_energy
+
+
 def test_parents_do_not_mate_again_while_recovering():
     world = make()
-    for x in (500, 501):
+    pair = [
         world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
+        for x in (500, 501)
+    ]
+    grown(*pair)
     first = world.step()
     second = world.step()
     assert first.animal_births == 1
     assert second.animal_births == 0
 
 
-def test_animals_too_far_apart_or_too_tired_do_not_mate():
+def test_juveniles_far_apart_or_unable_to_pay_do_not_mate():
     world = make()
-    world.add_animal(animal_dna(brain={**STILL, **LOVER}), HERE, heading=0.0)
-    world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(520, 500), heading=0.0)
-    assert world.step().animal_births == 0
-
-    world = make()
-    tired = [
+    young = [
         world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
         for x in (500, 501)
     ]
-    tired[0].traits.current_energy = 0.3 * tired[0].traits.max_energy
+    assert world.step().animal_births == 0  # both are still juveniles
+    assert all(a.traits.mating_cooldown > 0 for a in young)
+
+    world = make()
+    far = [
+        world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
+        for x in (500, 520)
+    ]
+    grown(*far)
     assert world.step().animal_births == 0
+
+    world = make()
+    pair = [
+        world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
+        for x in (500, 501)
+    ]
+    grown(*pair)
+    pair[0].traits.current_energy = 1.0
+    energy = pair[1].traits.current_energy
+    assert world.step().animal_births == 0  # one cannot pay, so nobody is charged
+    assert energy - 1.0 < pair[1].traits.current_energy < energy  # only a tick of living
+    assert pair[1].traits.mating_cooldown == 0
 
 
 def test_an_animal_that_does_not_seek_a_mate_is_left_alone():
@@ -249,8 +284,12 @@ def test_an_animal_that_does_not_seek_a_mate_is_left_alone():
 
 def test_the_animal_cap_stops_births():
     world = make(max_animals=2)
-    for x in (500, 501):
-        world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
+    grown(
+        *[
+            world.add_animal(animal_dna(brain={**STILL, **LOVER}), Vec.of(x, 500), heading=0.0)
+            for x in (500, 501)
+        ]
+    )
     assert world.step().animal_births == 0
     assert len(world.animals) == 2
 
@@ -271,6 +310,30 @@ def test_a_ready_plant_drops_seeds_nearby():
         assert seed.position.distance_to(plant.position) <= plant.traits.dispersal_radius + 1e-9
         assert world.bounds.contains(seed.position)
     assert plant.traits.current_biomass < plant.traits.max_biomass * 0.7
+
+
+def test_seeds_start_with_the_biomass_their_parent_spent():
+    world = make(bounds=Bounds((200, 200)))
+    plant = world.add_plant(
+        plant_dna(seed_clutch="3333", dispersal_radius="1111"), Vec.of(150, 150)
+    )
+    plant.traits.current_biomass = plant.traits.max_biomass * 0.95
+    world.step()
+    seeds = [p for p in world.plants if p is not plant]
+    spent = plant.traits.current_biomass * 0.35 / 0.65  # it spends 35% of what it had
+    assert sum(seed.traits.current_biomass for seed in seeds) == pytest.approx(spent)
+    for seed in seeds:
+        assert seed.traits.current_biomass == pytest.approx(spent / 8)
+        assert seed.traits.current_energy == seed.traits.current_biomass
+
+
+def test_a_plant_with_no_room_for_seeds_keeps_its_biomass():
+    world = make(max_plants=1)
+    plant = world.add_plant(plant_dna(seed_clutch="3333"), HERE)
+    plant.traits.current_biomass = plant.traits.max_biomass * 0.95
+    report = world.step()
+    assert report.plant_births == 0
+    assert plant.traits.current_biomass >= plant.traits.max_biomass * 0.94
 
 
 def test_the_plant_cap_stops_seeding():

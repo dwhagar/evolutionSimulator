@@ -356,7 +356,7 @@ once at birth to set the body, then tracks energy, health and flags). The brain 
   weights and its inputs, so it is simple to test.
 - **The sense and drive code feeds the brain**. The world loop (`WORLD.2`) computes the 17 inputs
   from what each creature can sense, calls `brain.decide`, and passes the outputs to the existing
-  actions (`movement_speed_ratio`, `feed`, `consume_mating_cost`, `trigger_signal_emission`). The
+  actions (`movement_speed_ratio`, `feed`, `AnimalTraits.give_birth`, `trigger_signal_emission`). The
   fixed rule stays as the fallback and as the reference the seeded brain imitates.
 - **The traits-and-DNA contract still holds.** DNA does not know what a weight means, traits do not
   read weights, and the brain only reads decoded numbers.
@@ -384,8 +384,8 @@ Anything the owner answers differently is a change to one constant or one table 
 | Sensing step | `sensing.py` | `SENSE.10`. `sense(position, heading, radius, organs, neighbours, conditions, rules, rng, edge_distance) -> Percepts`, a pure function that follows the rules in [senses.md](senses.md) (the worked example is a test). The caller gives already-classified `Neighbour`s (plant, prey, threat, mate or other, with a radius, loudness, scent and call radii); `SenseOrgans` holds the effective range, field of view and direction noise of each organ, which `SENSE.11` fills from the genes; `SensingConditions` holds daylight and sleep; `SensingRules` holds every constant (light floor 0.25, sleep factors 0, 0.5, 0.5, 1, weak smell, crowding reference 8, closeness noise 0.03) for the `TRAIT.3` config. Distances are between surfaces, each class reports its nearest detected member scaled by the best range that can report that class, and the bearing comes from the most precise organ that found it. With no `rng` every report is exact, and the draws are in a fixed order, so a seed repeats. It is 2D only for now; positions are vectors and the creature's frame is built from vectors, so 3D adds components. The world's neighbour search and classifier (`SENSE.12`) is what will call it, replacing `BasicSenses`. |
 | `AnimalTraits.brain`, `.brain_upkeep`, `.think(percepts)` | `traits.py` | The hookup. The brain is built from the genome at birth; `think` adds the animal's own state to the percepts, runs the brain and returns the decision; pass an `rng` to enable the wander fallback. |
 
-**Genome.** `ANIMAL_LAYOUT` is now 461 digits at layout version 2: the 65 body digits, unchanged in position,
-then the 396 brain digits. The body genes are read by the trait table as before; the brain is read only by
+**Genome.** `ANIMAL_LAYOUT` is now 466 digits at layout version 3: the 70 body digits (the prototype's 65, with
+the three reproduction genes of `REPRO.5` in place of `fertility`), then the 396 brain digits. The body genes are read by the trait table as before; the brain is read only by
 `Brain`, so `TraitSet.unread_genes()` does not list it.
 
 **Brain layout.** The 198 numbers are grouped per hidden neuron so a neuron's wiring travels together: for
@@ -393,7 +393,7 @@ each of the 8 hidden neurons its bias, its 17 incoming weights and its 6 outgoin
 the 6 output biases. Crossover by unit takes whole neurons, with their outgoing weights, from either parent,
 which is the "per-neuron block" recommendation under [Storing the brain in the DNA](#storing-the-brain-in-the-dna).
 
-**Mutation.** `ANIMAL_LAYOUT` sets about 0.65 expected changes per child for the body (the prototype's 0.01 per
+**Mutation.** `ANIMAL_LAYOUT` sets about 0.70 expected changes per child for the body (the prototype's 0.01 per
 digit, unchanged) and 1.0 for the brain (about 0.0025 per brain digit), so the brain's 396 digits do not take
 over the mutation count (0.01 per digit would have given about 4 changes in the brain alone). Both numbers
 are data on the layout and can be overridden per call. The first-digit-dominates problem

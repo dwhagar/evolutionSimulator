@@ -19,6 +19,11 @@ from enum import Enum
 from evolution_simulator.dna import Genome, GenomeLayout, position_bias_for_step
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 
+CARE_FRACTION_RANGE: tuple[float, float] = (0.10, 0.80)
+"""A newborn's starting energy as a share of its own energy store (``caregiving``)."""
+INTERVAL_FRACTION_RANGE: tuple[float, float] = (0.01, 0.25)
+"""Shortest gap between births as a share of the expected lifespan (``repro_interval``, log scale)."""
+
 DEFAULT_MUTATION_STEP: float = 0.05
 """Typical size of one mutation as a fraction of a trait's range (the research note's 5%)."""
 
@@ -201,6 +206,7 @@ ANIMAL_TRAITS = TraitSet(
         _level("aggression"),
         _level("fear"),
         _level("encoder_fidelity"),
+        _level("repro_drive", "Urge to find a mate: lowers the energy needed to start looking."),
         # Ranged traits.
         TraitDef("mass", ("size",), 1.0, 4.0, description="Body mass in simulation units."),
         TraitDef("sight_reach", ("sight_range",), 10.0, 60.0, description="Before FOV narrowing."),
@@ -211,6 +217,20 @@ ANIMAL_TRAITS = TraitSet(
         TraitDef("call_radius", ("encoder_fidelity",), 0.0, 60.0),
         TraitDef("call_energy_cost", ("encoder_fidelity",), 1.5, 7.5),
         TraitDef("sex_strategy", ("sex_strategy",), kind=Kind.CATEGORY),
+        # Reproduction (REPRO.5).
+        TraitDef(
+            "care_fraction",
+            ("caregiving",),
+            *CARE_FRACTION_RANGE,
+            description="A newborn starts with this share of its own energy store.",
+        ),
+        TraitDef(
+            "interval_fraction",
+            ("repro_interval",),
+            *INTERVAL_FRACTION_RANGE,
+            scale=Scale.LOG,
+            description="Shortest gap between births, as a share of the expected lifespan.",
+        ),
     ),
 )
 

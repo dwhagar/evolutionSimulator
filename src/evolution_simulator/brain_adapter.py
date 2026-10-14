@@ -59,16 +59,19 @@ class Temperament:
 
     - ``aggression`` scales how close prey looks: bold animals are drawn to it harder.
     - ``fear`` scales how close a threat looks: timid animals react to it sooner and harder.
+    - ``repro_drive`` scales how close a possible mate looks (``REPRO.5``): a driven animal feels
+      pulled toward a mate harder. The other reproduction genes act on energy and timing, not on
+      what the brain perceives.
 
-    The reproduction genes planned in ``REPRO.5`` (drive to reproduce and so on) are added as more
-    fields here, each bending the input it concerns.
+    More behaviour genes are added as more fields here, each bending the input it concerns.
     """
 
     aggression: float = 0.5
     fear: float = 0.5
+    repro_drive: float = 0.5
 
     def __post_init__(self) -> None:
-        for name in ("aggression", "fear"):
+        for name in ("aggression", "fear", "repro_drive"):
             value = getattr(self, name)
             if not (math.isfinite(value) and 0.0 <= value <= 1.0):
                 raise ValueError(f"Temperament {name} must be between 0 and 1, got {value}.")

@@ -9,7 +9,7 @@ Written 2026-10-14 by the Foundations 1 thread.
 | --- | --- |
 | `dna.py` | `DNA` (immutable genome), `GenomeLayout`, `GeneSpec` and `BlockSpec` (the gene table); knows gene IDs only |
 | `diploid.py` | `DiploidDNA` (two `DNA` strands read through a `DominanceModel`), `DominanceModel`, `CODOMINANT` |
-| `layouts.py` | `ANIMAL_LAYOUT` (461 digits: 65 body, 396 brain) and `PLANT_LAYOUT` (24 digits) as plain data, and `dna_from_dict` |
+| `layouts.py` | `ANIMAL_LAYOUT` (466 digits: 70 body, 396 brain) and `PLANT_LAYOUT` (24 digits) as plain data, and `dna_from_dict` |
 | `brain.py`, `brain_adapter.py` | The `Brain` network and the world-side inputs and outputs; see [brain.md](brain.md) |
 | `trait_defs.py` | `TraitDef` and `TraitSet`: what each trait reads from DNA, its range, scale and mutation step; `ANIMAL_TRAITS`, `PLANT_TRAITS` |
 | `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits`: runtime organism state and the formulas built on the traits; `AnimalTraits` also builds the animal's `Brain` |
@@ -36,7 +36,7 @@ open questions in issues #2 to #11 by example; those answers are used here and l
   read, replaced (`dna.replaced(gene_id, digits)`), saved and compared like any other.
 - Genes belong to a named **segment** (`GeneSpec(..., segment="brain")`, default `"body"`); the genes of a
   segment must be consecutive. Segments are what mutation is set per, and they are the only place the genome
-  has structure beyond the gene table. `ANIMAL_LAYOUT` has `body` (digits 0 to 65) and `brain` (65 to 461).
+  has structure beyond the gene table. `ANIMAL_LAYOUT` has `body` (digits 0 to 70) and `brain` (70 to 466).
 - **DNA does not know trait names.** It exposes genes by ID (`value`, `digit`, `raw`, `slice_of`) and the
   decode API (`get_slice`, `decode_int`, `decode_normalized`), nothing else. The prototype's `dna.size`
   style properties are gone; what a gene is *for* is declared in `trait_defs.py`.
@@ -63,7 +63,7 @@ The prototype's `+` operator is gone because it cannot take an RNG or a rate. Mi
 (different layouts) raises `TypeError`.
 
 The mutation rate is **per digit** by default, as the DNA research note recommends, so the expected number of
-changes per child scales with genome length: about 0.65 for the animal body and 0.24 for a plant. That would
+changes per child scales with genome length: about 0.70 for the animal body and 0.24 for a plant. That would
 give the 396-digit brain about 4 changes per child on its own, so the animal layout sets the brain's default as
 **expected changes per segment** instead (1.0 per child). The defaults live on the layout
 (`GenomeLayout(..., segment_mutations={...})`), and every call can override them, so the owner's answers to
@@ -114,10 +114,52 @@ sense ranges, upkeep, seed count and so on, kept in `traits.phenotype`), then ca
 drive flags) that the simulation advances with `update_metabolism_and_aging()` /
 `update_growth_and_metabolism()`, `feed()`, `graze()`, `apply_damage()` and the stimulus setters.
 
-The formulas and constants are the prototype's, unchanged. A comparison harness ran the prototype and the
+The formulas and constants are the prototype's, unchanged apart from reproduction and repair
+(see [Reproduction and longevity](#reproduction-and-longevity)). A comparison harness ran the prototype and the
 port side by side over 300 random animals (300 ticks each, with feeding, damage, stimuli, mating and
 signalling) and 300 random plants (400 ticks each, with grazing and seeding) and found identical state at
 every step. The harness is not in the repo.
+
+## Reproduction and longevity
+
+`REPRO.5` and `TRAIT.6`, from the design in [reproduction-genes.md](reproduction-genes.md) and the owner's answers
+to [#16](https://github.com/dwhagar/evolutionSimulator/issues/16) and
+[#17](https://github.com/dwhagar/evolutionSimulator/issues/17). `fertility` is gone; three 3-digit genes
+replace it (animal layout version 3, 466 digits).
+
+| Gene | Trait | Range | What it does |
+| --- | --- | --- | --- |
+| `caregiving` | `care_fraction` | 0.10 to 0.80 | A newborn starts with this share of its own energy store (the parents' mean). Each parent pays half, at its own value. |
+| `repro_interval` | `interval_fraction` | 0.01 to 0.25, log | The shortest gap between births, and the age of first breeding, as a share of the animal's own lifespan. |
+| `repro_drive` | `repro_drive` | 0 to 1 | Lowers the energy needed to start looking for a mate, makes the animal bolder while a mate is in view, and bends how close a possible mate looks to the brain (`Temperament.repro_drive`). |
+
+- **Lifespan.** `AnimalTraits.lifespan_ticks` is the damage the body can take divided by `wear_per_tick`
+  (0.075 slowed by repair). `interval_ticks` is `interval_fraction * lifespan_ticks * (1 + 0.5 * somatic_maint)`,
+  so it scales with body and repair, not with a fixed count of ticks. A newborn starts with
+  `mating_cooldown = interval_ticks`: it is a juvenile for one interval.
+- **Birth.** `AnimalTraits.give_birth(parent_a, parent_b, newborn)` replaces `consume_mating_cost`. Both
+  parents must be alive, off cooldown and have more energy than their share, else it returns `False` and nobody
+  is charged (this is the mating-cost guard of `TRAIT.5`). Each parent pays
+  `care_fraction / 2 * newborn.max_energy * (1 + somatic_maint)` and starts its own cooldown. The newborn
+  gets the mean `care_fraction` times its energy store, without the surcharge.
+- **Longevity trade-off (`TRAIT.6`).** Repair is no longer free to keep up: its upkeep is
+  `0.20 * somatic_maint ** 2` (it was `0.12 * somatic_maint`), a birth costs `1 + somatic_maint` times as
+  much, and the interval is stretched by `1 + 0.5 * somatic_maint`. The design note's toy model puts the
+  best repair level in the middle rather than at the maximum.
+- **Upkeep.** Staying ready costs `0.03 * (0.05 / interval_fraction) ** 0.5` per tick and the drive costs
+  `0.05 * repro_drive ** 2`; both are in `basal_metabolism`.
+- **Wanting a mate.** The energy share needed is `clamp(0.85 - 0.5 * drive - 0.2 * (1 - vitality), 0.10, 0.95)`
+  (it was `0.35 + 0.35 * vitality`). During a cooldown a possible mate does not show up in the brain's
+  inputs and the animal does not call for one.
+- **Not built.** The protective effect of `caregiving` on aggression and fear needs a "young nearby" sense
+  (`SENSE.1`). Plant seeds and `seed_provision` are `REPRO.3`.
+- **Constants.** `traits.py` holds them as named module constants (`REPAIR_COST`, `REPAIR_BIRTH_SURCHARGE`,
+  `REPAIR_INTERVAL_STRETCH`, `READINESS_UPKEEP`, `DRIVE_UPKEEP`, `DRIVE_THRESHOLD_*`, `DRIVE_BOLDNESS`), named
+  as in the design note's table so `TRAIT.3` can move them into the config object. The gene ranges are in
+  `trait_defs.py` (`CARE_FRACTION_RANGE`, `INTERVAL_FRACTION_RANGE`).
+- **In the world.** `World` builds the child's traits, calls `give_birth`, and puts the child in only if it
+  returned `True`; a seed starts with an equal share of the biomass its parent spent
+  (`PlantTraits.set_starting_biomass`). `WorldConfig.min_mating_energy_ratio` is gone.
 
 ## Changes from the prototype
 
@@ -132,12 +174,14 @@ Behaviour is unchanged except where noted:
    constructor's implicit random fill, and the sequence is now required to construct.
 4. **Extras:** `distance`, value equality and hash, `to_dict` / `dna_from_dict`, `crossover_one_point`,
    `crossover_by_gene`, and a single `reproduce` entry point.
-5. **Start-of-life state and the mating cost (`TRAIT.5`).** An animal's drive flags are set in
-   `__init__` (the prototype left them unset until the first tick), a plant's vitality starts at its
-   seedling health (0.5, the prototype had 1.0 until the first tick), and `consume_mating_cost` cannot push
-   energy below zero. The last one is a guard, not a rule: whether an animal that cannot pay should be
-   allowed to mate at all is a decision for the cost design in `TRAIT.6` and `REPRO.5`.
-6. **Python 3.12 typing** (`X | None`, built-in generics) and ruff clean.
+5. **Start-of-life state (`TRAIT.5`).** An animal's drive flags are set in `__init__` (the prototype left
+   them unset until the first tick) and a plant's vitality starts at its seedling health (0.5, the
+   prototype had 1.0 until the first tick).
+6. **Reproduction and repair (`REPRO.5`, `TRAIT.6`).** The fixed mating cost (25% or 45% of the energy store,
+   no check that it could be paid), the fixed cooldowns (40 or 100 ticks), the unused `fertility` gene and
+   the linear repair cost are replaced as described under
+   [Reproduction and longevity](#reproduction-and-longevity).
+7. **Python 3.12 typing** (`X | None`, built-in generics) and ruff clean.
 
 ## Decisions taken from the prototype
 
@@ -148,7 +192,7 @@ way and is easy to change.
 | --- | --- | --- | --- |
 | #2 genome detail | Gene-level | Base-4 digit sequence with genes as slices (closest to the "sequence" level) | Traits read genes only through `value` / `digit`, so another encoding changes `decode_*` only |
 | #3 ploidy | Diploid, haploid option | Both: `DNA` is haploid, `DiploidDNA` is diploid (`DNA.13`, owner chose diploid) | See [Diploid genomes](#diploid-genomes); traits read through the `Genome` protocol and did not change |
-| #4 reproduction | Both modes, no sexes | Both modes, plus a `sex_strategy` digit that shifts temperament and mating cost | The digit is read in one place in `AnimalTraits.__init__` and `consume_mating_cost` |
+| #4 reproduction | Both modes, no sexes | Both modes, plus a `sex_strategy` digit that shifts temperament (it no longer changes the mating cost, which now comes from the genes) | The digit is read in one place in `AnimalTraits.__init__` |
 | #5 length | Fixed | Fixed | Gene IDs are not reserved yet; layout position is the identity |
 | #6 trait set | Fixed | Fixed (16 animal genes plus the brain block, 6 plant genes) | Add a `GeneSpec` row to the layout and a `TraitDef` row that reads it |
 | #8 diet | Plants only | Herbivore and carnivore efficiency genes, so predation is in | |
@@ -169,12 +213,12 @@ Flagged by the research threads; not changed without the owner's call.
   uniform operator is still there as `DNA.crossover`.
 - **Sex is an inherited digit with no balancing.** A small population can lose one sex. Assigning it at
   birth is a change to `reproduce`.
-- **`fertility` is decoded but nothing reads it**, so it drifts neutrally.
 - **Mutation rate is per digit for the body and plants**, so the same 0.01 gives 0.65 changes per animal body
   but 0.24 per plant. Both are now readable as expected changes per child: `layout.default_mutations`
   holds them per segment and any call can set them with `mutations_per_segment` (`DNA.8`). The defaults
   are unchanged; whether plants should mutate more slowly is `REPRO.3`.
-- **`somatic_maint` is cheap and cuts wear up to 4.5 times**, so selection will push it to the maximum
-  unless something penalises long life.
+- **`somatic_maint` still cuts wear up to 4.5 times**, but it now competes with reproduction (`TRAIT.6`), so
+  selection should not push it to the maximum. That rests on the design note's toy model, not on the
+  simulator, which has no stable ecology yet.
 - **Constants are inline.** Moving the tuning numbers into a config object is listed in
   [TODO.md](../../TODO.md).

@@ -9,6 +9,14 @@ The numbers below are starting values to be tuned, not measurements of the real 
 world yet. The two small calculations in [Does the trade-off work?](#does-the-trade-off-work) were run as
 a toy model, with the model stated.
 
+> **Built.** `REPRO.5` and `TRAIT.6` were built together as written in [What to build](#what-to-build); the
+> numbers are the note's. Differences: the protective effect of caregiving (needs `SENSE.1`) and the plant
+> genes (`REPRO.3`) are not built, the constants are named module constants in `traits.py` until `TRAIT.3`
+> moves them into the config object, and the readiness upkeep and `interval_ticks` use the note's formulas
+> with `interval_ticks` rounded to whole ticks. A newborn is a juvenile for one interval, so the founders a
+> world creates cannot breed until that has passed. See
+> [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity).
+
 ## Summary
 
 - `fertility` is removed. Three genes replace it, in two tiers:

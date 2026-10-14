@@ -113,7 +113,7 @@ INPUT_CHANNELS: tuple[InputChannel, ...] = (
     *_pair("plant", ("vision", "smell")),
     *_pair("prey", ("vision", "hearing", "smell"), "aggression", "possible prey"),
     *_pair("threat", ("vision", "hearing", "smell"), "fear", "threat"),
-    *_pair("mate", ("vision", "hearing", "smell"), what="possible mate"),
+    *_pair("mate", ("vision", "hearing", "smell"), "repro_drive", "possible mate"),
     InputChannel("touching", 0.0, 1.0, "world", "flag", ("touch",), description="Something is in contact."),
     InputChannel("alarm_strength", 0.0, 1.0, "world", "strength", ("hearing",), description="Alarm call heard."),
     InputChannel("mating_call_strength", 0.0, 1.0, "world", "strength", ("hearing",), description="Mating call heard."),

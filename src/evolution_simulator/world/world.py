@@ -16,9 +16,9 @@ Everything random comes from one ``random.Random`` seeded by ``WorldConfig.seed`
 visited in id order, and nothing reads a clock, so the same config, the same organisms and the same
 sequence of calls always give the same world (``state_digest`` shows it).
 
-Placeholders to replace later: the child's energy and the seeds' biomass do not come out of the
-parents (REPRO.5), the mating energy guard belongs with the trait config (TRAIT.5, TRAIT.3), and
-attacking prey and acting on the other brain outputs are BRAIN.10.
+A child's starting energy and a seed's starting biomass come out of its parents (REPRO.5), and a
+pair mates only if both can afford the birth (TRAIT.5). Attacking prey and acting on the other brain
+outputs are BRAIN.10.
 """
 
 from __future__ import annotations
@@ -53,8 +53,6 @@ class WorldConfig:
     """Biomass an animal can take from a plant in one tick."""
     mating_reach: float = 3.0
     """Two animals mate only if their centres are this close or closer."""
-    min_mating_energy_ratio: float = 0.5
-    """An animal below this fraction of its energy store will not mate (the cost is up to 45%)."""
     birth_scatter: float = 1.0
     """A child appears within this distance of its parents' midpoint."""
     max_animals: int = 1000
@@ -66,8 +64,6 @@ class WorldConfig:
             value = getattr(self, name)
             if not math.isfinite(value) or value < 0.0:
                 raise ValueError(f"{name} must be zero or more, got {value}.")
-        if not 0.0 <= self.min_mating_energy_ratio <= 1.0:
-            raise ValueError("min_mating_energy_ratio must be between 0 and 1.")
         if self.max_animals < 0 or self.max_plants < 0:
             raise ValueError("Population caps must not be negative.")
 
@@ -176,7 +172,12 @@ class World:
             raise ValueError(f"The world already holds {self.config.max_animals} animals.")
         place = self._place(position)
         facing = self.rng.uniform(-math.pi, math.pi) if heading is None else wrap_angle(heading)
-        animal = Animal(self._new_id(), AnimalTraits(dna), place, facing, parents)
+        return self._insert_animal(AnimalTraits(dna), place, facing, parents)
+
+    def _insert_animal(
+        self, traits: AnimalTraits, place: Vec, facing: float, parents: tuple[int, ...]
+    ) -> Animal:
+        animal = Animal(self._new_id(), traits, place, facing, parents)
         self._animals[animal.id] = animal
         self._animal_index.insert(animal.id, animal.position)
         self.max_body = max(self.max_body, animal.radius)
@@ -294,11 +295,10 @@ class World:
             and a.last_decision is not None
             and a.last_decision.seeks_mating
             and a.traits.mating_cooldown == 0
-            and a.traits.current_energy >= cfg.min_mating_energy_ratio * a.traits.max_energy
         ]
         willing_ids = {a.id for a in willing}
         paired: set[int] = set()
-        newborn: list[tuple[DNA, Vec, tuple[int, ...]]] = []
+        newborn: list[tuple[AnimalTraits, Vec, tuple[int, ...]]] = []
         for a in willing:
             if a.id in paired:
                 continue
@@ -315,28 +315,30 @@ class World:
             if len(self._animals) + len(newborn) >= cfg.max_animals:
                 break
             paired.update((a.id, best.id))
-            child_dna = a.traits.dna.reproduce(
-                best.traits.dna, self.rng, crossover=DNA.crossover_by_unit
-            )
+            child = AnimalTraits(a.traits.dna.reproduce(best.traits.dna, self.rng))
+            if not AnimalTraits.give_birth(a.traits, best.traits, child):
+                continue  # one of them could not pay: nobody is charged
             at = Vec.midpoint(a.position, best.position)
-            newborn.append((child_dna, self._scatter(at, cfg.birth_scatter), (a.id, best.id)))
-            a.traits.consume_mating_cost()
-            best.traits.consume_mating_cost()
-        for child_dna, position, parents in newborn:
-            self.add_animal(child_dna, position, parents=parents)
+            newborn.append((child, self._scatter(at, cfg.birth_scatter), (a.id, best.id)))
+        for child, position, parents in newborn:
+            facing = self.rng.uniform(-math.pi, math.pi)
+            self._insert_animal(child, position, facing, parents)
         return len(newborn)
 
     def _seed(self, plant: Plant) -> int:
-        plant.traits.consume_reproduction_cost()
-        born = 0
-        for _ in range(plant.traits.seed_count):
-            if len(self._plants) >= self.config.max_plants:
-                break
+        """Drop seeds. The biomass the plant spends is shared out among them, so a seed starts with
+        what its parent gave it (up to its own full size), and a plant that cannot place any seed
+        spends nothing."""
+        seeds = min(plant.traits.seed_count, self.config.max_plants - len(self._plants))
+        if seeds <= 0:
+            return 0
+        share = plant.traits.consume_reproduction_cost() / seeds
+        for _ in range(seeds):
             dna = plant.traits.dna.reproduce(None, self.rng)
             spot = self._scatter(plant.position, plant.traits.dispersal_radius)
-            self.add_plant(dna, spot, parents=(plant.id,))
-            born += 1
-        return born
+            seed = self.add_plant(dna, spot, parents=(plant.id,))
+            seed.traits.set_starting_biomass(share)
+        return seeds
 
     def _scatter(self, centre: Vec, radius: float) -> Vec:
         """A random point within ``radius`` of ``centre`` (2D), kept inside the world."""
