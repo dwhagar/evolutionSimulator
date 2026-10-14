@@ -1,278 +1,335 @@
-# Reproduction genes and the cost of long life
+# Reproduction genes, recovery, plant lifespan and the cost of long life
 
-Design note for `REPRO.5` (replace `fertility` with three reproduction genes) and `TRAIT.6` (longevity
-trades against reproduction). Written 2026-10-14 by the Research 2 thread. It builds on the owner's
-answers in [#16](https://github.com/dwhagar/evolutionSimulator/issues/16) and
-[#17](https://github.com/dwhagar/evolutionSimulator/issues/17) (logged in [decisions.md](../decisions.md)).
+Design note for `REPRO.7` (the reproduction genes, revised to the owner's answers), `TRAIT.6`
+(longevity trades against reproduction), `TRAIT.7` (a recovery gene) and `TRAIT.8` (a plant lifespan
+gene). Written 2026-10-14 by the Research 2 thread. The first version ([#49](https://github.com/dwhagar/evolutionSimulator/pull/49)) was
+written before the owner answered [#36](https://github.com/dwhagar/evolutionSimulator/issues/36); this
+revision replaces it in place and follows the answers logged in [decisions.md](../decisions.md).
 
-The numbers below are starting values to be tuned, not measurements of the real simulator, which has no
-world yet. The two small calculations in [Does the trade-off work?](#does-the-trade-off-work) were run as
-a toy model, with the model stated.
-
-> **Built.** `REPRO.5` and `TRAIT.6` were built together as written in [What to build](#what-to-build); the
-> numbers are the note's. Differences: the protective effect of caregiving (needs `SENSE.1`) and the plant
-> genes (`REPRO.3`) are not built, the constants are named module constants in `traits.py` until `TRAIT.3`
-> moves them into the config object, and the readiness upkeep and `interval_ticks` use the note's formulas
-> with `interval_ticks` rounded to whole ticks. A newborn is a juvenile for one interval, so the founders a
-> world creates cannot breed until that has passed. See
-> [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity).
+The numbers are starting values to tune, not measurements of the running simulator. The small model in
+[Does the trade-off work?](#does-the-trade-off-work) is a toy, with its assumptions stated.
 
 ## Summary
 
-- `fertility` is removed. Three genes replace it, in two tiers:
-  - **Tier 1, capacity (energy and time):** `caregiving` (energy put into each offspring) and
-    `repro_interval` (the shortest gap between births, as a share of the animal's lifespan).
-  - **Tier 2, motivation (behaviour):** `repro_drive` (how strongly the animal wants to reproduce).
-- All three also reach behaviour, each for its own reason: caregiving through protective behaviour
-  around young (and the hunger a costly birth leaves behind), the interval through the "not ready" gate
-  on all mating behaviour, and the drive through when and how boldly the animal looks for a mate. They
-  reach the brain the way `BRAIN.14` already does it: as fields on `Temperament` in
-  `brain_adapter.py` that bend the input they concern, with no new brain inputs.
-- Offspring survival is not a separate number. A newborn starts with the energy its parents gave it, so
-  it lives or starves according to the same energy rules as everyone else.
-- Longevity (`somatic_maint`) pays for itself by competing with reproduction: more repair means a more
-  expensive birth and a longer gap between births (the disposable-soma trade-off), plus an upkeep cost
-  that grows faster than the benefit.
-- Every time is a **share of the animal's own lifespan**, so none of it depends on how long a tick is.
-  That matters because of a problem with the fastest time scales, raised as question 8 below.
-- The animal layout changes (version 3), so saved animal genomes stop loading. The brain's shape does not change.
+- **Four reproduction genes plus the sex digit** (the owner's three, and parenting as its own gene, the
+  default in [#69](https://github.com/dwhagar/evolutionSimulator/issues/69) question 2):
+  - `repro_drive`: how much the animal wants to mate. Sets the energy threshold for looking for a mate.
+    Strong drive shortens life.
+  - `repro_cooldown`: how often it can mate. A short cooldown costs standing upkeep.
+  - `fertility`: how fertile it is, impregnating or becoming impregnated. It sets the chance a mating
+    works, the litter size, how long gestation takes and what carrying a litter costs.
+  - `parenting`: energy given to each child, and how closely the parent stays near and protects its
+    young, at risk to itself.
+- **The sex digit** is 0 or 1 by its value mod 2 (0 impregnates, 1 bears). The values 2 and 3 amplify or
+  subdue the drive by 25% (the default for [#69](https://github.com/dwhagar/evolutionSimulator/issues/69)
+  question 1). Mating needs one of each sex.
+- **Who pays for a child** is decided by the parents' own `parenting` genes: each parent pays in
+  proportion to its own gene, and the newborn starts with the mean of both. A low-parenting animal that
+  mates with a high-parenting one pays less and its child still gets energy, so cheating is possible,
+  which is the pattern the owner wants to see.
+- **The first generation** starts with a large litter (fertility 0.75, six young) and no parenting.
+- **Recovery** (`recovery`, `TRAIT.7`): how fast the body heals lost health and regains energy at rest.
+- **Plant lifespan** (`longevity`, `TRAIT.8`): a plant lives one simulated month by default if nothing
+  eats it, and the gene lets that evolve, traded against growth and seed output.
+- **Longevity** (`TRAIT.6`) keeps its place in the same system: more repair makes every birth dearer and
+  every gap longer, and the drive shortens life, so the two trade-offs the owner asked for share one
+  lifespan.
+- **Time**: durations are in simulated time (days), not shares of lifespan. The first version used
+  shares of lifespan, which meant a longer life gave no extra births at all and so removed the reason to
+  live longer. With absolute times, lifespan, drive and cooldown pull against each other as intended.
+- The animal layout changes (fertility rewritten, four more genes, so version 3 or later) and the plant
+  layout gains three genes.
+
+## What the owner decided
+
+| Words | Where | In this design |
+| --- | --- | --- |
+| Three genes besides sex: desire, cooldown, fertility | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) 7, [#17](https://github.com/dwhagar/evolutionSimulator/issues/17) | `repro_drive`, `repro_cooldown`, `fertility` |
+| Strong drive / shorter life against weak drive / longer life | 7 | Wear rate rises with drive ([Drive](#drive-repro_drive)) |
+| More offspring, longer gestation against fewer, shorter | 7 | Litter size and gestation both rise with `fertility` |
+| Easy reproduction / more energy against less easily / less energy | 7 | Conception chance and fertility upkeep both rise with `fertility` |
+| No parenting, no danger against stays near and protects, in danger | 7 | `parenting` gene |
+| Caregiving genes decide who pays; see if a pattern emerges | 9 | Each parent pays by its own `parenting` gene |
+| Litter size is genetic; start with a large litter and no parenting | 11 | `fertility` start 0.75, `parenting` start 0 |
+| Sex digit 0 or 1; 2 and 3 amplify or subdue the mating drive by a fraction | 2 | Mod 2 is the sex; 2 is +25%, 3 is -25% |
+| Much longer lifespans, longer tick, a gene for recoup and recovery | 8 | [Time](#units-and-time), `recovery` |
+| Plant lifespan genetic, default a month, evolves | 10 | `longevity` |
 
 ## What exists today
 
 | Thing | Where | Current behaviour |
 | --- | --- | --- |
-| `fertility` | `layouts.py` (gene 56 to 59) | Decoded, never read: it drifts neutrally ([#17](https://github.com/dwhagar/evolutionSimulator/issues/17)) |
-| Mating cost | `AnimalTraits.consume_mating_cost` | 25% of max energy for `sex_strategy` 0 and 1, 45% for 2 and 3; no check that the energy is there |
-| Cooldown | same | 40 ticks (types 0, 1) or 100 ticks (types 2, 3), regardless of body size or lifespan |
+| `fertility` | `layouts.py` (4 digits) | Decoded, never read |
+| Mating cost and cooldown | `AnimalTraits.consume_mating_cost` | 25% of max energy for `sex_strategy` 0 and 1, 45% for 2 and 3; cooldown 40 or 100 ticks; energy floored at zero |
+| Who may mate | `World._mate` | Any two willing animals; one child per pair at once; the energy guard is `WorldConfig.min_mating_energy_ratio` (0.5) |
 | Wants to mate | `_update_needs_and_drives` | energy ratio at least `0.35 + 0.35 * vitality`, cooldown over, not afraid |
-| Repair cost | `AnimalTraits.__init__` | `0.12 * somatic_maint` per tick, in basal metabolism |
-| Wear | `update_metabolism_and_aging` | `0.075 / (1 + 3.5 * somatic_maint)` per tick; death when accumulated damage reaches `max_damage_capacity` (`100 * (1 + size)`) |
-| Seeds | `PlantTraits.consume_reproduction_cost` | 35% of current biomass, fixed |
-
-Lifespan is `max_damage_capacity / wear` ticks. Computed from the formulas above: 1,333 ticks (size 0,
-no repair) up to 12,000 ticks (size 1, full repair), which at one second per tick is 22 minutes to 3.3
-hours of simulated time. The fixed cooldowns of 40 and 100 ticks are 0.8% to 2% of a mid-size animal's
-lifespan, and are the same for a short-lived small animal and a long-lived large one.
+| Repair | `AnimalTraits` | cost `0.12 * somatic_maint` per tick; wear `0.075 / (1 + 3.5 * somatic_maint)` per tick |
+| Sleep | `SleepRules` | `energy_regain` 0.002 of the store per tick of sleep, metabolism 0.4 |
+| Passive healing | `AnimalTraits.feed` | when above 80% energy, up to 4 health per feeding, at 0.5 energy per point |
+| Seeds | `PlantTraits.consume_reproduction_cost` | 35% of biomass, fixed; no plant ageing |
+| Time | `TimeScale` | `seconds_per_tick` only changes the clock; costs are charged per tick |
 
 ## The genes (animals)
 
-All gene values are 0 to 1, read by the existing `TraitDef` mechanism. Width is a suggestion:
-three digits gives 64 levels, about 1.6% per step, plenty for a trait with this little detail, and fewer
-digits means fewer neutral places for mutations to land.
+All gene values are 0 to 1, read by the existing `TraitDef` mechanism. Three digits (64 levels) each.
 
-| Gene | Width | Trait | Range | Scale | Meaning |
-| --- | --- | --- | --- | --- | --- |
-| `caregiving` | 3 digits | `care_fraction` | 0.10 to 0.80 | linear | Newborn's starting energy as a share of the newborn's own `max_energy` |
-| `repro_interval` | 3 digits | `interval_fraction` | 0.01 to 0.25 | log | Minimum gap between births as a share of the animal's expected lifespan |
-| `repro_drive` | 3 digits | `repro_drive` | 0 to 1 | linear | Strength of the urge to find a mate and reproduce |
-
-`fertility` (4 digits) goes. Net change: the 65 digits before the brain become 70 (4 removed, 9
-added), so `sex_strategy` and the brain block move along by five. `ANIMAL_LAYOUT.version` goes to 3.
-
-### Caregiving: energy per offspring (tier 1)
-
-- A newborn starts with `care_fraction * max_energy(newborn)`. The old fixed start was
-  `0.75 * max_energy`, which is the middle of the range.
-- With two parents, the newborn's start is the mean of both parents' `care_fraction`, and each parent
-  pays half of it (`care_fraction_i / 2 * max_energy(newborn)`, times the repair surcharge below). This
-  keeps the cost shared by genes rather than by sex type, so it works whether or not sex types stay
-  ([#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 2).
-- Survival comes from the energy rules: a newborn lasts about `start_energy / basal_metabolism` ticks
-  before it must eat. Low caregiving means many cheap births but the young often starve before their
-  first meal; high caregiving means few expensive ones that nearly all survive. This is the Smith and
-  Fretwell offspring size against number trade-off from the
-  [traits research](../research/basic-traits.md#35-reproduction-and-life-history), with no survival
-  curve written in by hand.
-- One offspring per birth to begin with. Litter size can come later as the number the parent's
-  spare energy can pay for.
-- **Behaviour:** an animal with dependent young nearby is more protective: aggression times
-  `1 + 0.5 * care_fraction_norm`, fear times `1 - 0.4 * care_fraction_norm`, where `care_fraction_norm`
-  is the gene value 0 to 1. This needs "young nearby" from the senses, so it waits for `SENSE.1`;
-  until then the modifier is zero. Meanwhile caregiving already acts on behaviour through its cost:
-  a costly birth leaves the parent hungry, and the existing hunger rule sends it foraging.
-
-### Interval: a limit on how often (tier 1)
-
-- After a birth, the animal cannot reproduce for `interval_fraction * lifespan_ticks`, where
-  `lifespan_ticks = max_damage_capacity / wear_per_tick`. The first birth is allowed once the animal
-  reaches the same age (the same gene sets the juvenile period, so there is no extra gene).
-- With the ranges above, a mid-size animal (expected lifespan about 4,800 ticks) can breed as often as
-  every 48 ticks or as rarely as every 1,200. The old fixed 40 and 100 ticks sit at the short end.
-- The cost of a short interval is a standing upkeep for staying ready (gonads, milk, hormones):
-  `0.03 * (0.05 / interval_fraction) ** 0.5` energy per tick. That is 0.067 at 0.01, 0.030 at 0.05 and
-  0.013 at 0.25, against a basal metabolism around 0.5 for a mid-size animal.
-- A short interval also means more births from the same body, each paying the full cost, so a fast
-  breeder is limited by its food supply, not by the gene.
-- **Behaviour:** while the cooldown runs, the animal does not seek a mate, does not mating-call, and
-  the brain sees `ready_to_mate = 0` (already an input).
-
-### Drive: the urge to reproduce (tier 2)
-
-- The drive does not change what a birth costs or how long the gap is. It changes **when the animal
-  tries and how much it risks to do it**:
-  - Energy threshold to start looking: `threshold = clamp(0.85 - 0.5 * drive - 0.2 * (1 - vitality),
-    0.10, 0.95)` of `max_energy`. At drive 0 a healthy animal needs 85% of its energy; at drive 1 it
-    needs 35%. This replaces `0.35 + 0.35 * vitality` and keeps the old idea that failing health lowers
-    the bar.
-  - Boldness: while a mate is in view, `effective_fear` is multiplied by `1 - 0.3 * drive`.
-  - Upkeep: `0.05 * drive ** 2` per tick (search, display, hormones). At drive 1 that is about 10% of a
-    mid-size animal's basal metabolism.
-- In the brain, the drive is a `Temperament` field that bends the `mate_closeness` input with the same
-  factor as aggression and fear (0.4 to 1.6, 0.5 neutral): a high-drive animal finds a mate "closer" and
-  is pulled to it harder. During a cooldown the factor is 0. The brain's existing `ready_to_mate` input
-  stays as the gate.
-- The reason it is separate from caregiving: a high-drive, low-caregiving animal is a fast, careless
-  breeder; low-drive, high-caregiving is a slow, devoted one; and the two other combinations are also
-  coherent strategies.
-
-### Trade-off structure
-
-| Gene | Gain | Cost | Pushes against |
-| --- | --- | --- | --- |
-| `caregiving` up | Young survive (diminishing returns) | Bigger energy bill per birth, so fewer births | Number of offspring |
-| `repro_interval` down | More births in a lifetime | Readiness upkeep, more total spending | Food supply, the body's own repair |
-| `repro_drive` up | Earlier and bolder mating | Upkeep, more risk while courting | Safety and the animal's own reserves |
-| `somatic_maint` up | Longer life, more years to breed | Bigger and slower births, upkeep | All three above |
-
-## Longevity trades against reproduction (`TRAIT.6`)
-
-The owner's choice is mainly option C of #16 (longevity against reproduction), with a hint of option B
-(upkeep that grows faster than the benefit).
-
-**Main mechanism (disposable soma).** Repair and breeding draw on one energy supply, so an animal that
-invests in repair has less to give each birth:
-
-- Cost per birth to each parent: `care_fraction_i / 2 * max_energy(newborn) * (1 + 1.0 * somatic_maint)`.
-  Full repair doubles what a birth costs the parent. The newborn still receives the unsurcharged amount.
-- The shortest gap is stretched by the same investment:
-  `interval_ticks = interval_fraction * lifespan_ticks * (1 + 0.5 * somatic_maint)`.
-
-**Hint of option B.** Today the repair cost is `0.12 * somatic_maint`, linear, against a benefit that
-saturates (lifespan `x (1 + 3.5 * somatic_maint)`, so each extra bit of repair buys less). The cost
-becomes `0.20 * somatic_maint ** 2`: cheaper at low values (0.013 against 0.03 at 0.25) and dearer at
-the top (0.20 against 0.12 at 1.0), so it grows faster than the benefit where the benefit is smallest.
-
-## Does the trade-off work?
-
-A small model, not the simulator: a mid-size animal (size 0.5), constant food intake per tick, the
-lifespan and costs above, `caregiving 0.4`, `interval 0.05`, base upkeep 0.53 per tick (body, senses,
-gut and brain, taken as a guess) plus the repair and readiness upkeep above, the animal paying the
-whole birth bill itself (in a pair each pays half, which moves the numbers, not the shape), and newborn survival `1 - exp(-care_fraction / 0.15)`. It counts the
-surviving young one animal produces in a lifetime, taking the smaller of what its energy allows and
-what its interval allows. `somatic_maint` is `s`.
-
-| `s` | Lifespan (ticks) | Surviving young, intake 1.0 | intake 0.8 | intake 0.7 |
+| Gene | Trait | Range | Scale | Meaning |
 | --- | --- | --- | --- | --- |
-| 0.0 | 2,000 | 9.8 | 5.4 | 3.1 |
-| 0.2 | 3,400 | 13.6 | 7.3 | 4.2 |
-| 0.4 | 4,800 | 15.5 | 8.0 | 4.2 |
-| 0.6 | 6,200 | 15.8 | 7.3 | 3.0 |
-| 0.8 | 7,600 | 14.7 | 5.3 | 0.7 |
-| 1.0 | 9,000 | 12.0 | 2.1 | 0.0 |
+| `repro_drive` | `drive` | 0 to 1 | linear | Desire to mate |
+| `repro_cooldown` | `cooldown_days` | 2 to 90 days | log | Gap between matings |
+| `fertility` | `fertility` | 0 to 1, then derived (below) | linear | Fertility of either sex |
+| `parenting` | `care_fraction` | 0.10 to 0.80 | linear | Newborn energy as a share of its own max energy; also how closely the parent stays near and protects |
+| `recovery` | `recovery` | 0 to 1, then derived | linear | Healing and energy regain ([Recovery](#recovery-recovery)) |
+| `sex_strategy` | `sex`, `drive_modifier` | digit 0 to 3 | category | `sex = digit % 2`; digit 2 is +25% drive, 3 is -25% |
 
-Under this model the best repair level is in the middle (about 0.4 to 0.6, lower when food is
-scarce), so selection does not push `somatic_maint` to its maximum, which was the worry in #16. The
-table counts offspring per lifetime only: when food is plentiful, a shorter-lived animal also turns
-over generations faster, so population growth is a further pull toward low repair. The second
-calculation, varying `caregiving` at `s = 0.4` and intake 0.8, gives a best value near 0.2:
+The old `fertility` gene (4 digits) is replaced by the new one (3 digits). Net change: 15 digits added
+for the five new genes, 4 removed, so the digits before the brain become 76 (from 65) and
+`sex_strategy` and the brain block move along by 11. `ANIMAL_LAYOUT.version` goes up by one. The sex
+digit keeps its single digit.
 
-| `caregiving` | Births | Newborn survival | Surviving young |
-| --- | --- | --- | --- |
-| 0.1 | 19.0 | 0.49 | 9.2 |
-| 0.2 | 17.1 | 0.74 | 12.6 |
-| 0.4 | 8.6 | 0.93 | 8.0 |
-| 0.6 | 5.7 | 0.98 | 5.6 |
-| 0.8 | 4.3 | 1.00 | 4.3 |
+### Drive (`repro_drive`)
 
-The toy model's optimum depends on its guessed constants and on assuming steady intake; real
-results will move once food is patchy. What it does show is that the structure produces an interior
-optimum for both genes, not a runaway to a corner.
+- **Effective drive** is `clamp(drive * (1 + 0.25 if digit == 2, 1 - 0.25 if digit == 3, else 1), 0, 1)`.
+- **Threshold.** The animal looks for a mate once its energy ratio is at least
+  `clamp(0.85 - 0.5 * effective_drive - 0.2 * (1 - vitality), 0.10, 0.95)`. At drive 0 a healthy animal
+  needs 85% of its energy; at 1 it needs 35%. This replaces `0.35 + 0.35 * vitality` and
+  `WorldConfig.min_mating_energy_ratio`.
+- **Boldness.** While a mate is in view, `effective_fear` is multiplied by `1 - 0.3 * effective_drive`.
+- **Brain.** `Temperament` gets a `repro_drive` field that bends the `mate_closeness` input with the
+  usual factor (0.4 to 1.6, 0.5 neutral). A cooldown or pregnancy makes it 0.
+- **Costs (strong drive, shorter life).** Wear per tick is multiplied by `1 + 0.6 * drive`, so drive 1
+  cuts expected life to 62% of drive 0. Plus upkeep `0.05 * drive ** 2`.
+- A low-drive animal waits for a full belly before looking; a high-drive one reproduces sooner and in
+  leaner times, which only pays off where mates are scarce ([toy results](#does-the-trade-off-work)).
+
+### Cooldown (`repro_cooldown`)
+
+- After a mating the animal cannot mate again for `cooldown_days * (1 + 1.0 * somatic_maint)` of
+  simulated time. A bearer's cooldown starts at the birth, so her gap is gestation plus cooldown.
+- The cost of a short cooldown is standing upkeep for staying ready: `0.03 * (5 / cooldown_days) ** 0.5`
+  per tick, 0.047 at 2 days, 0.03 at 5, 0.007 at 90, against a basal metabolism around 0.5.
+- **Behaviour.** While the cooldown or a pregnancy runs the animal does not seek a mate or mating-call
+  (the existing `ready_to_mate` input is 0), so it spends the time feeding and recovering.
+- An animal first becomes able to mate at 6% of its expected lifespan (a fixed share, not a gene), so
+  bigger, longer-lived animals mature later, as in nature.
+
+### Fertility (`fertility`)
+
+Both sexes carry the gene. For a mating between an impregnating animal `i` and a bearing animal `b`:
+
+| What | Formula | Range |
+| --- | --- | --- |
+| Chance the mating takes | `0.30 + 0.60 * (f_i + f_b) / 2` | 0.30 to 0.90 |
+| Litter size (bearer's gene) | `1 + round(f_b * 7)` | 1 to 8 |
+| Gestation (bearer's gene) | `2 + 18 * f_b` days | 2 to 20 days |
+| Upkeep, either sex | `0.04 * f ** 2` per tick | up to 0.04 |
+| Carrying a litter (bearer, during gestation) | extra upkeep `0.5 * basal * litter / 8`; speed times `1 - 0.3 * litter / 8` | |
+
+- A failed mating still costs the **mating effort**, 3% of max energy for each (replacing the old 25% and
+  45%). The real cost is paid at birth.
+- **Behaviour.** A pregnant bearer is slower, hungrier and (through the existing hunger rule) forages
+  more; a heavy litter makes this stronger. This is how fertility reaches behaviour.
+- The trade-offs: easy to reproduce costs energy (chance and upkeep rise together), and more young
+  means a longer gestation, which lengthens the bearer's gap.
+
+### Parenting (`parenting`)
+
+- `care_fraction = 0.10 + 0.70 * parenting`. At birth each young starts with
+  `mean(care_fraction_a, care_fraction_b) * max_energy(young)`.
+- **Who pays.** Each parent pays `litter * care_fraction_own / 2 * max_energy(young) *
+  (1 + 2.0 * somatic_maint)`. A parent with a high gene pays more; one with a low gene pays less. If
+  either cannot afford it, the birth waits (this is the `TRAIT.5` guard).
+- **Survival** comes from the energy rules: a newborn lasts about `start_energy / basal_metabolism`
+  ticks before it must eat, so low parenting means many young that often starve, and high parenting
+  means few well-provisioned ones.
+- **Staying near and protecting.** Young depend on their parent for `parenting * 6%` of the parent's
+  lifespan after birth. While they are dependent and close:
+  - the parent sees them through a new sense channel, "own young" (direction and closeness), the
+    optional input already listed as `SENSE.14`; `Temperament.parenting` bends its closeness by the usual
+    0.4 to 1.6, so high-parenting animals are drawn to their young;
+  - a threat near the young is treated as dangerous to them: aggression is multiplied by
+    `1 + 0.5 * parenting` and fear by `1 - 0.4 * parenting`, which makes the parent fight instead of
+    flee and so puts itself in danger. Low-parenting animals ignore the young and keep their normal fear.
+- Until `SENSE.14` provides the percept, parenting acts through energy only.
+- **First generation:** `parenting = 0` (care fraction 0.10, no protection), `fertility = 0.75`.
+
+### Longevity trades against reproduction (`TRAIT.6`)
+
+The owner's choice is mainly #16 option C (longevity against reproduction), with a hint of option B.
+It lives alongside the owner's strong drive against short life:
+
+- **Main mechanism (disposable soma).** Repair and breeding draw on one energy supply:
+  - cost per birth to each parent is multiplied by `1 + 2.0 * somatic_maint` (full repair triples it);
+  - the cooldown is stretched by `1 + 1.0 * somatic_maint` (full repair doubles it).
+  The newborn still receives the unsurcharged amount.
+- **Hint of option B.** Repair upkeep becomes `0.20 * somatic_maint ** 2` (was `0.12 * somatic_maint`):
+  cheaper below about 0.6, dearer above, so it grows faster than the benefit at the top.
+- **Drive** adds to the same budget: a high drive shortens life as in [Drive](#drive-repro_drive), so a
+  short-lived animal is not simply a low-repair one.
+
+### Recovery (`recovery`)
+
+`TRAIT.7`: the owner asked for a gene for how well the body recoups and recovers energy and health. It is
+**different from `somatic_maint`**: repair slows wear (slow ageing, which cannot be undone), recovery
+heals acute damage and refills energy.
+
+- **Healing.** Lost health heals with a half-life of `20 * (1 / 20) ** recovery` days, 20 days at 0 and 1
+  day at 1 (log scale). It only heals while the energy ratio is at least 0.5, and each point healed
+  costs 0.5 energy (as now). This replaces the "4 health per feeding above 80%" rule.
+- **Energy regain at rest.** `SleepRules.energy_regain` is multiplied by `0.5 + 1.5 * recovery`, 0.5 to 2.
+- **Cost.** Upkeep `0.10 * recovery ** 2` per tick. A fast healer burns more even when healthy.
+- **Not covered:** accumulated wear (ageing) is not healed.
+- Behaviour: a quick healer can afford more risks; it reaches the brain through the existing
+  `health_ratio` and `energy_ratio` inputs, with no change to the brain.
 
 ## Units and time
 
-- One tick is 1 simulated second ([WORLD.3](../../TODO.md)). Every per-tick number here (upkeep rates,
-  wear) is "per reference tick"; if the tick length ever changes, multiply by it.
-- Intervals, juvenile period and anything else that is a duration are stored as **shares of the animal's
-  own lifespan** and turned into ticks at birth (`interval_ticks`). Nothing here is a fixed count of
-  ticks, so the genes mean the same for a 22-minute animal and a 3-hour one, and for any time scale.
-- **A problem for the owner.** Lifespans come out at 22 minutes to 3.3 hours of simulated time, and
-  "1000 years per real second" is 3.2 x 10^10 ticks per real second at one second per tick. The brain
-  decides in about 20 microseconds ([brain.md](brain.md)), so Python manages roughly 50,000 decisions a
-  second for one animal. The fastest settings therefore cannot be run tick by tick. See question 8.
+The owner chose option C of #36 question 8: much longer lifespans in simulated time, with a longer
+tick. The defaults in [#69](https://github.com/dwhagar/evolutionSimulator/issues/69) question 3 are one
+simulated year of life and a tick of about an hour, so a life is roughly 8,800 ticks and a plant's
+month roughly 730.
 
-## Plants (REPRO.3)
+- **Reference tick.** Every per-tick rate in this note and in `traits.py` is "per reference tick",
+  `REFERENCE_TICK_SECONDS = 3600`. The world multiplies each by `dt = seconds_per_tick / 3600`, so a
+  one-second tick still works, just slowly (`WORLD.7`). Durations in days are converted to ticks with
+  `ceil(days * 86400 / seconds_per_tick)`.
+- **Calibration.** With the wear changed from 0.075 to `WEAR_BASE = 0.0362` per reference tick, an
+  animal with size 0.5, repair 0.5 and drive 0.5 lives 8,765 ticks, about a simulated year. Across the
+  range of genes lifespan runs from 2,762 ticks (115 days: size 0, no repair, no drive) to 24,862
+  (2.8 years: size 1, full repair, no drive), and a full-drive animal lives 62% as long as a no-drive
+  one.
+- **Why absolute times.** The first version of this note stored cooldown and gestation as shares of
+  lifespan. That made the number of matings per lifetime independent of lifespan, so living longer
+  earned no extra young and the drive-against-longevity trade-off the owner asked for had nothing on
+  the other side of the scale. In days, a long life means more cycles.
+- The brain keeps deciding on its own interval (`BRAIN.11`); ageing, metabolism and reproduction are
+  summed over the tick.
 
-Plants are asexual, mutate slower and live longer, and have no brain, so:
+## Plants (REPRO.3 and TRAIT.8)
 
-| Animal gene | Plant equivalent |
-| --- | --- |
-| `caregiving` | `seed_provision`: energy per seed as a share of the seed's own `max_biomass`; the seed count is what the 35% seed budget can pay for, so `seed_clutch` becomes the upper limit rather than a free number |
-| `repro_interval` | `seeding_interval`: share of the plant's lifespan between seed bursts, stored the same way |
-| `repro_drive` | None: a plant has no behaviour to motivate. The seeding trigger stays "at 85% of capacity" |
+Plants are asexual, mutate slower (a `DNA.8` setting) and have no brain, so no drive and no sex.
 
-- Plants have no ageing today, so there is no lifespan to take a share of. `TRAIT.6` for plants needs a
-  plant lifespan first (question 10). Until then `seeding_interval` is a share of a configured plant
-  lifespan constant, set several times the animal one to match "live longer".
-- Slower mutation is a `DNA.8` setting, not a trait: the plant layout gets a lower segment rate than the
-  animal body.
-- No sexual cost or mate search applies, so there is no repair surcharge on a "birth" other than the
-  seed budget itself.
+| Gene (3 digits) | Trait | Range | Meaning |
+| --- | --- | --- | --- |
+| `longevity` | `lifespan_days` | 7 to 365 days, log | `TRAIT.8`: age at which an uneaten plant dies |
+| `seed_provision` | `seed_fraction` | 0.05 to 0.50 | Energy per seed as a share of the seed's own max biomass (`seed_clutch` still caps the count) |
+| `seeding_interval` | `seeding_days` | 2 to 60 days, log | Gap between seed bursts (the "ready to seed" trigger at 85% stays) |
+
+- **Default lifespan:** one simulated month, 30.4 days, which is `longevity = 0.371` on that scale. Plants
+  die when their age reaches the lifespan, or earlier from damage or starvation. A plant first seeds at
+  6% of its lifespan.
+- **Trade-offs (so it does not run to the maximum).** Growth rate is multiplied by `1 - 0.3 * g` and the
+  share of biomass available for seeds is `0.35 * (1 - 0.4 * g)` where `g` is the gene value: a long-lived
+  perennial grows slower and seeds less, a short-lived annual grows fast and seeds heavily. Crowding
+  adds the usual pressure from the world (shade, roots).
+- **Seed count** is what the budget can pay for: `min(seed_clutch, budget / (seed_fraction * max_biomass))`.
+- **The earlier notes said plants live longer.** With the owner's numbers plants default to a month and
+  animals to a year, so plants now start short-lived; the lifespan gene lets them evolve longer. The
+  TODO text for `REPRO.3` ("live longer") needs updating; see question 12.
+
+## Does the trade-off work?
+
+A toy, not the simulator: a mid-size animal (size 0.5, tick one hour), constant food intake per tick,
+the formulas above, newborn survival `1 - exp(-care_fraction / 0.15)`, and a count of surviving young
+(half of them credited to this parent). The number of matings is the smaller of what its time and what
+its energy allow. There is no crowding, so food does not get scarcer as young pile up.
+
+| Gene varied | Values and surviving young | What it shows |
+| --- | --- | --- |
+| Parenting 0, .2, .4, .6, .8, 1 | 9.0, 14.7, 17.0, 14.0, 11.3, 9.4 (intake 1.0); 9.0, 7.9, 5.8, 4.5, 3.6, 3.0 (intake 0.75) | Interior optimum (about 0.4) when food is plentiful; none at all pays best when it is scarce |
+| Repair 0, .2, .4, .6, .8, 1 (parenting 0.3) | 7.0, 11.0, 14.5, 17.6, 17.6, 13.7 (intake 1.0); 6.8, 8.0, 7.5, 5.6, 2.5, 0.0 (intake 0.75) | Interior optimum that moves down as food gets scarce |
+| Drive 0, .25, .5, .75, 1, mates common (wait 100 ticks) | 12.3, 11.0, 10.0, 9.2, 8.6 | Low drive wins |
+| Drive, mates scarce (wait 600 ticks) | 8.1, 7.8, 7.8, 8.0, 8.6 | High drive wins slightly |
+| Fertility 0, .25, .5, .75, 1 | 0.9, 3.4, 6.7, 9.0, 13.0 (intake 1.0); same up to .75, then 9.7 at 1 (intake 0.75) | Rises to the top when food is plentiful, bends over when it is not |
+| Cooldown gene 0, .25, .5, .75, 1 (2 to 90 days) | 15.2, 12.7, 9.0, 5.1, 2.4 (intake 1.0); 8.4, 10.1, 9.0, 5.1, 2.4 (intake 0.75) | Shortest wins when food is plentiful; an interior optimum appears when it is scarce |
+
+What this says: parenting, repair and cooldown have optima that move with food, and drive's best value
+depends on how hard mates are to find, which is the point of making them genes. Fertility and
+cooldown run to an end when food is plentiful because the toy has no crowding; in the world, many young
+share the same food, which is what must stop them. This is the main risk of the design and needs
+a check once births work: run many generations and see where `fertility`, `repro_cooldown` and
+`parenting` settle. If they pile up at an end, raise `GESTATION_UPKEEP`, `FERTILITY_UPKEEP` or the
+mating effort. The repair birth surcharge (2.0) and cooldown stretch (1.0) were chosen from a small grid, because
+the first values (1.0 and 0.5) let full repair win whenever food was plentiful.
 
 ## What to build
 
-`REPRO.5` and `TRAIT.6` change the same functions and the same layout version, so one builder should
-take both.
+One builder should take `REPRO.5`, `TRAIT.6`, `TRAIT.7` and `WORLD.7`'s per-second charging together,
+because they change the same functions and the same layout version. Plant work (`REPRO.3`, `TRAIT.8`)
+can follow as a second change.
 
-1. `layouts.py`: drop `fertility`; add `caregiving`, `repro_interval`, `repro_drive` (3 digits each);
-   `ANIMAL_LAYOUT.version = 3`. Plant layout gets `seed_provision` and `seeding_interval`
-   (`PLANT_LAYOUT.version = 2`).
-2. `trait_defs.py`: the three `TraitDef` rows above, and the plant rows. `unread_genes()` stays empty.
+1. `layouts.py` (animals): replace `fertility` (4 digits) with `repro_drive`, `repro_cooldown`,
+   `fertility`, `parenting`, `recovery` (3 digits each); bump `ANIMAL_LAYOUT.version`; set the first
+   generation's values (`fertility` 0.75, `parenting` 0, the rest 0.5) with `DNA.replaced` or the
+   world's seeding code.
+2. `trait_defs.py`: the traits in the tables above; `sex_strategy` yields `sex` (mod 2) and
+   `drive_modifier`.
 3. `traits.py`:
-   - `lifespan_ticks` (property), `interval_ticks`, and the energy rules above;
-   - replace `consume_mating_cost` with a two-parent birth step that checks both parents can afford it
-     before taking anything (this is also `TRAIT.5`'s mating-cost guard), sets both cooldowns, and
-     returns the newborn's starting energy;
-   - replace the `0.35 + 0.35 * vitality` threshold with the drive formula;
-   - basal metabolism gains the readiness and drive upkeep and the new repair cost.
-4. `brain_adapter.py`: add `repro_drive` to `Temperament` (bending `mate_closeness`), and `caregiving`
-   once `SENSE.1` provides a "young nearby" percept. `INPUT_NAMES` and the brain's shape stay as they
-   are.
-5. Tests: the newborn's energy equals the parents' mean `care_fraction` times its `max_energy`; neither
-   parent is charged if one cannot afford the birth; cooldown ticks scale with lifespan; full repair
-   makes a birth cost double; and repair cost is convex.
-6. Constants go in the `TRAIT.3` config object, with the names below.
+   - `lifespan_ticks`, cooldown ticks, gestation ticks, litter size, conception chance, care fraction;
+   - the drive threshold and boldness; wear and upkeep terms (drive, cooldown, fertility, repair,
+     recovery); `WEAR_BASE` 0.0362;
+   - replace `consume_mating_cost` with a mating step (effort, conception check, begin pregnancy) and
+     a birth step that checks both parents can pay before taking anything and returns the newborns'
+     starting energy;
+   - healing by half-life; scale `SleepRules.energy_regain` by recovery.
+4. `world/world.py`: `_mate` pairs one of each sex (the rule stays in one function, with `REPRO.4`'s
+   closeness preference); a pregnancy list (bearer, litter, due tick); births at the due tick, placing the
+   litter near the bearer; `dt`-scaled charging.
+5. `brain_adapter.py`: `Temperament.repro_drive` bending `mate_closeness`; `Temperament.parenting` and
+   the "own young" channel when `SENSE.14` lands.
+6. Plants (second change): three plant genes, plant ageing, the seed budget, plant layout version bump.
+7. Tests: care fraction and who pays; neither parent charged if one cannot pay; litter size and gestation
+   from the bearer; pregnancy blocks mating; cooldown scales with repair; drive shortens lifespan by
+   the stated factor; healing half-life; a plant dies at its lifespan; same seed gives the same births;
+   and a long run that checks no reproduction gene has piled up at an end.
+8. Constants go in the `TRAIT.3` config object, with the names below.
 
 ## Constants for the TRAIT.3 config
 
 | Name | Value | Used in |
 | --- | --- | --- |
-| `CARE_FRACTION_RANGE` | 0.10 to 0.80 | `caregiving` trait |
-| `INTERVAL_FRACTION_RANGE` | 0.01 to 0.25 (log) | `repro_interval` trait |
-| `READINESS_UPKEEP` | 0.03, reference interval 0.05, exponent 0.5 | basal metabolism |
+| `REFERENCE_TICK_SECONDS` | 3600 | converting per-tick rates |
+| `WEAR_BASE` | 0.0362 | wear per reference tick (was 0.075) |
+| `DRIVE_WEAR` | 0.6 | wear times `1 + 0.6 * drive` |
 | `DRIVE_UPKEEP` | 0.05, exponent 2 | basal metabolism |
-| `DRIVE_THRESHOLD` | 0.85, slope 0.5, vitality weight 0.2, clamp 0.10 to 0.95 | wants-to-mate rule |
-| `DRIVE_BOLDNESS` | 0.3 | fear modifier while a mate is in view |
-| `CARE_PROTECTION` | aggression 0.5, fear 0.4 | modifiers near dependent young |
+| `DRIVE_THRESHOLD` | 0.85, slope 0.5, vitality weight 0.2, clamp 0.10 to 0.95 | when to look for a mate |
+| `DRIVE_BOLDNESS` | 0.3 | fear modifier with a mate in view |
+| `SEX_DRIVE_MODIFIER` | +0.25 (digit 2), -0.25 (digit 3) | effective drive |
+| `COOLDOWN_DAYS` | 2 to 90, log | cooldown trait |
+| `READINESS_UPKEEP` | 0.03, reference 5 days, exponent 0.5 | basal metabolism |
+| `MATURITY_SHARE` | 0.06 of lifespan | first mating, first seeding |
+| `FERTILITY_CONCEPTION` | 0.30 + 0.60 * mean fertility | whether a mating takes |
+| `LITTER_MAX` | 8 | litter size |
+| `GESTATION_DAYS` | 2 + 18 * fertility | gestation |
+| `FERTILITY_UPKEEP` | 0.04, exponent 2 | basal metabolism |
+| `GESTATION_UPKEEP` | 0.5 of basal times litter / 8 | bearer during gestation |
+| `GESTATION_SLOWING` | 0.3 times litter / 8 | speed |
+| `MATING_EFFORT` | 0.03 of max energy | each parent per mating |
+| `CARE_FRACTION_RANGE` | 0.10 to 0.80 | newborn energy and cost per young |
+| `DEPENDENCY_SHARE` | 0.06 of lifespan times parenting | how long young depend on the parent |
+| `PARENT_PROTECTION` | aggression +0.5, fear -0.4 times parenting | near dependent young |
 | `REPAIR_COST` | 0.20, exponent 2 | basal metabolism |
-| `REPAIR_BIRTH_SURCHARGE` | 1.0 | cost per birth |
-| `REPAIR_INTERVAL_STRETCH` | 0.5 | `interval_ticks` |
-| `PLANT_LIFESPAN_TICKS` | to set with question 10 | `seeding_interval` |
+| `REPAIR_BIRTH_SURCHARGE` | 2.0 | cost per birth |
+| `REPAIR_COOLDOWN_STRETCH` | 1.0 | cooldown |
+| `HEAL_HALFLIFE_DAYS` | 20 down to 1, log | healing |
+| `HEAL_ENERGY_COST` | 0.5 per health point; needs energy ratio at least 0.5 | healing |
+| `RECOVERY_REGAIN` | 0.5 to 2 times `SleepRules.energy_regain` | sleep and rest |
+| `RECOVERY_UPKEEP` | 0.10, exponent 2 | basal metabolism |
+| `PLANT_LIFESPAN_DAYS` | 7 to 365, log; default 30.4 | `longevity` |
+| `PLANT_LONGEVITY_GROWTH` | growth times `1 - 0.3 * g` | plant growth |
+| `PLANT_LONGEVITY_SEEDS` | seed budget `0.35 * (1 - 0.4 * g)` | seeds |
+| `SEED_FRACTION_RANGE` | 0.05 to 0.50 | `seed_provision` |
+| `SEEDING_DAYS` | 2 to 60, log | `seeding_interval` |
 
 ## Questions for the owner
 
-Raised as a comment on [#36](https://github.com/dwhagar/evolutionSimulator/issues/36), numbered 7 to 11
-after its six; each has a default this note assumes until answered.
+Raised as a comment on [#69](https://github.com/dwhagar/evolutionSimulator/issues/69), numbered 4 to 6
+after its three. Each has a default this note assumes.
 
-7. **Two tiers.** I read "two tiers" as tier 1 = the two capacity genes (caregiving, interval) and
-   tier 2 = the drive. Right? Default: yes.
-8. **Time scales.** A tick of one second and lifespans of hours cannot run at "1000 years per real
-   second". Options: (A) keep one-second ticks and offer only the speeds that can run; (B) let the tick
-   grow at fast speeds, with ageing, metabolism and reproduction summed over it and the brain deciding
-   at a fixed interval; (C) make lifespans much longer in simulated time and the tick longer to match.
-   Default: all durations are shares of lifespan (done here), decide when `WORLD.3` is built.
-9. **Who pays for a child.** Shared by the two parents' genes (this note), or the one with sex type 2
-   or 3 as in the prototype? Default: shared.
-10. **Plant lifespan.** Plants have no ageing, so "live longer" and `TRAIT.6` for plants need a lifespan
-   model. Add one (a simple maximum age, or wear like animals)? Default: a configured constant, no
-   repair gene.
-11. **Litters.** One offspring per birth, or several when the parent can afford it? Default: one.
+4. **Plant lifespan against animal lifespan.** With a month for plants and a year for animals, plants now
+   start shorter-lived than animals, where an earlier answer said plants should live longer. Keep the
+   month and let plants evolve longer? Default: yes.
+5. **After birth.** Parenting here is energy at birth plus staying near and protecting. Should parents
+   also feed their young afterwards (needs a "give food" action in the brain)? Default: no, later.
+6. **Pregnancy.** The bearer carries the litter for the gestation time, is slower and hungrier, and cannot
+   mate again until birth plus cooldown. Right? Default: yes.
