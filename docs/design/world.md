@@ -32,6 +32,7 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 | `sleep.py` | `SleepRules` and the `SleepListener` hook | WORLD.5 |
 | `organisms.py` | `Animal` and `Plant`: traits plus a place (and heading for animals) | WORLD.2 |
 | `senses.py` | the `Senses` interface and `BasicSenses`, a stand-in until `SENSE.1` | WORLD.2 |
+| `mating.py` | `may_mate`, `mate_rank`, `choose_mate`: who may mate and who is preferred | REPRO.4 |
 | `world.py` | `World`, `WorldConfig`, `StepReport` and the step loop | WORLD.2 |
 
 ## One tick
@@ -45,8 +46,9 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 2. In id order each awake animal ages and burns energy (`update_metabolism_and_aging`, with the brain's
    speed output as the movement ratio), turns, moves and, if the brain says "eat" and a plant is
    within reach, grazes it.
-3. Animals whose brain says "seek mating" and that are off cooldown pair off with the nearest such
-   animal within `mating_reach` (3 units). Each pair has one child (`DNA.reproduce`, default
+3. Animals whose brain says "seek mating" and that are off cooldown pair off in id order, each with
+   the willing animal within `mating_reach` (3 units) whose genome is closest (see
+   [Mate choice](#mate-choice)). Each pair has one child (`DNA.reproduce`, default
    crossover) placed near the parents' midpoint, and `AnimalTraits.give_birth` charges the parents
    and sets the child's energy; if either parent cannot pay, nobody is charged and there is no child.
 4. Plants grow in id order; a ready plant drops up to `seed_count` seeds within its dispersal radius
@@ -129,6 +131,19 @@ animal's range and field of view, touch (if the touch gene is above 0.1) and cro
 animal (under 0.8 of its mass) is prey, a heavier one (over 1.25 times) a threat, and anything else
 the nearest possible mate. Calls are not heard yet, so those inputs stay 0.
 
+## Mate choice
+
+`REPRO.4`. Two functions in `world/mating.py` decide everything about pairing, so the step loop does not.
+`may_mate(a, b)` says whether two animals can have a child at all: today, any two with the same layout and
+the same ploidy. The sex rule (`DNA.9`) belongs there. `choose_mate(a, candidates)` picks the preferred
+one among the willing animals in reach: the smallest genetic `distance` (the fraction of differing digits;
+for diploid genomes the closer pairing of strands), then the nearer animal, then the lower id.
+
+The closest genome is the same species or the nearest relative, so animals prefer their own kind.
+Cross-breeding between distant genomes is allowed but is the last choice: it happens only when nothing closer
+is in reach. There is no species label and no hard line between species; "closest" is relative to who is
+there. Pairing is greedy in id order, so an animal can lose its first choice to an earlier one.
+
 ## Placeholders and limits
 
 - **Births are paid for (`REPRO.5`).** A child starts with the mean `care_fraction` of its parents
@@ -138,8 +153,8 @@ the nearest possible mate. Calls are not heard yet, so those inputs stay 0.
   `populate` creates are juveniles too.
 - **Acting on the brain is partial.** Only turn, speed, eat and seek-mating are used. Attacking
   prey, meat, calls and retiring the fixed rule are `BRAIN.10`. Animals do not eat each other yet.
-- **Sex and species.** Any two willing animals of the same layout may mate; mate choice by genetic
-  closeness is `REPRO.4`.
+- **Sex.** Any two willing animals with the same kind of genome may mate; whether one of each sex is
+  needed is `DNA.9` and goes in `may_mate` ([Mate choice](#mate-choice)).
 - **Sleep** energy numbers and the 600-second day are guesses to calibrate (`SENSE.13`, `TRAIT.3`).
 - **Population caps** (1000 animals, 5000 plants) exist so a run cannot grow without limit.
 - **Speed** (`WORLD.9`). Measured with `cProfile` on 300 animals and 3000 plants: the first version took
