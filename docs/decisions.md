@@ -4,6 +4,10 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-14: plant trade-offs, effort to eat and animal resistance
+
+The owner asked that toxicity and size are linked, that a bigger plant takes longer to germinate, that every free plant gene gets a balancing trait and all of them interact, that `root_reach` is fixed, that faster seeding makes a plant easier to eat, that tougher and more toxic plants take longer to eat (an effort to eat), and that animals get a resistance gene: more resistance to toxic plants (or poisoned animals) means eating takes longer but more food can be eaten. Design: [design/plant-tradeoffs.md](design/plant-tradeoffs.md). Tasks: `TRAIT.13` (plant genes, new `toughness` gene, germination, `root_reach`), `TRAIT.14` (effort to eat), `TRAIT.15` (animal resistance gene, animal layout version 10), `TRAIT.16` (poisoned animals). Three points are open in [#216](https://github.com/dwhagar/evolutionSimulator/issues/216) with defaults in use: how toxicity and size are linked (default: a bigger plant costs more to keep poisonous), whether tough is its own gene (default: yes), and what poisoned animals means (default: they carry the poison they ate, and their meat is poisonous).
+
 ## 2026-10-14: data storage is SQLite
 
 The owner decided that data storage is SQLite, not a database server. The Python standard library `sqlite3` is used, so the core stays dependency-free. Plan: one `run.sqlite` file per run holding the manifest, the checkpoints (still the JSON world save, compressed), the history tiers appended as they are taken, and later the species and lineage tables. `STORE.1` is the design note, `STORE.2` the build; `UX.32`, `SPECIES.2`, `UX.35` and `UX.40` wait for it so the recorder format changes once.
