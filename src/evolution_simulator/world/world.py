@@ -651,7 +651,7 @@ class World:
         (``BRAIN.22``). It lets touch cut the decision interval short without sensing every tick, and
         costs a neighbour query only for animals that are between decisions."""
         traits = animal.traits
-        if traits.decided_touch or traits.decision_interval <= 1:
+        if traits.decided_touch or traits.looks_every_tick:
             return False
         # Imported here because ``sensing`` itself imports from this package.
         from evolution_simulator.sensing import organs_from_traits
