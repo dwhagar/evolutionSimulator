@@ -154,10 +154,7 @@ class Brain:
         """One pass through the network: ``inputs`` in, one number per output out."""
         if len(inputs) != self.shape.inputs:
             raise ValueError(f"Expected {self.shape.inputs} inputs, got {len(inputs)}.")
-        hidden = [
-            math.tanh(bias + math.sumprod(weights, inputs))
-            for bias, weights in self._hidden
-        ]
+        hidden = [math.tanh(bias + math.sumprod(weights, inputs)) for bias, weights in self._hidden]
         signed = self.shape.signed_outputs
         result: list[float] = []
         for k, (bias, weights) in enumerate(self._outputs):
