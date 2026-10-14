@@ -810,19 +810,29 @@ class World:
     # -------------------------------------------------------------------------
 
     def state_digest(self) -> str:
-        """A hash of the whole state: tick, random generator, and every organism's place, energy
-        and genome. Two runs that are really the same give the same digest."""
+        """A hash of the state that decides what happens next: tick, random generator, and every
+        organism's place, energy, health, age, sleep, pregnancy, learned changes and genome. Two
+        runs that are really the same give the same digest. It is a check, not a full copy: whatever
+        else a world holds is saved by ``persistence.py`` (``UX.9``), which has to learn about any
+        new state."""
         parts: list[str] = [str(self.tick), repr(self.rng.getstate())]
         for animal in self.animals:
+            traits = animal.traits
+            pregnancy = traits.pregnancy
+            learner = traits.learner
             parts.append(
                 f"A{animal.id}|{animal.position.coords!r}|{animal.heading!r}|"
-                f"{animal.traits.current_energy!r}|{animal.traits.current_health!r}|"
-                f"{animal.traits.dna}"
+                f"{traits.current_energy!r}|{traits.current_health!r}|{traits.dna}|"
+                f"{animal.asleep}|{animal.disturbed}|{animal.awake_time!r}|{animal.partner}|{traits.age_ticks}|"
+                f"{traits.matings}|{traits.mating_cooldown!r}|"
+                f"{None if pregnancy is None else (pregnancy.litter, pregnancy.remaining)!r}|"
+                f"{None if learner is None else (learner.offsets, learner.open_decisions)!r}"
             )
         for plant in self.plants:
+            traits = plant.traits
             parts.append(
-                f"P{plant.id}|{plant.position.coords!r}|{plant.traits.current_biomass!r}|"
-                f"{plant.traits.dna}"
+                f"P{plant.id}|{plant.position.coords!r}|{traits.current_biomass!r}|{traits.dna}|"
+                f"{traits.lived_ticks!r}|{traits.seed_cooldown!r}"
             )
         for corpse in self.corpses:
             parts.append(f"C{corpse.id}|{corpse.position.coords!r}|{corpse.meat!r}")
