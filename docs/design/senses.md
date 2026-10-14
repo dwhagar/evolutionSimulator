@@ -19,6 +19,15 @@ Task IDs and the owner's answers are recorded in [../decisions.md](../decisions.
 `WORLD.5`, the evolving brain shape `BRAIN.13`, learning `BRAIN.15`, the random-movement fallback
 `BRAIN.16`, mate choice `REPRO.4`, the constants config `TRAIT.3`).
 
+> **Update, 2026-10-14 (`SENSE.15`).** The sense channels, the sensing step, the sense genes and
+> inputs 18 to 20 are built (`SENSE.8` to `SENSE.11`, `SENSE.9`); `sense_genes.py` now has ranges that
+> reach 0, noise that falls with the gene, and cost on the area covered, so parts of
+> "What the existing code already does" below describe the code at the time of writing. The owner's
+> request for a field-of-vision gene, an acuity gene with a hard trade-off, a gene per sense starting
+> mid-range and different starting eyes for predators and prey, and the check of what the world must
+> provide for each sense, are in [sense-genes.md](sense-genes.md). Where the two disagree (for example
+> "a wider field shortens the range by 45%"), that note is newer.
+
 ## Contents
 
 1. [Summary](#summary)

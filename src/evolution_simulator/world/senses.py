@@ -175,6 +175,7 @@ class WorldSenses:
                         scent=1.0,
                         alarm_call_radius=alarm,
                         mating_call_radius=mating,
+                        mass=other.traits.mass,
                     )
                 )
         return sense(
@@ -187,4 +188,5 @@ class WorldSenses:
             rules,
             world.rng,
             edge_distance=world.edge_distance(position) - animal.radius,
+            mass=traits.mass,
         )

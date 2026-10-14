@@ -119,7 +119,7 @@ def test_things_out_of_range_or_outside_the_field_of_view_are_not_seen():
     world.add_plant(plant_dna(), Vec.of(500 + 100, 500))  # beyond 60 units
     world.add_plant(plant_dna(), Vec.of(480, 500))  # behind, outside 40 degrees
     world.add_plant(plant_dna(), Vec.of(510, 540))  # ahead-ish but far off to the side
-    assert seen_by(world, animal) == Percepts()
+    assert seen_by(world, animal) == Percepts(daylight=1.0)
 
 
 def test_a_plant_one_can_stand_on_is_seen_whichever_way_it_faces():
@@ -191,10 +191,35 @@ def test_crowding_counts_animals_in_reach_and_tops_out_at_the_reference():
     assert seen_by(world, me, SensingRules(crowding_reference=24)).crowding == pytest.approx(0.5)
 
 
+def test_relative_size_is_that_of_the_nearer_of_prey_and_threat():
+    world = World()
+    me = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    world.add_animal(animal_dna(size=MASS_1), Vec.of(510, 500))  # lighter: half the mass
+    world.add_animal(animal_dna(size=MASS_4), Vec.of(500, 520))  # heavier: twice the mass, further
+    assert seen_by(world, me).relative_size == pytest.approx(-0.5)  # log2(1/2) / 2
+    world = World()
+    me = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    world.add_animal(animal_dna(size=MASS_1), Vec.of(520, 500))
+    world.add_animal(animal_dna(size=MASS_4), Vec.of(500, 510))  # now the nearer one
+    assert seen_by(world, me).relative_size == pytest.approx(0.5)  # log2(2) / 2
+    world = World()
+    alone = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    world.add_animal(animal_dna(size=MASS_2), Vec.of(510, 500))  # a possible mate is not sized
+    assert seen_by(world, alone).relative_size == 0.0
+
+
+def test_the_time_of_day_is_reported():
+    world = World()
+    me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
+    assert seen_by(world, me).daylight == 1.0  # no day cycle: always full daylight
+    assert seen_by(world, me).senses_nothing  # and that is not a sense
+
+
 def test_an_animal_does_not_sense_itself():
     world = World()
     me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
-    assert seen_by(world, me) == Percepts()
+    seen = seen_by(world, me)
+    assert seen == Percepts(daylight=1.0)  # daylight is reported even when nothing else is
 
 
 def test_a_sleeper_is_quiet_but_not_invisible():
@@ -289,6 +314,7 @@ def brute_force(world, animal, rules, rng):
                 scent=1.0,
                 alarm_call_radius=alarm,
                 mating_call_radius=mating,
+                mass=other.traits.mass,
             )
         )
     return sense(
@@ -301,6 +327,7 @@ def brute_force(world, animal, rules, rng):
         rules,
         rng,
         edge_distance=world.edge_distance(animal.position) - animal.radius,
+        mass=animal.traits.mass,
     )
 
 
@@ -321,8 +348,11 @@ def test_perceiving_changes_nothing_but_the_random_stream():
     world = World(WorldConfig(seed=3))
     world.populate(animals=10, plants=40)
     before = world.state_digest()
+    stream = world.rng.getstate()
     for animal in world.animals:
         seen_by(world, animal)
+    assert world.rng.getstate() != stream  # the noise came from the world's generator
+    world.rng.setstate(stream)
     assert world.state_digest() == before
 
 

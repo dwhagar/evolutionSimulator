@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING
 
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
+from evolution_simulator.learning import LearningRules, NightlyLearning
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, PlantTraits
 from evolution_simulator.world.bounds import Bounds
@@ -118,6 +119,9 @@ class WorldConfig:
     sleep. Turn it on once seeded brains (BRAIN.9) and the call rules (BRAIN.10) exist."""
     sensing: SensingRules = field(default_factory=_default_sensing_rules)
     """The constants of the sensing step: light and sleep factors, weak smell, noise."""
+    learning: LearningRules | None = field(default_factory=LearningRules)
+    """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
+    ``None`` turns it off."""
     plants: PlantRules = field(default_factory=PlantRules)
     max_animals: int = 1000
     max_plants: int = 5000
@@ -170,6 +174,8 @@ class World:
         self._sleep_listeners: list[SleepListener] = []
         self.calls: dict[int, tuple[float, float]] = {}
         """Animals calling this tick, by id: (alarm call radius, mating call radius), 0 for none."""
+        if self.config.learning is not None:
+            self.add_sleep_listener(NightlyLearning())
 
     # -------------------------------------------------------------------------
     # Reading the world
@@ -279,6 +285,7 @@ class World:
     def _insert_animal(
         self, traits: AnimalTraits, place: Vec, facing: float, parents: tuple[int, ...]
     ) -> Animal:
+        traits.learning_rules = self.config.learning
         animal = Animal(self._new_id(), traits, place, facing, parents)
         self._animals[animal.id] = animal
         self._animal_index.insert(animal.id, animal.position)

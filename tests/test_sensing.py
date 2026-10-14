@@ -18,7 +18,13 @@ from evolution_simulator.sensing import (
 from evolution_simulator.world.vector import Vec
 
 ORIGIN = Vec.of(0.0, 0.0)
-BODY = {"energy_ratio": 0.5, "health_ratio": 0.5, "vitality": 0.5, "ready_to_mate": False}
+BODY = {
+    "energy_ratio": 0.5,
+    "health_ratio": 0.5,
+    "vitality": 0.5,
+    "ready_to_mate": False,
+    "pain": 0.0,
+}
 
 
 def at(distance: float, degrees: float = 0.0) -> Vec:
@@ -54,7 +60,7 @@ def test_worked_example_by_day_and_by_night():
 
 
 def test_an_empty_world_gives_the_default_percepts():
-    assert look([]) == Percepts()
+    assert look([]) == Percepts(daylight=1.0)  # daylight is the time of day, not a sense
     assert look([]).senses_nothing
 
 
@@ -145,7 +151,7 @@ def test_the_most_precise_organ_gives_the_direction_and_the_best_range_the_scale
 
 
 def test_an_organ_with_no_range_is_off():
-    assert look([thing("plant", 1.0)], SenseOrgans()) == Percepts()
+    assert look([thing("plant", 1.0)], SenseOrgans()) == Percepts(daylight=1.0)
     assert (
         look([thing("plant", 1.0)], SenseOrgans(vision_range=0.0, smell_range=10.0)).plant_closeness
         > 0
@@ -177,7 +183,7 @@ def test_light_factor_follows_the_design_note():
 def test_sleep_switches_vision_off_and_halves_hearing_and_smell():
     asleep = SensingConditions(asleep=True)
     eye = SenseOrgans(vision_range=40.0)
-    assert look([thing("plant", 5.0)], eye, conditions=asleep) == Percepts()
+    assert look([thing("plant", 5.0)], eye, conditions=asleep) == Percepts(daylight=1.0)
     nose = SenseOrgans(smell_range=40.0)
     assert look([thing("plant", 5.0)], nose, conditions=asleep).plant_closeness == pytest.approx(
         0.75
@@ -285,7 +291,7 @@ def test_closeness_gets_a_small_error_and_unsensed_things_stay_zero():
     assert statistics.pstdev(values) == pytest.approx(0.03, abs=0.01)
     assert all(0.0 <= v <= 1.0 for v in values)
     empty = look([], organs, rng=random.Random(3))
-    assert empty == Percepts()  # nothing sensed: no error invented
+    assert empty == Percepts(daylight=1.0)  # nothing sensed: no error invented
 
 
 def test_a_zero_noise_setting_uses_no_random_draws():

@@ -22,10 +22,12 @@ What the function does, in order:
    inputs are scaled to its own senses. The bearing comes from the most precise organ that detected
    it (vision, then hearing, then smell), divided by the half field of view for vision and by 180
    degrees otherwise, left negative.
-5. Calls, touch and crowding are read off the same neighbours.
+5. The nearest prey or threat also gives the relative-size input, ``log2(mass ratio) / 2``, exact by
+   sight and noisy by the other senses. Calls, touch and crowding are read off the same neighbours,
+   and the daylight input is the conditions' daylight.
 6. If a random generator is given, each report gets seeded noise that falls as the organ improves.
 
-Everything not sensed is 0. Nothing here changes its arguments.
+Everything not sensed is 0 (daylight aside). Nothing here changes its arguments.
 """
 
 from __future__ import annotations
@@ -215,6 +217,8 @@ class Neighbour:
     """How far its alarm call carries, 0 when it is not calling."""
     mating_call_radius: float = 0.0
     """How far its mating call carries, 0 when it is not calling."""
+    mass: float = 0.0
+    """Its body mass, for the relative-size input; 0 when not known."""
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
@@ -226,6 +230,8 @@ class Neighbour:
                 raise ValueError(f"{name} must be between 0 and 1, got {getattr(self, name)}.")
         if self.alarm_call_radius < 0.0 or self.mating_call_radius < 0.0:
             raise ValueError("A call radius cannot be negative.")
+        if self.mass < 0.0:
+            raise ValueError("A neighbour's mass cannot be negative.")
 
     @property
     def is_animal(self) -> bool:
@@ -275,6 +281,7 @@ def sense(
     rules: SensingRules | None = None,
     rng: random.Random | None = None,
     edge_distance: float | None = None,
+    mass: float = 0.0,
 ) -> Percepts:
     """What a creature at ``position`` facing ``heading`` (radians, 0 is +x, counterclockwise) with
     a body of ``radius`` perceives of ``neighbours``.
@@ -334,6 +341,7 @@ def sense(
         return _clamp(-bearing / norm + noise(sense_kind), -1.0, 1.0)
 
     reported: dict[str, float] = {}
+    sizeable: list[tuple[float, int, _Seen, str]] = []  # prey and threats found, for relative size
     for target in TARGETS:
         direction_row, closeness_row, reporters = _TARGET_PLAN[target]
         class_range = max((range_for(k, target) for k in reporters), default=0.0)
@@ -350,12 +358,22 @@ def sense(
             continue
         found = best[2]
         by = next(k for k in reporters if detects(k, target, found))
+        if target in ("prey", "threat"):
+            sizeable.append((found.distance, found.neighbour.ident, found, by))
         reported[direction_row] = direction(by, found.bearing)
         reported[closeness_row] = _clamp(
             1.0 - found.distance / class_range + noise("vision", rules.closeness_noise),
             0.0,
             1.0,
         )
+
+    # Relative size of the nearest prey or threat: vision is exact, other senses are noisy.
+    if sizeable and mass > 0.0:
+        _, _, nearest, by = min(sizeable, key=lambda item: item[:2])
+        if nearest.neighbour.mass > 0.0:
+            ratio = math.log2(nearest.neighbour.mass / mass) / 2.0
+            noisy = ratio + (0.0 if by == "vision" else noise(by))
+            reported["relative_size"] = _clamp(noisy, -1.0, 1.0)
 
     # Calls come only through hearing.
     alarm = mating = 0.0
@@ -400,4 +418,5 @@ def sense(
         mating_call_strength=mating,
         call_direction=call_direction,
         crowding=min(1.0, crowd / rules.crowding_reference),
+        daylight=conditions.daylight,
     )

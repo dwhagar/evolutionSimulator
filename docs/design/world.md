@@ -184,8 +184,8 @@ neighbours, the world finds and classifies the neighbours.
   call costs about seven times the basal rate and random founder brains call on most ticks, which
   killed them before they could do anything else; `BRAIN.9` and `BRAIN.10` decide the real rule.
 - **Touch** sees the world's edge as well as other bodies (`World.edge_distance`).
-- **Not yet.** The neighbour's mass (`SENSE.9`) is not passed on because `Neighbour` has no field
-  for it; it is filled in when `SENSE.9` adds one.
+- **Size and light.** Each animal neighbour carries its mass and the step gets the viewer's mass,
+  for the relative-size input (`SENSE.9`); the daylight input is the world's daylight.
 
 The sensing step is imported inside `perceive` because `sensing` itself imports from this package.
 
