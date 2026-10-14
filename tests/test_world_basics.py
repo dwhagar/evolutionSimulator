@@ -69,11 +69,14 @@ def test_bounds_can_be_user_sized_and_other_dimensions():
 # --- time scale ---------------------------------------------------------------
 
 
-def test_a_tick_is_one_second_by_default():
+def test_a_tick_is_one_hour_by_default_and_one_second_is_still_possible():
     scale = TimeScale()
-    assert scale.seconds_per_tick == 1.0
-    assert scale.ticks_per_real_second == 1.0
-    assert scale.simulated_seconds(90) == 90.0
+    assert scale.seconds_per_tick == 3600.0
+    assert scale.ticks_per_real_second == pytest.approx(1 / 3600)
+    assert scale.simulated_seconds(90) == 90 * 3600.0
+    second = TimeScale(seconds_per_tick=1.0)
+    assert second.ticks_per_real_second == 1.0
+    assert second.simulated_seconds(90) == 90.0
 
 
 def test_all_the_owners_presets_exist_with_the_right_ratio():
@@ -89,7 +92,11 @@ def test_all_the_owners_presets_exist_with_the_right_ratio():
 
 
 def test_a_preset_sets_ticks_per_real_second():
-    assert TimeScale.from_preset("hour").ticks_per_real_second == 3600
+    assert (
+        TimeScale.from_preset("hour").ticks_per_real_second == 1
+    )  # an hour a tick, an hour a second
+    assert TimeScale.from_preset("day").ticks_per_real_second == 24
+    assert TimeScale.from_preset("hour", seconds_per_tick=1.0).ticks_per_real_second == 3600
     assert TimeScale.from_preset("hour", seconds_per_tick=60).ticks_per_real_second == 60
     with pytest.raises(ValueError):
         TimeScale.from_preset("fortnight")
@@ -103,7 +110,7 @@ def test_time_scale_rejects_bad_values():
 
 
 def test_pacer_carries_the_fraction_between_calls():
-    pacer = Pacer(TimeScale(speed=2.5))  # 2.5 ticks per real second
+    pacer = Pacer(TimeScale(seconds_per_tick=1.0, speed=2.5))  # 2.5 ticks per real second
     assert pacer.advance(1.0) == 2
     assert pacer.advance(1.0) == 3  # 0.5 carried + 2.5
     assert pacer.advance(0.0) == 0

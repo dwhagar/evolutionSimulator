@@ -1,8 +1,9 @@
 """The day-night cycle (WORLD.5): how light changes with simulated time.
 
-A day is ``length_seconds`` of simulated time (600 by default, ten simulated minutes: animals live
-from about 22 minutes to 3.3 hours, so a real 24-hour day would give most of them less than one
-night to learn in). Daylight runs smoothly from 0 at midnight to 1 at noon:
+A day is ``length_seconds`` of simulated time, 24 simulated hours by default (``WORLD.7``). It was ten
+minutes when a tick was a second and animals lived minutes; now animals live about a simulated year,
+so a real day gives them hundreds of nights to learn in, and at the default one-hour tick a day is 24
+ticks. Daylight runs smoothly from 0 at midnight to 1 at noon:
 ``0.5 - 0.5 * cos(2 * pi * phase)`` where ``phase`` is the fraction of the day gone (0 midnight,
 0.25 dawn, 0.5 noon, 0.75 dusk). It counts as night while daylight is below ``night_below``
 (0.3 by default, which is a little over a third of the day).
@@ -19,7 +20,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class DayCycle:
-    length_seconds: float = 600.0
+    length_seconds: float = 24.0 * 3600.0
     start_phase: float = 0.5
     night_below: float = 0.3
 

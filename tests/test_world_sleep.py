@@ -16,7 +16,7 @@ HERE = Vec.of(500, 500)
 FAST = {"speed": 2.0}
 EATER = {"eat": 2.0}
 LOVER = {"mate": 2.0}
-SHORT_DAY = DayCycle(length_seconds=100.0)  # noon at tick 0, night from tick 32 to 68
+SHORT_DAY = DayCycle(length_seconds=100.0 * 3600.0)  # noon at tick 0, night from tick 32 to 68
 
 
 def make(seed=0, **config):
@@ -123,7 +123,7 @@ def test_animals_fall_asleep_at_night_and_wake_in_the_morning():
 def test_a_sleeper_does_not_move_eat_or_mate():
     world = make()
     grazed = []
-    world._graze = grazed.append  # record any attempt to eat
+    world._graze = lambda animal, dt: grazed.append(animal)  # record any attempt to eat
     world.add_plant(plant_dna(), HERE)
     runner = world.add_animal(animal_dna(brain={**FAST, **EATER, **LOVER}), HERE, heading=0.0)
     partner = world.add_animal(animal_dna(brain={**FAST, **LOVER}), Vec.of(501, 500), heading=0.0)
@@ -204,7 +204,7 @@ def test_animals_see_less_at_night():
     wide = {"sight_range": "3333", "sight_fov": "3333"}  # 33 units, all round
     seen = []
     for start in (0.5, 0.0):  # noon, midnight
-        world = make(day_cycle=DayCycle(length_seconds=100.0, start_phase=start))
+        world = make(day_cycle=DayCycle(length_seconds=100.0 * 3600.0, start_phase=start))
         animal = world.add_animal(animal_dna(**wide), HERE, heading=0.0)
         world.add_plant(plant_dna(), Vec.of(520, 500))
         seen.append(senses.perceive(world, animal).plant_closeness)

@@ -615,7 +615,7 @@ def test_the_drive_shortens_life_to_62_percent():
     assert driven.lifespan_ticks / calm.lifespan_ticks == pytest.approx(0.625)
 
 
-def test_a_longer_tick_scales_wear_energy_and_cooldown_but_not_movement():
+def test_a_longer_tick_scales_wear_energy_cooldown_and_the_cost_of_moving():
     one = AnimalTraits(animal_with(somatic_maint="0000"))
     four = AnimalTraits(one.dna)
     for traits in (one, four):
@@ -630,7 +630,7 @@ def test_a_longer_tick_scales_wear_energy_and_cooldown_but_not_movement():
     moving = AnimalTraits(one.dna)
     moving.current_energy = moving.max_energy
     moving.update_metabolism_and_aging(1.0, 4.0)
-    kinetic = 0.35 * moving.mass
+    kinetic = 0.35 * moving.mass * 4.0  # moving for four hours at full speed
     assert moving.max_energy - moving.current_energy == pytest.approx(
         moving.basal_metabolism * 4.0 + kinetic
     )

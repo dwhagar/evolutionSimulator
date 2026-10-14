@@ -36,7 +36,7 @@ NOSE = {"sight_range": "0000", "hearing": "0000", "smell": "3333", "touch": "000
 EARS = {"sight_range": "0000", "hearing": "3333", "smell": "0000", "touch": "0000"}  # 85 units
 MASS_1, MASS_2, MASS_4 = "0000", "1111", "3333"
 EXACT = SensingRules()
-SHORT_DAY = DayCycle(length_seconds=100.0)  # noon at tick 0, night from tick 33 to 67
+SHORT_DAY = DayCycle(length_seconds=100.0 * 3600.0)  # noon at tick 0, night from tick 33 to 67
 
 
 def seen_by(world, animal, rules=EXACT):

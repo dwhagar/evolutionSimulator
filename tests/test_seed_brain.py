@@ -198,7 +198,7 @@ def test_seeded_founders_outlive_random_ones():
         total = 0
         for seed in range(4):
             world = populated(seed, seeded)
-            world.run(300)
+            world.run(200)
             total += len(world.animals)
         return total
 

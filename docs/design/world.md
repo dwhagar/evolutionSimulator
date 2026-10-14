@@ -62,10 +62,12 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 5. The dead are removed and the tick counter goes up by one.
 
 Aging (plants too), energy burn, healing, the mating cooldown and the pregnancy run per **reference tick** (an hour of
-simulated time) and are scaled by `World.dt = seconds_per_tick / 3600`; movement, grazing and plant growth
-are per tick. A one-hour tick (`TimeScale(seconds_per_tick=3600)`) is what the numbers were set for; the
-world's default is still a one-second tick until `WORLD.7` switches it, so a default world burns energy
-3,600 times slower than its movement suggests.
+simulated time) and are scaled by `World.dt = seconds_per_tick / 3600`. So are movement (`dt` times the
+per-reference-tick distance), turning, the energy spent moving, a bite of a plant (`graze_amount * dt`) and the
+poison in it, a plant's growth and upkeep, and a sleeper's energy regain (`WORLD.7`). Every rate in the code is
+per reference tick, whatever the tick: a one-second tick (`TimeScale(seconds_per_tick=1)`) is correct but slow,
+an animal then moves 1/3600 of its per-hour distance in a tick. The default tick is one hour, which is what the
+numbers were set for, so `dt` is 1 and a default animal lives about 8,765 ticks.
 
 Movement: the `turn` output turns the animal by up to `base_turn_rate` radians (a positive turn goes
 right, the same side as a positive direction input, so turning toward a thing and seeing it move to
@@ -82,7 +84,7 @@ test or a user can check two runs match.
 
 ## Time (WORLD.3)
 
-A tick is `seconds_per_tick` of simulated time, 1 second by default. The speed is how many simulated
+A tick is `seconds_per_tick` of simulated time, one hour by default (`WORLD.7`; it was a second). The speed is how many simulated
 seconds pass per real second, set from the presets (1 real second equals 1 minute, 1 hour, 1 day,
 7 days, 1 month, 1 year, 10 years, 100 years, 1000 years) or any number. A year is 365.25 days and
 a month a twelfth of a year. `TimeScale.ticks_per_real_second` is speed divided by tick length.
@@ -93,9 +95,25 @@ script) supplies the elapsed time. The fast presets cannot be met by any compute
 is about 31.6 million ticks per second), so `max_ticks` drops the excess and the run is slower than
 the label. Nothing is queued, so a slow machine does not fall further behind.
 
-`seconds_per_tick` changes only the clock. The traits code charges energy and ages animals per
-tick, not per second, so a longer tick does not yet mean more metabolism per tick (see
-[Follow-ups](#follow-ups)).
+`seconds_per_tick` sets the clock and, through `World.dt`, the physics: a longer tick means more
+metabolism, ageing, movement, eating and growth per tick (see the reference tick above). At the default
+hourly tick the presets need these ticks per real second (`TimeScale.ticks_per_real_second`), and a
+default animal's life of about 8,765 ticks takes this long in real time. Measured: 60 animals and 300
+plants step in about 4 ms, so about 240 ticks per second:
+
+| Preset | Ticks per second | A life (8,765 ticks) takes | Met? |
+| --- | --- | --- | --- |
+| real-time | 0.0003 | 1 year | yes |
+| minute | 0.017 | 6 days | yes |
+| hour | 1 | 2.4 hours | yes |
+| day | 24 | 6 minutes | yes |
+| week | 168 | 52 seconds | yes |
+| month | 730 | 12 seconds | no, about a third of it |
+| year | 8,766 | 1 second | no |
+| decade and up | 87,660 and up | under a second | no |
+
+With a one-second tick the same presets need 1 (real-time) up to 31.6 million (year) ticks per second, so only
+real-time and minute are within reach; that tick is for studying fast things, not for evolving.
 
 ## Bounds (WORLD.4)
 
@@ -108,11 +126,11 @@ wrap.
 ## Day, night and sleep (WORLD.5)
 
 `WorldConfig.day_cycle` (a `DayCycle`, or `None` for permanent daylight and no sleep) turns simulated
-time into light. A day is 600 simulated seconds by default: animals live from about 22 minutes to
-3.3 hours, so a real 24-hour day would leave most of them less than one night in which to learn
-(`BRAIN.15`). Daylight runs smoothly from 0 at midnight to 1 at noon, `0.5 - 0.5 cos(2 pi phase)`,
-and it is night while daylight is below 0.3, which is 37% of the day (about 221 ticks of 600). The
-world starts at noon. `World.daylight`, `World.is_night` and `World.day` read it.
+time into light. A day is 24 simulated hours by default (`WORLD.7`; it was 600 seconds, set for animals
+that lived minutes: now they live about a year, so a real day still leaves hundreds of nights to learn in,
+`BRAIN.15`). Daylight runs smoothly from 0 at midnight to 1 at noon, `0.5 - 0.5 cos(2 pi phase)`,
+and it is night while daylight is below 0.3, which is 37% of the day (about 9 ticks of 24 at the default
+hourly tick). The world starts at noon. `World.daylight`, `World.is_night` and `World.day` read it.
 
 - **Plants** get the daylight as their sunlight factor each tick, so they grow by day and only
   burn reserves at night (the traits code floors sunlight at 0.05).
@@ -123,7 +141,11 @@ world starts at noon. `World.daylight`, `World.is_night` and `World.day` read it
 - **Sleep.** At night every animal with at least 15% of its energy store falls asleep (a hungrier
   one stays awake to feed, the default for "can a creature skip sleep"). A sleeper does not sense,
   think, move, eat or mate. It still ages. It burns 40% of its basal metabolism and regains 0.2% of
-  its energy store per tick, a net gain of roughly a fifth of the store over a night. It wakes when
+  its energy store per reference tick (an hour) at average `recovery` (half to double that for the worst
+  and best sleepers). Checked at the 24-hour day (`WORLD.7`): a still animal at average recovery loses
+  about 5.7 energy over a whole day with its night (3% of its store) against about 13.7 awake, so sleep
+  cuts the daily bill by about 40% and is never free: a night nets zero at the lowest recovery and up to
+  half an energy point an hour at the highest. The numbers stay as they were. It wakes when
   the night ends, or earlier if an alarm call wakes it (below). These are starting values in
   `SleepRules`.
 - **An alarm wakes a sleeper** (`SENSE.7`). A sleeper whose (sleeping) hearing reaches an alarm
@@ -231,10 +253,17 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
 - **Sex.** One of each sex is needed (`DNA.9`), decided in `may_mate`. The reading of the sex digit (value
   modulo 2, with 2 and 3 changing the drive) is the default for question 1 on
   [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
-- **Time.** See the reference tick above. Movement, grazing and plant growth are not scaled by `dt` yet
-  (`WORLD.7`), and the sleep and day numbers are in seconds, so a world with a one-hour tick needs a day
-  cycle of `24 * 3600` seconds or longer.
-- **Sleep** energy numbers and the 600-second day are guesses to calibrate (`SENSE.13`, `TRAIT.3`).
+- **Time.** See the reference tick above. Everything is scaled by `dt` (`WORLD.7`); the defaults are an hour a
+  tick and a 24-hour day. Two things still count in ticks, not time: the brain's `decision_interval` (1 to 4
+  ticks, so 1 to 4 hours at the default) and the learning rules' `reward_window` (10 ticks). A world with a
+  one-second tick keeps those numbers of ticks, so its animals decide every few seconds.
+- **The hourly default exposes the plant ecology.** Founder plants in an hourly world mostly die before they
+  seed (growth is below upkeep at seedling health, a lone plant's own biomass fills the soil limit of
+  0.015 per unit of ground before it reaches 85% of its size, and seedlings burn upkeep all night): that is
+  `WORLD.11`. Seeded founder animals (`BRAIN.9`) now live about 200 ticks (12 days) in a 1000 by 1000 world
+  with 120 plants before they starve; breeding them is `WORLD.15`. In the one-second world these effects were
+  hidden because nothing aged or ate in a meaningful time.
+- **Sleep** energy numbers are guesses to calibrate (`SENSE.13`).
 - **Population caps** (1000 animals, 5000 plants) are a safety net so a run cannot grow without limit; plants now stay under theirs on their own.
 - **Speed** (`WORLD.9`). Measured with `cProfile` on 300 animals and 3000 plants: the first version took
   about 62 ms per tick, mostly in the senses (generic vector arithmetic and the neighbour query
@@ -269,6 +298,7 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
 Sent to the TODO thread rather than built here:
 
 - Whether metabolism, ageing and speed should be per second (so `seconds_per_tick` changes the
-  physics) or per tick (as now). Needs the `TRAIT.3` config (built: `WorldConfig.traits`, [trait-config.md](trait-config.md)).
+  physics) or per tick: answered by `WORLD.7`, they are per reference tick (hour) times `dt`, and the tick is
+  an hour by default (rules in [trait-config.md](trait-config.md), `TimeRules`).
 - Random first-generation animals starve before they breed, as the brain note predicted
   (`BRAIN.9`, `BRAIN.16`).

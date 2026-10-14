@@ -230,7 +230,7 @@ Plants are asexual, mutate slower (a `DNA.8` setting) and have no brain, so no d
 > version 3, 33 digits) as designed below, with `lifespan_days`, `seeding_days` in days, the first seeding at 6%
 > of the lifespan, the growth and seed-budget trade-offs, ageing and the cooldown in reference ticks times the
 > world's `dt`, and a first generation that starts at 0.371 give or take 0.1 (`founder_plant_dna`). Growth and
-> upkeep are still per tick (`WORLD.7`).
+> upkeep are per reference tick times `dt` since `WORLD.7`.
 
 | Gene (3 digits) | Trait | Range | Meaning |
 | --- | --- | --- | --- |

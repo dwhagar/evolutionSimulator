@@ -409,8 +409,9 @@ class AnimalTraits(BaseTraits):
         self, movement_speed_ratio: float = 0.0, dt: float = 1.0
     ) -> None:
         """Advances one simulation tick of ``dt`` reference ticks (an hour each): wear, energy burn,
-        healing, the mating cooldown and the pregnancy all run on that clock. Movement is charged
-        per tick, not per ``dt``: it follows the distance moved."""
+        healing, the mating cooldown and the pregnancy all run on that clock, and so does the
+        energy spent on moving (the world moves an animal ``dt`` times its per-reference-tick
+        distance)."""
         if not self.is_alive:
             return
 
@@ -424,7 +425,7 @@ class AnimalTraits(BaseTraits):
 
         # Kinetic movement burn
         repro = self.rules.reproduction
-        kinetic_burn = (movement_speed_ratio**2) * (self.rules.body.kinetic_burn * self.mass)
+        kinetic_burn = (movement_speed_ratio**2) * (self.rules.body.kinetic_burn * self.mass) * dt
         upkeep = self.basal_metabolism
         if self.pregnancy is not None:
             upkeep *= 1.0 + (repro.gestation_upkeep * self.pregnancy.litter / repro.litter_max)
@@ -750,8 +751,10 @@ class AnimalTraits(BaseTraits):
         )
         return rng.random() < detection_probability
 
-    def feed(self, biomass: float, is_meat: bool, toxicity: float = 0.0) -> float:
-        """Processes food intake, applying toxic damage and extracting calories."""
+    def feed(self, biomass: float, is_meat: bool, toxicity: float = 0.0, dt: float = 1.0) -> float:
+        """Processes food intake, applying toxic damage and extracting calories. A poisonous bite
+        does its damage per reference tick, so a bite of a tick of ``dt`` reference ticks does ``dt``
+        times as much."""
         if not self.is_alive:
             return 0.0
 
@@ -761,6 +764,7 @@ class AnimalTraits(BaseTraits):
                 toxicity
                 * (1.0 - (behaviour.poison_taste_shield * self.phenotype["taste"]))
                 * behaviour.poison_damage
+                * dt
             )
             self.apply_damage(poison_damage)
             if not self.is_alive:
@@ -982,8 +986,8 @@ class PlantTraits(BaseTraits):
 
     def update_growth_and_metabolism(self, dt: float = 1.0) -> None:
         """Advances one tick of photosynthesis, chemical defense upkeep, and maturation. ``dt`` is the
-        tick in reference ticks (hours): ageing and the seeding cooldown run on that clock. Growth and
-        upkeep are still charged per tick (``WORLD.7``)."""
+        tick in reference ticks (hours): ageing, the seeding cooldown, growth and upkeep all run on
+        that clock."""
         if not self.is_alive:
             return
 
@@ -1003,7 +1007,7 @@ class PlantTraits(BaseTraits):
             * self.vitality
         )
 
-        net_growth = photosynthetic_gain - self.basal_metabolism
+        net_growth = (photosynthetic_gain - self.basal_metabolism) * dt
 
         # Apply net energy to biomass
         if net_growth > 0:

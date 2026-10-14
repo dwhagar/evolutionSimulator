@@ -347,7 +347,9 @@ def test_damage_and_matings_are_counted_over_a_life():
 
 
 def world_with_animals(seed=5, count=8, **config):
-    world = World(WorldConfig(seed=seed, day_cycle=DayCycle(length_seconds=100.0), **config))
+    world = World(
+        WorldConfig(seed=seed, day_cycle=DayCycle(length_seconds=100.0 * 3600.0), **config)
+    )
     rng = random.Random(seed)
     for _ in range(count):
         world.add_animal(DNA.random(ANIMAL_LAYOUT, rng))
