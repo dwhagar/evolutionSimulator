@@ -42,10 +42,11 @@ from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
+from evolution_simulator.world.combat import AttackRules
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
-from evolution_simulator.world.senses import Senses, WorldSenses, wrap_angle
+from evolution_simulator.world.senses import Senses, WorldSenses, classify, wrap_angle
 from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
@@ -108,11 +109,13 @@ class WorldConfig:
     day_cycle: DayCycle | None = field(default_factory=DayCycle)
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     sleep: SleepRules = field(default_factory=SleepRules)
-    calls_enabled: bool = False
+    attack: AttackRules = field(default_factory=AttackRules)
+    """Bites and meat (``BRAIN.10``)."""
+    calls_enabled: bool = True
     """Whether animals can call (their brains' call outputs, paid for with ``call_energy_cost``).
-    Off by default: a random founder's brain calls on most ticks, a call costs several times an
-    animal's basal metabolism, and every call wakes sleepers, so founders die out or never
-    sleep. Turn it on once seeded brains (BRAIN.9) and the call rules (BRAIN.10) exist."""
+    A call is made only by an animal with a call radius (the encoder gene) that can afford it,
+    so a brain that calls on every tick starves itself; seeded founders do not call at all and
+    calling has to be evolved. Turn it off to study a silent world."""
     learning: LearningRules | None = field(default_factory=LearningRules)
     """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
     ``None`` turns it off."""
@@ -397,8 +400,8 @@ class World:
             animal.position = self.bounds.clamp(
                 animal.position + Vec.from_angle(animal.heading, step_length)
             )
-            if decision.eats_or_attacks:
-                self._graze(animal, dt)
+            if decision.eats_or_attacks and not self._graze(animal, dt):
+                self._attack(animal, dt)
 
         # 3. Mate, then deliver the litters that are due.
         self._refresh_animal_index()
@@ -556,7 +559,9 @@ class World:
         for animal in self.animals:
             self._animal_index.insert(animal.id, animal.position, animal.radius)
 
-    def _graze(self, animal: Animal, dt: float) -> None:
+    def _graze(self, animal: Animal, dt: float) -> bool:
+        """Eat from the plant the animal touches, if any. Returns whether it touched one (even if
+        it refused the poison), so the brain's "eat or attack" is spent on the plant."""
         reach = animal.radius + self.max_canopy
         best: Plant | None = None
         best_distance = math.inf
@@ -565,11 +570,40 @@ class World:
             if distance <= animal.radius + plant.radius and (distance < best_distance):
                 best, best_distance = plant, distance
         if best is None:
-            return
+            return False
         if animal.traits.inspect_food(best.traits.toxicity, self.rng):
-            return  # it tasted the poison and refused
+            return True  # it tasted the poison and refused
         eaten, toxicity = best.traits.graze(self.config.graze_amount * dt)
         animal.traits.feed(eaten, is_meat=False, toxicity=toxicity, dt=dt)
+        return True
+
+    def _attack(self, animal: Animal, dt: float) -> None:
+        """Bite the nearest animal in contact that this one counts as prey. A sleeper is woken by
+        the bite; the one that kills eats the meat. A bite does its damage per reference tick, so a
+        tick of ``dt`` reference ticks does ``dt`` times as much."""
+        rules = self.config.attack
+        reach = animal.radius + self.max_body
+        target: Animal | None = None
+        best_distance = math.inf
+        for other, _ in self.animals_within(animal.position, reach):
+            if other is animal or not other.is_alive:
+                continue
+            distance = animal.position.distance_to(other.position)
+            if (
+                distance <= animal.radius + other.radius
+                and distance < best_distance
+                and classify(animal, other) == "prey"
+            ):
+                target, best_distance = other, distance
+        if target is None:
+            return
+        traits = animal.traits
+        target.traits.apply_damage(
+            rules.bite(traits.effective_carn_eff, traits.mass, target.traits.mass) * dt
+        )
+        target.disturbed = True
+        if not target.is_alive:
+            traits.feed(rules.meat(target.traits.max_energy), is_meat=True)
 
     def _mate(self, animals: list[Animal]) -> int:
         """Pair the willing animals off and try each pair. Returns the matings that took."""

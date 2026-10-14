@@ -21,6 +21,7 @@ SHORT_DAY = DayCycle(length_seconds=100.0 * 3600.0)  # noon at tick 0, night fro
 
 def make(seed=0, **config):
     config.setdefault("day_cycle", SHORT_DAY)
+    config.setdefault("calls_enabled", False)  # these tests are about sleep, not calls
     return World(WorldConfig(seed=seed, **config))
 
 

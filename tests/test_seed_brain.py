@@ -62,6 +62,15 @@ def test_a_plant_ahead_is_walked_to_and_a_plant_in_reach_is_eaten():
     assert near[2] == 1.0
 
 
+def test_prey_is_walked_to_and_attacked_in_reach():
+    far = reference_rule(inputs(prey_direction=-0.3, prey_closeness=0.2))
+    near = reference_rule(inputs(prey_direction=-0.3, prey_closeness=0.8))
+    assert far[0] == pytest.approx(-0.3)
+    assert 0.3 <= far[1] < 0.8
+    assert far[2] == 0.0
+    assert near[2] == 1.0
+
+
 def test_a_ready_animal_with_energy_is_willing_to_mate_and_steers_to_a_mate():
     ready = reference_rule(inputs(ready_to_mate=1.0, energy_ratio=0.8, mate_direction=-0.4))
     assert ready[3] == 1.0
@@ -95,7 +104,7 @@ def test_agreement_compares_turn_speed_class_and_actions():
 
 def test_the_table_is_complete_and_in_range():
     body = DEFAULT_BLUEPRINT.neuron_size - 1
-    assert len(SEED_SLOTS) == SEED_HIDDEN == 8
+    assert len(SEED_SLOTS) == SEED_HIDDEN
     assert all(len(slot) == body for slot in SEED_SLOTS)
     assert len(SEED_OUTPUT_BIASES) == DEFAULT_BLUEPRINT.outputs
     levels = seed_levels()
@@ -103,16 +112,16 @@ def test_the_table_is_complete_and_in_range():
     assert all(0 <= level < LEVELS for level in levels)
 
 
-def test_the_first_eight_slots_are_on_and_the_rest_off():
+def test_the_first_slots_are_on_and_the_rest_off():
     dna = seeded_dna(random.Random(0), variation=0.0)
     values = dna.values("brain")
     assert DEFAULT_BLUEPRINT.slots_on(values) == tuple(range(SEED_HIDDEN))
     size = DEFAULT_BLUEPRINT.neuron_size
     assert [values[j * size] > 0 for j in range(DEFAULT_BLUEPRINT.max_hidden)] == (
-        [True] * 8 + [False] * 8
+        [True] * SEED_HIDDEN + [False] * (DEFAULT_BLUEPRINT.max_hidden - SEED_HIDDEN)
     )
     levels = seed_levels()
-    assert levels[0] == GATE_ON and levels[8 * size] == GATE_OFF
+    assert levels[0] == GATE_ON and levels[SEED_HIDDEN * size] == GATE_OFF
 
 
 def test_the_seed_survives_being_written_into_dna_exactly():
@@ -120,9 +129,9 @@ def test_the_seed_survives_being_written_into_dna_exactly():
     assert BRAIN_GENE.encode(dna.values("brain")) == dna.slice_of("brain")
 
 
-def test_the_creature_gets_an_eight_neuron_brain_at_the_seed_gain():
+def test_the_creature_gets_the_seed_sized_brain_at_the_seed_gain():
     traits = AnimalTraits(seeded_dna(random.Random(1), variation=0.0))
-    assert traits.brain.shape.hidden == 8
+    assert traits.brain.shape.hidden == SEED_HIDDEN
     assert traits.brain.gain == pytest.approx(SEED_GAIN)
 
 
@@ -148,8 +157,8 @@ def test_variation_moves_only_that_many_levels_and_never_a_gate():
         moved = [i for i, (a, b) in enumerate(zip(seed, varied, strict=True)) if a != b]
         assert len(moved) <= n
         size = DEFAULT_BLUEPRINT.neuron_size
-        assert all(i % size != 0 or i >= 8 * size for i in moved)
-        assert DEFAULT_BLUEPRINT.slots_on(varied) == tuple(range(8))
+        assert all(i % size != 0 or i >= SEED_HIDDEN * size for i in moved)
+        assert DEFAULT_BLUEPRINT.slots_on(varied) == tuple(range(SEED_HIDDEN))
         assert all(abs(seed[i] - varied[i]) < 0.3 for i in moved)
 
 
@@ -184,13 +193,13 @@ def populated(seed, seeded):
 
 def test_populate_seeds_the_brains_by_default():
     world = populated(1, True)
-    assert all(a.traits.brain.shape.hidden == 8 for a in world.animals)
+    assert all(a.traits.brain.shape.hidden == SEED_HIDDEN for a in world.animals)
     assert all(a.traits.innate_brain.gain == pytest.approx(SEED_GAIN) for a in world.animals)
 
 
 def test_populate_can_still_make_random_brains():
     world = populated(1, False)
-    assert any(a.traits.brain.shape.hidden != 8 for a in world.animals)
+    assert any(a.traits.brain.shape.hidden != SEED_HIDDEN for a in world.animals)
 
 
 def test_seeded_founders_outlive_random_ones():

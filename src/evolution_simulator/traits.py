@@ -300,10 +300,8 @@ class AnimalTraits(BaseTraits):
         self.pregnancy: Pregnancy | None = None
 
         # Environmental stimulus inputs
-        self.env_threat_detected: bool = False
         self.env_target_size_ratio: float = 1.0
         self.env_local_density: float = 0.0
-        self.env_tactile_collision: bool = False
 
         # Modulated outputs
         self.current_aggression: float = self.base_aggression
@@ -312,17 +310,6 @@ class AnimalTraits(BaseTraits):
         self.effective_carn_eff: float = t["carnivore_eff"]
         self.current_sight_range: float = self.effective_sight_range
         self.current_hearing_range: float = self.hearing_range
-
-        # Behavioral flags
-        self.flag_wants_food: bool = False
-        self.flag_target_is_plant: bool = False
-        self.flag_target_is_prey: bool = False
-        self.flag_wants_mate: bool = False
-        self.flag_in_fear: bool = False
-        self.flag_wants_to_attack: bool = False
-        self.flag_tactile_evade: bool = False
-        self.flag_ready_to_signal: bool = False
-        self.signal_to_emit: int | None = None
 
         self._refresh_vitality_dependents()
         self._update_needs_and_drives()  # so the drive flags are right at birth, not after tick one
@@ -456,19 +443,13 @@ class AnimalTraits(BaseTraits):
         self.current_energy -= healed * recovery.heal_energy_cost
 
     def set_environmental_stimuli(
-        self,
-        threat_detected: bool,
-        target_size_ratio: float = 1.0,
-        local_density: float = 0.0,
-        tactile_contact: bool = False,
+        self, target_size_ratio: float = 1.0, local_density: float = 0.0
     ) -> None:
         """Feeds sensory world events into dynamic drive modulation."""
-        self.env_threat_detected = threat_detected
         self.env_target_size_ratio = max(
             self.rules.behaviour.min_target_size_ratio, target_size_ratio
         )
         self.env_local_density = min(1.0, max(0.0, local_density))
-        self.env_tactile_collision = tactile_contact
 
         if self.is_alive:
             self._update_needs_and_drives()
@@ -642,8 +623,32 @@ class AnimalTraits(BaseTraits):
         self.brain = self.innate_brain.with_output_offsets(weights, biases)
         return True
 
+    @property
+    def mating_energy_threshold(self) -> float:
+        """Share of the energy store an animal needs before it is willing to mate: the drive gene
+        lowers it, and so does failing health (senescence desperation)."""
+        repro = self.rules.reproduction
+        low, high = repro.drive_threshold_range
+        return min(
+            high,
+            max(
+                low,
+                repro.drive_threshold_base
+                - (repro.drive_threshold_slope * self.effective_drive)
+                - (repro.drive_threshold_vitality * (1.0 - self.vitality)),
+            ),
+        )
+
+    @property
+    def wants_mate(self) -> bool:
+        """Whether the body is ready and rich enough to mate (the brain reads the same two facts
+        as its ``ready_to_mate`` and ``energy_ratio`` inputs)."""
+        return (
+            self.can_mate and self.current_energy / self.max_energy >= self.mating_energy_threshold
+        )
+
     def _update_needs_and_drives(self) -> None:
-        behaviour, repro = self.rules.behaviour, self.rules.reproduction
+        behaviour = self.rules.behaviour
         energy_ratio = self.current_energy / self.max_energy
         starvation_factor = max(0.0, 1.0 - energy_ratio)
 
@@ -660,83 +665,6 @@ class AnimalTraits(BaseTraits):
             * size_confidence
         )
         self.current_aggression = min(1.0, max(0.0, modulated_aggression))
-
-        # Tactile Reflex
-        self.flag_tactile_evade = self.env_tactile_collision and (
-            self.phenotype["touch"] > behaviour.tactile_threshold
-        )
-
-        # Fear vs Aggression Fight-or-Flight
-        if self.env_threat_detected:
-            effective_fear = self._effective_fear()
-            if effective_fear > (self.current_aggression * size_confidence):
-                self.flag_in_fear = True
-                self.flag_wants_to_attack = False
-            else:
-                self.flag_in_fear = False
-                self.flag_wants_to_attack = True
-        else:
-            self.flag_in_fear = False
-            self.flag_wants_to_attack = (
-                self.current_aggression > behaviour.hunt_aggression
-                and starvation_factor > behaviour.hunt_starvation
-                and self.effective_carn_eff > behaviour.forage_efficiency
-            )
-
-        # Hunger
-        if energy_ratio < behaviour.hunger_threshold:
-            self.flag_wants_food = True
-            self.flag_target_is_plant = self.effective_herb_eff > behaviour.forage_efficiency
-            self.flag_target_is_prey = (
-                self.effective_carn_eff > behaviour.forage_efficiency
-                and self.current_aggression > behaviour.prey_aggression
-            )
-        else:
-            self.flag_wants_food = False
-            self.flag_target_is_plant = False
-            self.flag_target_is_prey = False
-
-        # Mating urgency: the drive gene lowers the energy needed to start looking, and so does
-        # failing health (senescence desperation).
-        low, high = repro.drive_threshold_range
-        mating_threshold = min(
-            high,
-            max(
-                low,
-                repro.drive_threshold_base
-                - (repro.drive_threshold_slope * self.effective_drive)
-                - (repro.drive_threshold_vitality * (1.0 - self.vitality)),
-            ),
-        )
-        self.flag_wants_mate = (
-            energy_ratio >= mating_threshold and self.can_mate and not self.flag_in_fear
-        )
-
-        # Communication
-        self.flag_ready_to_signal = False
-        self.signal_to_emit = None
-
-        if (
-            self.phenotype["encoder_fidelity"] > behaviour.signal_gene_threshold
-            and self.current_energy > self.call_energy_cost
-        ):
-            if self.flag_in_fear:
-                self.flag_ready_to_signal = True
-                self.signal_to_emit = 2  # Alarm / Flee
-            elif self.flag_wants_mate and (1.0 - self.vitality) > behaviour.mating_call_wear:
-                self.flag_ready_to_signal = True
-                self.signal_to_emit = 0  # Mating Call
-
-    def _clear_flags(self) -> None:
-        self.flag_wants_food = False
-        self.flag_target_is_plant = False
-        self.flag_target_is_prey = False
-        self.flag_wants_mate = False
-        self.flag_in_fear = False
-        self.flag_wants_to_attack = False
-        self.flag_tactile_evade = False
-        self.flag_ready_to_signal = False
-        self.signal_to_emit = None
 
     def inspect_food(self, toxicity: float, rng: random.Random) -> bool:
         """Uses taste to detect toxins before consumption."""
@@ -857,15 +785,6 @@ class AnimalTraits(BaseTraits):
         for parent in payers:
             parent._update_needs_and_drives()
         return True
-
-    def trigger_signal_emission(self) -> int | None:
-        if self.flag_ready_to_signal and self.signal_to_emit is not None:
-            self.current_energy -= self.call_energy_cost
-            signal = self.signal_to_emit
-            self.flag_ready_to_signal = False
-            self.signal_to_emit = None
-            return signal
-        return None
 
 
 # =============================================================================
