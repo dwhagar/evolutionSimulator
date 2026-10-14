@@ -18,7 +18,7 @@ from __future__ import annotations
 import random
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Self
+from typing import Any, Protocol, Self
 
 BASES: tuple[int, ...] = (0, 1, 2, 3)
 BASE_COUNT: int = len(BASES)
@@ -346,6 +346,28 @@ def position_bias_for_step(width: int, step: float) -> float:
     return (low + high) / 2
 
 
+class Genome(Protocol):
+    """What the rest of the code needs from a genome: the reads traits and the brain use, plus
+    reproduction. ``DNA`` (one strand, haploid) and ``DiploidDNA`` (two strands, in ``diploid.py``)
+    both provide it, so an organism is built from either without knowing which."""
+
+    @property
+    def layout(self) -> GenomeLayout: ...
+
+    @property
+    def ploidy(self) -> int: ...
+
+    def value(self, gene_id: str) -> float: ...
+
+    def digit(self, gene_id: str) -> int: ...
+
+    def values(self, gene_id: str) -> tuple[float, ...]: ...
+
+    def distance(self, other: Any) -> float: ...
+
+    def reproduce(self, partner: Any, rng: random.Random, *args: Any, **kwargs: Any) -> Any: ...
+
+
 Crossover = Callable[["DNA", "DNA", random.Random], "DNA"]
 """A crossover strategy: (parent_a, parent_b, rng) -> child."""
 
@@ -396,6 +418,11 @@ class DNA:
     @property
     def layout(self) -> GenomeLayout:
         return self._layout
+
+    @property
+    def ploidy(self) -> int:
+        """Copies of each gene: 1 for a plain ``DNA`` (haploid)."""
+        return 1
 
     @property
     def sequence(self) -> tuple[int, ...]:
@@ -559,18 +586,7 @@ class DNA:
                 raise ValueError(f"Mutation rate must be between 0 and 1, got {mutation_rate}.")
             probabilities = [mutation_rate] * self.length
         else:
-            expected = dict(self._layout.default_mutations)
-            for name, value in (mutations_per_segment or {}).items():
-                if name not in self._layout.segments:
-                    raise ValueError(
-                        f"Unknown segment {name!r}; layout {self._layout.name!r} has "
-                        f"{sorted(self._layout.segments)}."
-                    )
-                if value < 0:
-                    raise ValueError(
-                        f"Mutations for segment {name!r} must not be negative, got {value}."
-                    )
-                expected[name] = value
+            expected = self.expected_mutations(mutations_per_segment)
             for name, (start, end) in self._layout.segments.items():
                 probabilities[start:end] = [min(1.0, expected[name] / (end - start))] * (
                     end - start
@@ -586,6 +602,25 @@ class DNA:
                 else:
                     digits[i] = (digit + rng.choice((1, 2, 3))) % BASE_COUNT
         return type(self)(self._layout, digits)
+
+    def expected_mutations(
+        self, mutations_per_segment: Mapping[str, float] | None = None
+    ) -> dict[str, float]:
+        """Expected changed digits per child for each segment: the layout's defaults, with any
+        segments named in ``mutations_per_segment`` replaced."""
+        expected = dict(self._layout.default_mutations)
+        for name, value in (mutations_per_segment or {}).items():
+            if name not in self._layout.segments:
+                raise ValueError(
+                    f"Unknown segment {name!r}; layout {self._layout.name!r} has "
+                    f"{sorted(self._layout.segments)}."
+                )
+            if value < 0:
+                raise ValueError(
+                    f"Mutations for segment {name!r} must not be negative, got {value}."
+                )
+            expected[name] = value
+        return expected
 
     def _apply_position_bias(
         self, probabilities: list[float], bias: float, gene_biases: Mapping[str, float] | None

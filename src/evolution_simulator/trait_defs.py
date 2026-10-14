@@ -16,7 +16,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
-from evolution_simulator.dna import DNA, GenomeLayout, position_bias_for_step
+from evolution_simulator.dna import Genome, GenomeLayout, position_bias_for_step
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 
 DEFAULT_MUTATION_STEP: float = 0.05
@@ -82,7 +82,7 @@ class TraitDef:
             return self.lo * (self.hi / self.lo) ** unit
         return self.lo + unit * (self.hi - self.lo)
 
-    def express(self, dna: DNA) -> float | int:
+    def express(self, dna: Genome) -> float | int:
         """This trait's value for a genome."""
         if self.kind is Kind.CATEGORY:
             return dna.digit(self.genes[0])
@@ -127,7 +127,7 @@ class TraitSet:
     def __len__(self) -> int:
         return len(self.defs)
 
-    def express(self, dna: DNA) -> Mapping[str, float | int]:
+    def express(self, dna: Genome) -> Mapping[str, float | int]:
         """Every trait's value for a genome, by trait name."""
         if dna.layout != self.layout:
             raise TypeError(

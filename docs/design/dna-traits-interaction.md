@@ -50,7 +50,9 @@ resizing changes every later position; bump the layout's `version` when you do. 
 65 body digits, that is 16 four-digit genes and one single-digit gene, then a 396-digit brain block) and
 `PLANT_LAYOUT` (24 digits) are plain data.
 
-A `DNA` pairs a layout with an immutable digit string. It offers four reads and nothing else:
+A `DNA` pairs a layout with an immutable digit string. It offers four reads and nothing else (a
+`DiploidDNA` of two strands offers `value`, `digit` and `values`, with the two blended; see
+[dna-and-traits.md](dna-and-traits.md#diploid-genomes)):
 
 | Call | Returns |
 | --- | --- |
@@ -166,7 +168,8 @@ These wait on the owner's answers or on other tasks and are tracked in [TODO.md]
   `locality`.
 - Tuning constants inside the formulas are still inline numbers (`TRAIT.3`). The trait table already holds
   the ranges; the formula constants (`0.08`, `0.18`, `0.75`) are what remain.
-- Haploid only. A diploid genome would hold two `DNA` objects and combine their `value` reads before
-  expression (`DNA.3`, [#3](https://github.com/dwhagar/evolutionSimulator/issues/3)); the trait table would
-  not change.
+- Diploid is built (`DNA.13`, [#3](https://github.com/dwhagar/evolutionSimulator/issues/3)):
+  `DiploidDNA` holds two `DNA` strands and blends each gene by a `DominanceModel` (default codominant,
+  the average) when `value`, `digit` or `values` is read, so the trait table does not change. Which species
+  use it is decided when the world creates the first generation.
 - The unused `fertility` gene is still in the animal layout, and `TraitSet.unread_genes()` reports it.

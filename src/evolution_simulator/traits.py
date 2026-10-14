@@ -1,4 +1,4 @@
-"""Traits: the living phenotype built from a DNA object.
+"""Traits: the living phenotype built from a genome (haploid `DNA` or `DiploidDNA`).
 
 Each traits class reads its genes once to fix the organism's static phenotype (mass, speed, senses,
 upkeep and so on), then tracks runtime state (energy, health, age, drive flags) as the simulation
@@ -22,7 +22,7 @@ from evolution_simulator.brain_adapter import (
     build_inputs,
     decode_outputs,
 )
-from evolution_simulator.dna import DNA
+from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 
@@ -51,8 +51,8 @@ class BaseTraits:
     and life-cycle mortality checks.
     """
 
-    def __init__(self, dna: DNA, phenotype: Mapping[str, float | int]) -> None:
-        self.dna: DNA = dna
+    def __init__(self, dna: Genome, phenotype: Mapping[str, float | int]) -> None:
+        self.dna: Genome = dna
         # Primary trait values from the trait table (see trait_defs.py), fixed at birth.
         self.phenotype: Mapping[str, float | int] = phenotype
 
@@ -111,7 +111,7 @@ class AnimalTraits(BaseTraits):
     metabolic trade-offs, senescence degradation, and environmental drive flags.
     """
 
-    def __init__(self, dna: DNA, decision_interval: int = DECISION_INTERVAL) -> None:
+    def __init__(self, dna: Genome, decision_interval: int = DECISION_INTERVAL) -> None:
         if dna.layout != ANIMAL_LAYOUT:
             raise TypeError("AnimalTraits requires DNA with the animal layout.")
         if decision_interval < 1:
@@ -454,7 +454,7 @@ class PlantTraits(BaseTraits):
     canopy light shading, chemical defense expenditure, and seed burst triggers.
     """
 
-    def __init__(self, dna: DNA) -> None:
+    def __init__(self, dna: Genome) -> None:
         if dna.layout != PLANT_LAYOUT:
             raise TypeError("PlantTraits requires DNA with the plant layout.")
         t = PLANT_TRAITS.express(dna)
