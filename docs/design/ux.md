@@ -329,7 +329,7 @@ needs a new piece in the core.
   extends the digest.
 - **Autosave.** A checkpoint every few simulated days (and at a minimum wall-clock interval), keeping the newest
   few plus one a simulated year, so a crash loses little and the folder does not grow forever.
-- **Headless runs.** A command (`python -m evolution_simulator run --config c.json --until "100y" --out runs/`)
+- **Headless runs** (`UX.22`). A command (`python -m evolution_simulator run --config c.json --until "100y" --out runs/`)
   uses the same session without a window, writing the same run folder. The viewer opens it afterwards
   from Run history. Watching a headless run live is possible later through the socket form of
   `SimClient`, but is not needed first.
@@ -411,7 +411,7 @@ items that can be built at the same time.
 
 **Wave 1: the contract (one thread; small, everything waits for it).**
 `UX.6`, the session: snapshot types, command set, events hook, `FakeSimulation`, all in process with no
-window, plus the headless run command. Putting it first fixes the interface the screens are written
+window. The headless run command is `UX.22`, which needs only `UX.6` and `UX.9`. Building the session first fixes the interface the screens are written
 against. `UX.9` (world save and load) has no dependency and can start at once, beside it.
 
 **Wave 2: in parallel, each in its own files.**
@@ -452,18 +452,18 @@ Filed as issues, each with a default so nothing waits. The earlier four are
 [#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to
 [#126](https://github.com/dwhagar/evolutionSimulator/issues/126).
 
-1. [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) **Look of the creatures** (`UX.12`): colour by what by default, and the shape. Default: triangles by heading,
+1. [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) **Look of the creatures** (`UX.23`, feeds `UX.12`): colour by what by default, and the shape. Default: triangles by heading,
    colour by diet, switchable.
-2. [#130](https://github.com/dwhagar/evolutionSimulator/issues/130) **Slow and impossible speeds** (`UX.13`): the lowest presets (real time, a minute a second) move almost nothing
+2. [#130](https://github.com/dwhagar/evolutionSimulator/issues/130) **Slow and impossible speeds** (`UX.24`, feeds `UX.13`): the lowest presets (real time, a minute a second) move almost nothing
    with an hourly tick, and the fastest cannot be reached. Default: keep all presets, glide between ticks,
    show achieved speed, and add "as fast as possible".
-3. [#133](https://github.com/dwhagar/evolutionSimulator/issues/133) **What to see of the brain** (`UX.15`): the network drawing with live values, or only bars. Default: both,
+3. [#133](https://github.com/dwhagar/evolutionSimulator/issues/133) **What to see of the brain** (`UX.27`, feeds `UX.15`): the network drawing with live values, or only bars. Default: both,
    bars first.
-4. [#131](https://github.com/dwhagar/evolutionSimulator/issues/131) **Where runs are kept and how much space** (`UX.10`). Default: `%LOCALAPPDATA%\evolutionSimulator\runs`, keep
+4. [#131](https://github.com/dwhagar/evolutionSimulator/issues/131) **Where runs are kept and how much space** (`UX.25`, feeds `UX.10`). Default: `%LOCALAPPDATA%\evolutionSimulator\runs`, keep
    all, warn at 5 GB.
-5. [#132](https://github.com/dwhagar/evolutionSimulator/issues/132) **How the program is handed over** (`UX.19`): a zip to unzip or an installer; whether to pay for signing.
+5. [#132](https://github.com/dwhagar/evolutionSimulator/issues/132) **How the program is handed over** (`UX.26`, feeds `UX.19`): a zip to unzip or an installer; whether to pay for signing.
    Default: zip first, unsigned.
-6. [#134](https://github.com/dwhagar/evolutionSimulator/issues/134) **Extras:** compare two runs, video export, a family tree view, watching a headless run live, several runs at once.
+6. [#134](https://github.com/dwhagar/evolutionSimulator/issues/134) **Extras** (`UX.28`): compare two runs, video export, a family tree view, watching a headless run live, several runs at once.
    Default: not now, ask again after the first window works.
 
 ## Limits of this note
