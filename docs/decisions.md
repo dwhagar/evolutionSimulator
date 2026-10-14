@@ -2,7 +2,25 @@
 
 A log of the owner's design decisions, with the date, the issue where each was answered, and the
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
-Where an answer was ambiguous it is marked "to confirm" and collected in [#36](https://github.com/dwhagar/evolutionSimulator/issues/36).
+Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section below the first one replaces any "to confirm" in an older one.
+
+## 2026-10-14: answers to the clarification issues
+
+Issue [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) and [#27](https://github.com/dwhagar/evolutionSimulator/issues/27) are answered and closed. Points that stayed unclear are in [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
+
+| Question | Task | Decision | What follows |
+| --- | --- | --- | --- |
+| [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) 1, gene interaction | DNA.2 | Both: traits interact through shared costs and trade-offs, and genes affect each other, with clusters of genes feeding each trait's expression. | `DNA.14` design note. |
+| 2, sexes | DNA.9 | The sex digit is fine, 0 or 1. Values 2 and 3 are used for something else sex related: they amplify or subdue (only by a fraction) the drive for mating, in addition to the specific genes for mating and child rearing. | `DNA.9`; the digit reading and whether mating needs one of each sex are question 1 on [#69](https://github.com/dwhagar/evolutionSimulator/issues/69) (default: value mod 2 is the sex, 2 amplifies and 3 subdues by about 25%). |
+| 3, world edges and time | WORLD.4 | 1000 by 1000 world units. Edges do not wrap; they are hard boundaries. A tick is a fixed simulated second and the speed setting sets ticks per real second. | Already built as `WORLD.4` (walls). |
+| 4, first brains ([#27](https://github.com/dwhagar/evolutionSimulator/issues/27)) | BRAIN.9 | Option A: seeded brains plus the random wander fallback. | `BRAIN.9` after `BRAIN.23`. |
+| 5, learning | BRAIN.15 | Lost when the creature dies; children start from the inherited weights. | `BRAIN.24`. |
+| 6, brain shape | BRAIN.13 | Yes: a maximum-size brain in the genome plus genes that switch neurons and connections on or off. | `BRAIN.23`. |
+| 7, reproduction genes | REPRO.7 | Three reproduction genes other than sex: a drive that sets the threshold for looking for a mate, a cooldown for how often they can mate, and a fertility (impregnating or becoming impregnated). Trade-offs: strong drive against short life; more offspring per birth against longer gestation; easy reproduction against energy cost; parenting (stays near and protects, at risk) against none. | `REPRO.7` revises the design before `REPRO.5` and `TRAIT.6` are built. |
+| 8, time scales | WORLD.7, TRAIT.7 | Option C: much longer lifespans in simulated time with a longer tick, and a gene for how well the body recoups and recovers energy and health. | `WORLD.7`, `TRAIT.7`; defaults in [#69](https://github.com/dwhagar/evolutionSimulator/issues/69) question 3. |
+| 9, who pays for a child | REPRO.7 | The caregiving genes decide; the owner wants to see whether a pattern emerges. | In the `REPRO.7` design. |
+| 10, plant lifespan | TRAIT.8 | Plants have lifespans that are genetic. A plant that is not eaten lives a default of one month, and this should evolve. | `TRAIT.8`. |
+| 11, litters | REPRO.7 | Litter size comes from the genes in answer 7. The default starts with a large litter and no parenting skill. | In the `REPRO.7` design. |
 
 ## 2026-10-14: answers to the first round of issues
 
