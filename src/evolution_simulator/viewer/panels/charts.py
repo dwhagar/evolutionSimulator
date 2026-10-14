@@ -20,7 +20,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pyqtgraph as pg
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, Qt, QTimer
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -223,8 +223,20 @@ def _colour(value: str) -> QColor:
 class ChartPlot(pg.PlotWidget):
     """A plot in the window's own colours, with a legend, a grid and the usual mouse zoom."""
 
-    def __init__(self, y_label: str = "") -> None:
-        super().__init__()
+    def __init__(self, parent: QWidget, y_label: str = "") -> None:
+        super().__init__(parent)
+        item = self.getPlotItem()
+        for side in ("left", "bottom"):
+            item.getAxis(side).enableAutoSIPrefix(False)  # a share of 0.15 is not "150 (x0.001)"
+        item.showGrid(x=True, y=True, alpha=0.25)
+        self.legend = item.addLegend(offset=(10, 10))
+        self.apply_palette()
+        if y_label:
+            item.setLabel("left", y_label)
+
+    def apply_palette(self) -> None:
+        """Take the background and text colours from the window's palette (again, when the theme
+        changes)."""
         palette = self.palette()
         background, foreground = palette.window().color(), palette.windowText().color()
         self.setBackground(background)
@@ -233,11 +245,16 @@ class ChartPlot(pg.PlotWidget):
             axis = item.getAxis(side)
             axis.setPen(foreground)
             axis.setTextPen(foreground)
-            axis.enableAutoSIPrefix(False)  # a share of 0.15 should not read as 150 (x0.001)
-        item.showGrid(x=True, y=True, alpha=0.25)
-        self.legend = item.addLegend(offset=(10, 10), labelTextColor=foreground)
-        if y_label:
-            item.setLabel("left", y_label)
+        self.legend.setLabelTextColor(foreground)
+
+    def changeEvent(self, event: QEvent) -> None:
+        super().changeEvent(event)
+        palette_changed = event.type() in (
+            QEvent.Type.PaletteChange,
+            QEvent.Type.ApplicationPaletteChange,
+        )
+        if palette_changed and hasattr(self, "legend"):  # (not yet, while it is being built)
+            self.apply_palette()
 
     def reset(self) -> None:
         """Clear the curves and the legend, ready to draw again."""
@@ -274,20 +291,20 @@ class ChartTab(QWidget):
 
     title = ""
 
-    def __init__(self, y_label: str = "") -> None:
-        super().__init__()
-        self.plot = ChartPlot(y_label)
-        self.controls = QHBoxLayout()
-        self.controls.setContentsMargins(0, 0, 0, 0)
+    def __init__(self, parent: QWidget, y_label: str = "") -> None:
+        super().__init__(parent)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
+        self.plot = ChartPlot(self, y_label)
+        self.controls = QHBoxLayout()
+        self.controls.setContentsMargins(0, 0, 0, 0)
         layout.addLayout(self.controls)
         layout.addWidget(self.plot, 1)
         self.history: HistorySamples | None = None
         self.axis = TimeAxis("days", 1.0)
 
     def add_check(self, text: str, checked: bool = True, colour: str | None = None) -> QCheckBox:
-        box = QCheckBox(text)
+        box = QCheckBox(text, self)
         box.setChecked(checked)
         if colour is not None:
             box.setStyleSheet(f"QCheckBox {{ color: {colour}; font-weight: bold; }}")
@@ -296,7 +313,7 @@ class ChartTab(QWidget):
         return box
 
     def add_combo(self, on_change: Callable[[], None] | None = None) -> QComboBox:
-        combo = QComboBox()
+        combo = QComboBox(self)
         combo.currentIndexChanged.connect(lambda _index: (on_change or self.redraw)())
         self.controls.addWidget(combo)
         return combo
@@ -323,12 +340,13 @@ class SeriesTab(ChartTab):
 
     def __init__(
         self,
+        parent: QWidget,
         title: str,
         y_label: str,
         series: Sequence[tuple[str, str, str]],
         checked: Sequence[str] | None = None,
     ) -> None:
-        super().__init__(y_label)
+        super().__init__(parent, y_label)
         self.title = title
         self.series = series
         self.checks = {
@@ -348,8 +366,9 @@ class SeriesTab(ChartTab):
 
 
 class PopulationTab(SeriesTab):
-    def __init__(self) -> None:
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(
+            parent,
             "Population",
             "Count",
             [
@@ -361,8 +380,9 @@ class PopulationTab(SeriesTab):
 
 
 class ConditionTab(SeriesTab):
-    def __init__(self) -> None:
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(
+            parent,
             "Condition",
             "Average of the animals (0 to 1)",
             [
@@ -382,8 +402,9 @@ class LineagesTab(SeriesTab):
     """How many founders still have a line of descent alive (through the mother, or the seeding
     plant). It falls when a line dies out, so it shows diversity being lost."""
 
-    def __init__(self) -> None:
+    def __init__(self, parent: QWidget) -> None:
         super().__init__(
+            parent,
             "Lineages",
             "Founder lines still alive",
             [("lineages.animal", "Animals", BLUE), ("lineages.plant", "Plants", GREEN)],
@@ -395,8 +416,8 @@ class FlowsTab(ChartTab):
 
     title = "Births and deaths"
 
-    def __init__(self) -> None:
-        super().__init__("Per day")
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, "Per day")
         self.kind = self.add_combo()
         for kind, text in KIND_NAMES.items():
             self.kind.addItem(text, kind)
@@ -433,8 +454,8 @@ class TraitTab(ChartTab):
 
     title = "Traits and genes"
 
-    def __init__(self) -> None:
-        super().__init__()
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
         self.kind = self.add_combo(self._kind_changed)
         for kind, text in KIND_NAMES.items():
             self.kind.addItem(text, kind)
@@ -511,20 +532,20 @@ class DistributionTab(ChartTab):
 
     title = "Gene distribution"
 
-    def __init__(self) -> None:
-        super().__init__("Share of the population")
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, "Share of the population")
         self.kind = self.add_combo(self._kind_changed)
         for kind, text in KIND_NAMES.items():
             self.kind.addItem(text, kind)
         self.gene = self.add_combo(self._gene_changed)
         self.controls.addStretch(1)
-        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider = QSlider(Qt.Orientation.Horizontal, self)
         self.slider.setRange(0, 0)
         self.slider.setSingleStep(1)
         self.slider.valueChanged.connect(lambda _value: self.redraw())
-        self.when = QLabel()
+        self.when = QLabel(self)
         scrub = QHBoxLayout()
-        scrub.addWidget(QLabel("Time:"))
+        scrub.addWidget(QLabel("Time:", self))
         scrub.addWidget(self.slider, 1)
         scrub.addWidget(self.when)
         self.layout().addLayout(scrub)  # type: ignore[union-attr]
@@ -607,14 +628,18 @@ class DistributionTab(ChartTab):
 class ChartsPanel(QWidget):
     """The five chart tabs over one ``ViewerController``."""
 
-    def __init__(self, controller: ViewerController | None = None) -> None:
+    def __init__(
+        self, controller: ViewerController | None = None, parent: QWidget | None = None
+    ) -> None:
         """Over a live ``controller``, or with none to show one finished history that is handed
         in with ``set_history`` (the run history window, ``history_view``)."""
-        super().__init__()
+        super().__init__(parent)
         self.controller = controller
-        self.tabs = QTabWidget()
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.tabs = QTabWidget(self)
         self.chart_tabs: list[ChartTab] = [
-            tab()
+            tab(self.tabs)
             for tab in (
                 PopulationTab,
                 FlowsTab,
@@ -626,15 +651,13 @@ class ChartsPanel(QWidget):
         ]
         for tab in self.chart_tabs:
             self.tabs.addTab(tab, tab.title)
-        self.status = QLabel()
-        reset = QPushButton("Reset view")
+        self.status = QLabel(self)
+        reset = QPushButton("Reset view", self)
         reset.setToolTip("Fit the chart to all of its data again")
         reset.clicked.connect(self.reset_view)
         footer = QHBoxLayout()
         footer.addWidget(self.status, 1)
         footer.addWidget(reset)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(self.tabs, 1)
         layout.addLayout(footer)
 
@@ -700,9 +723,9 @@ class ChartsPanel(QWidget):
         self.current.fit()
 
 
-def history_view(history: HistorySamples) -> ChartsPanel:
+def history_view(history: HistorySamples, parent: QWidget | None = None) -> ChartsPanel:
     """The charts over one finished history, read only, for the run history window (UX.18)."""
-    panel = ChartsPanel()
+    panel = ChartsPanel(None, parent)
     panel.set_history(history)
     panel.refresh()
     return panel

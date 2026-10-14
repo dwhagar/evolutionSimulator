@@ -14,16 +14,19 @@ from collections.abc import Callable, Sequence
 from PySide6.QtCore import QByteArray, QSettings, Qt
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
 from PySide6.QtWidgets import (
+    QApplication,
     QDockWidget,
     QLabel,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QWidget,
 )
 
-from evolution_simulator import __version__
 from evolution_simulator.session import MAX_SPEED, Frame, Pause, Play, SetSpeed, Status, Step
+from evolution_simulator.viewer import theme
 from evolution_simulator.viewer.controller import ViewerController
+from evolution_simulator.viewer.help import AboutDialog, ShortcutsDialog
 from evolution_simulator.viewer.registry import (
     Area,
     MenuName,
@@ -36,6 +39,8 @@ from evolution_simulator.world.timescale import SPEED_PRESETS, format_duration
 log = logging.getLogger(__name__)
 
 APP_NAME = "Evolution Simulator"
+THEME_KEY = "appearance/theme"
+"""Where the theme is kept in the settings (not under ``window``, which Reset layout clears)."""
 LAYOUT_VERSION = 1
 """Bump when the default docks change in a way an old saved layout would get wrong."""
 DEFAULT_SIZE = (1280, 800)
@@ -46,6 +51,16 @@ _DOCK_AREAS: dict[Area, Qt.DockWidgetArea] = {
     "top": Qt.DockWidgetArea.TopDockWidgetArea,
     "bottom": Qt.DockWidgetArea.BottomDockWidgetArea,
 }
+
+
+def tidy_message(text: str) -> str:
+    """A status message as a sentence: first letter capital, ending in a full stop unless it
+    already ends in a mark."""
+    text = " ".join(text.split())
+    if not text:
+        return text
+    text = text[0].upper() + text[1:]
+    return text if text[-1] in ".!?:…" else text + "."
 
 
 def format_speed(status: Status) -> str:
@@ -84,6 +99,9 @@ class MainWindow(QMainWindow):
         self.panels: dict[str, QWidget] = {}
         self._speed_actions: dict[str, QAction] = {}
         self.crash_box: QMessageBox | None = None
+        self.about_dialog: AboutDialog | None = None
+        self.shortcuts_dialog: ShortcutsDialog | None = None
+        self._theme_actions: dict[str, QAction] = {}
         """The dialog shown when the simulation process fails, while it is open."""
         self.close_guards: list[Callable[[], bool]] = []
         """Asked in turn when the window closes; any that returns ``False`` keeps it open."""
@@ -95,11 +113,12 @@ class MainWindow(QMainWindow):
         self._build_status_bar()
         self._build_actions()
         self._build_menus()
+        self.set_theme(self.saved_theme(), save=False)
 
         context = ViewerContext(
             controller,
             self.actions,
-            self.statusBar().showMessage,
+            self.show_message,
             self.add_menu_action,
             self.set_run_label,
             self.settings,
@@ -111,7 +130,7 @@ class MainWindow(QMainWindow):
 
         controller.frame_received.connect(self._on_frame)
         controller.status_changed.connect(self._on_status)
-        controller.command_failed.connect(lambda text: self.statusBar().showMessage(text, 8000))
+        controller.command_failed.connect(lambda text: self.show_message(text, 8000))
         controller.backend_failed.connect(self._on_backend_failed)
         controller.backend_replaced.connect(self._on_backend_replaced)
         controller.backend_crashed.connect(self._on_backend_crashed)
@@ -125,8 +144,15 @@ class MainWindow(QMainWindow):
 
     def _build_status_bar(self) -> None:
         bar = self.statusBar()
-        self.status_labels = {name: QLabel() for name in ("run", "clock", "counts", "speed")}
-        for label in self.status_labels.values():
+        self.status_labels = {name: QLabel(bar) for name in ("run", "clock", "counts", "speed")}
+        tips = {
+            "run": "The run on screen",
+            "clock": "Simulated time, day or night, and the tick",
+            "counts": "Creatures alive now",
+            "speed": "The speed asked for and the speed the simulation is reaching",
+        }
+        for name, label in self.status_labels.items():
+            label.setToolTip(tips[name])
             bar.addPermanentWidget(label)
         self.status_labels["run"].setText(self.run_label or "")
         self.status_labels["clock"].setText(self._waiting_text())
@@ -137,31 +163,71 @@ class MainWindow(QMainWindow):
         )
 
     def _action(
-        self, name: str, text: str, slot, shortcut: str | QKeySequence.StandardKey | None = None
+        self,
+        name: str,
+        text: str,
+        slot,
+        shortcut: str | QKeySequence.StandardKey | None = None,
+        tip: str = "",
     ) -> QAction:
         action = QAction(text, self)
         action.triggered.connect(slot)
         if shortcut is not None:
             action.setShortcut(QKeySequence(shortcut))
+        if tip:
+            action.setStatusTip(tip)
+            action.setToolTip(tip)
         self.actions[name] = action
         return action
 
     def _build_actions(self) -> None:
-        self._action("quit", "&Quit", self.close, QKeySequence.StandardKey.Quit)
-        self._action("play_pause", "&Play", self._toggle_running, "Space")
-        self._action("step", "&Step", lambda: self.controller.send(Step(1)), "Right")
+        self._action("quit", "&Quit", self.close, QKeySequence.StandardKey.Quit, "Close the window")
+        self._action(
+            "play_pause", "&Play", self._toggle_running, "Space", "Run or pause the simulation"
+        )
+        self._action(
+            "step",
+            "&Step",
+            lambda: self.controller.send(Step(1)),
+            "Right",
+            "Run one tick, then pause",
+        )
         group = QActionGroup(self)
         group.setExclusive(True)
         for speed in (*SPEED_PRESETS, MAX_SPEED):
             label = "As fast as possible" if speed == MAX_SPEED else f"1 {speed} a second"
             action = self._action(
-                f"speed_{speed}", label, lambda _=False, s=speed: self.controller.send(SetSpeed(s))
+                f"speed_{speed}",
+                label,
+                lambda _=False, s=speed: self.controller.send(SetSpeed(s)),
+                tip="Set the simulation speed",
             )
             action.setCheckable(True)
             group.addAction(action)
             self._speed_actions[speed] = action
-        self._action("reset_layout", "&Reset layout", self.reset_layout)
-        self._action("about", "&About", self._about)
+        self._action(
+            "reset_layout",
+            "&Reset layout",
+            self.reset_layout,
+            tip="Put the panels back where they started",
+        )
+        for mode in theme.THEMES:
+            action = self._action(
+                f"theme_{mode}",
+                theme.THEME_TEXT[mode],
+                lambda _=False, m=mode: self.set_theme(m),
+                tip="Change the colours of the window",
+            )
+            action.setCheckable(True)
+            self._theme_actions[mode] = action
+        self._action(
+            "shortcuts",
+            "&Keyboard shortcuts",
+            self.show_shortcuts,
+            "F1",
+            "List the keys and mouse actions",
+        )
+        self._action("about", "&About", self.show_about, tip="Version, licence and notices")
 
     def _build_menus(self) -> None:
         bar = self.menuBar()
@@ -176,7 +242,14 @@ class MainWindow(QMainWindow):
         for action in self._speed_actions.values():
             speed_menu.addAction(action)
         self.view_menu = bar.addMenu("&View")
+        self.theme_menu = QMenu("&Theme", self.view_menu)
+        group = QActionGroup(self.theme_menu)
+        group.setExclusive(True)
+        for action in self._theme_actions.values():
+            group.addAction(action)
+            self.theme_menu.addAction(action)
         self.help_menu = bar.addMenu("&Help")
+        self.help_menu.addAction(self.actions["shortcuts"])
         self.help_menu.addAction(self.actions["about"])
 
     def add_menu_action(self, menu: MenuName, action: QAction) -> None:
@@ -188,6 +261,10 @@ class MainWindow(QMainWindow):
             {"run": self.run_menu, "view": self.view_menu, "help": self.help_menu}[menu].addAction(
                 action
             )
+
+    def show_message(self, text: str, timeout_ms: int = 5000) -> None:
+        """Say something on the status bar for a while, as a sentence (see ``tidy_message``)."""
+        self.statusBar().showMessage(tidy_message(text), timeout_ms)
 
     def set_run_label(self, text: str) -> None:
         self.run_label = text or None
@@ -213,8 +290,9 @@ class MainWindow(QMainWindow):
             if not spec.visible:
                 dock.hide()
         if not centre:
-            self.setCentralWidget(QWidget())
+            self.setCentralWidget(QWidget(self))
         self.view_menu.addSeparator()
+        self.view_menu.addMenu(self.theme_menu)
         self.view_menu.addAction(self.actions["reset_layout"])
         self._size_docks()
 
@@ -224,7 +302,7 @@ class MainWindow(QMainWindow):
         except Exception as error:
             log.exception("The panel %s could not be built", spec.id)
             label = QLabel(
-                f"The {spec.title} panel failed to start:\n{type(error).__name__}: {error}"
+                f"The {spec.title} panel failed to start:\n{type(error).__name__}: {error}", self
             )
             label.setWordWrap(True)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -308,7 +386,7 @@ class MainWindow(QMainWindow):
     def _on_backend_crashed(self, report: str) -> None:
         """The simulation process failed: say so, with the traceback a click away, and offer a
         fresh start (from the run's newest checkpoint when it was saved into a run)."""
-        self.statusBar().showMessage("The simulation stopped unexpectedly.")
+        self.show_message("The simulation stopped unexpectedly.")
         for name in ("play_pause", "step", *(f"speed_{s}" for s in self._speed_actions)):
             self.actions[name].setEnabled(False)
         box = QMessageBox(self)
@@ -329,17 +407,41 @@ class MainWindow(QMainWindow):
 
     def _after_crash_choice(self, box: QMessageBox, restart) -> None:
         if box.clickedButton() is restart and not self.controller.restart():
-            self.statusBar().showMessage("This simulation cannot be restarted.")
+            self.show_message("This simulation cannot be restarted.")
 
     def _on_backend_failed(self, text: str) -> None:
-        self.statusBar().showMessage(f"The simulation stopped: {text}")
+        self.show_message(f"The simulation stopped: {text}")
         for name in ("play_pause", "step", *(f"speed_{s}" for s in self._speed_actions)):
             self.actions[name].setEnabled(False)
 
-    def _about(self) -> None:
-        box = QMessageBox(self)
-        box.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose)
-        box.setWindowTitle(f"About {APP_NAME}")
-        box.setText(f"<b>{APP_NAME}</b><br>Version {__version__}")
-        box.setInformativeText("An evolution simulator. Released under CC0 1.0.")
-        box.open()
+    # -------------------------------------------------------------------------
+    # Themes and help
+    # -------------------------------------------------------------------------
+
+    def saved_theme(self) -> str:
+        """The theme kept in the settings (``"system"`` when there is none, or it is not one)."""
+        value = self.settings.value(THEME_KEY, theme.DEFAULT_THEME)
+        return value if value in theme.THEMES else theme.DEFAULT_THEME
+
+    def set_theme(self, mode: str, *, save: bool = True) -> None:
+        """Restyle the whole program as ``mode`` ("system", "light" or "dark") and remember it."""
+        theme.apply_theme(QApplication.instance(), mode)
+        for name, action in self._theme_actions.items():
+            action.setChecked(name == mode)
+        if save:
+            self.settings.setValue(THEME_KEY, mode)
+            self.settings.sync()
+
+    def show_shortcuts(self) -> None:
+        """The window that lists the keys and the mouse (rebuilt each time, so it is current)."""
+        if self.shortcuts_dialog is not None:
+            self.shortcuts_dialog.close()
+            self.shortcuts_dialog.deleteLater()
+        self.shortcuts_dialog = ShortcutsDialog(self, self.actions)
+        self.shortcuts_dialog.show()
+
+    def show_about(self) -> None:
+        if self.about_dialog is None:
+            self.about_dialog = AboutDialog(self)
+        self.about_dialog.show()
+        self.about_dialog.raise_()

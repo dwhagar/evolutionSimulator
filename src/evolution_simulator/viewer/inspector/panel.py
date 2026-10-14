@@ -95,6 +95,7 @@ class InspectorPanel(QWidget):
             return actions[DESELECT]
         action = QAction("&Deselect creature", self)
         action.setToolTip("Stop following the selected creature's details")
+        action.setStatusTip("Stop following the selected creature's details")
         action.setShortcuts([QKeySequence(key) for key in KEY_MAP[DESELECT]])
         action.triggered.connect(self.deselect)
         actions[DESELECT] = action
