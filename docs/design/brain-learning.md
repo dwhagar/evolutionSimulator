@@ -10,7 +10,7 @@ start.
 **Who this is for.** The owner, who is new to neural networks, and the thread that builds this. The early
 sections explain the ideas in plain terms; the later ones give the design and the figures.
 
-**Status.** Draft design, nothing built. Figures marked *measured* come from a small test written for this
+**Status.** Built as `BRAIN.24` (see [As built](#as-built)); the design below is unchanged. Figures marked *measured* come from a small test written for this
 note that uses the real `Brain` class on a toy problem (described under [A test of the rule](#a-test-of-the-rule)).
 It shows that the rule works and what its settings do, not how it will behave in the finished world.
 
@@ -362,6 +362,30 @@ Decisions the owner should make, raised as issues. Each has a default the build 
 
 Already asked: whether learned changes are inherited ([#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 5,
 default no).
+
+## As built
+
+`BRAIN.24` follows the design above. What differs or was decided while building:
+
+- **Where.** `learning.py` holds `LearningRules` (log size 64, reward window 10 ticks, reward weights
+  1, 2, 1, 0.5, night cap 0.5, fade 0, total limit 2), `reward`, `nightly_update`, `Learner` and the sleep
+  listener `NightlyLearning`. `Brain` gained `decide_with_hidden` and `with_output_offsets`; `AnimalTraits`
+  keeps `innate_brain`, the live `brain` (innate plus offsets), `learner`, `damage_taken` and `matings`.
+  `WorldConfig.learning` holds the rules and registers the listener; `None` turns learning off.
+- **Reward.** Energy is the change in the energy-store fraction over the window (a fall counts against),
+  health lost is the damage taken as a fraction of capacity (repair does not cancel it), and the safety
+  term is the fall in the threat-closeness input. A decision still waiting when the animal falls asleep is
+  closed on what has happened so far.
+- **Curiosity noise** is uniform, up to the gene either way, added to every output and clamped to its range.
+  It is applied whenever an `rng` is passed, and the decision (not the proposal) goes on to the wander check.
+- **A total limit** (2) on each number's learned change was added beside the nightly cap, so many nights in
+  a row cannot run away. Fading is a setting and is off.
+- **The brain's energy upkeep** is worked out at birth from the inherited brain and does not follow learned
+  changes. Learned connections that leave or enter the dead zone are not charged for.
+- **Tests** cover each item of the list above (`tests/test_learning.py`), including the toy task: with the
+  default cap and rate the toy creature beats chance within six days and learns nothing without curiosity.
+- **To calibrate** once the world runs for long: the reward weights and window, the cap, and how much sleep
+  time there is (`WORLD.2`, `TRAIT.3`).
 
 ## Sources
 

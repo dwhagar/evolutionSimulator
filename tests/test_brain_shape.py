@@ -251,9 +251,9 @@ class RecordingBrain:
     def __init__(self) -> None:
         self.inputs: list[tuple[float, ...]] = []
 
-    def decide(self, inputs):
+    def decide_with_hidden(self, inputs):
         self.inputs.append(tuple(inputs))
-        return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
+        return (0.0,), (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
 
 
 def test_pain_is_health_lost_since_the_last_decision():

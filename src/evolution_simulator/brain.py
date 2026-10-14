@@ -188,19 +188,51 @@ class Brain:
 
     def decide(self, inputs: Sequence[float]) -> tuple[float, ...]:
         """One pass through the network: ``inputs`` in, one number per output out."""
+        return self.decide_with_hidden(inputs)[1]
+
+    def decide_with_hidden(
+        self, inputs: Sequence[float]
+    ) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        """Like ``decide`` but also returns the hidden neurons' activations, which learning
+        (``BRAIN.24``) logs: ``(hidden, outputs)``."""
         if len(inputs) != self.shape.inputs:
             raise ValueError(f"Expected {self.shape.inputs} inputs, got {len(inputs)}.")
         gain = self.gain
-        hidden = [
+        hidden = tuple(
             math.tanh(gain * (bias + math.sumprod(weights, inputs)))
             for bias, weights in self._hidden
-        ]
+        )
         signed = self.shape.signed_outputs
         result: list[float] = []
         for k, (bias, weights) in enumerate(self._outputs):
             total = gain * (bias + math.sumprod(weights, hidden))
             result.append(math.tanh(total) if signed[k] else _logistic(total))
-        return tuple(result)
+        return hidden, tuple(result)
+
+    def with_output_offsets(
+        self, weight_offsets: Sequence[Sequence[float]], bias_offsets: Sequence[float]
+    ) -> Brain:
+        """A brain whose output layer is this one's plus learned changes (``BRAIN.24``).
+
+        ``weight_offsets[k][j]`` is added to the weight from hidden neuron ``j`` to output ``k`` and
+        ``bias_offsets[k]`` to output ``k``'s bias. The dead zone applies to the sum, so a learned
+        change can switch a connection off or on. This brain is not changed.
+        """
+        shape = self.shape
+        if len(weight_offsets) != shape.outputs or len(bias_offsets) != shape.outputs:
+            raise ValueError(f"Expected offsets for {shape.outputs} outputs.")
+        if any(len(row) != shape.hidden for row in weight_offsets):
+            raise ValueError(f"Expected {shape.hidden} weight offsets per output.")
+        values = list(self._values)
+        size = shape.neuron_size
+        out_start = 1 + shape.inputs
+        for j in range(shape.hidden):
+            for k in range(shape.outputs):
+                values[j * size + out_start + k] += weight_offsets[k][j]
+        base = shape.hidden * size
+        for k in range(shape.outputs):
+            values[base + k] += bias_offsets[k]
+        return Brain(shape, values, self.dead_zone, self.gain)
 
     # -------------------------------------------------------------------------
     # Size, for the energy cost of thinking
