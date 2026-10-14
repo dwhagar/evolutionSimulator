@@ -35,12 +35,12 @@ WIDE = {"sight_range": "3333", "sight_fov": "3333", "touch": "0000", **BLIND_DEA
 NOSE = {"sight_range": "0000", "hearing": "0000", "smell": "3333", "touch": "0000"}  # 100 units
 EARS = {"sight_range": "0000", "hearing": "3333", "smell": "0000", "touch": "0000"}  # 85 units
 MASS_1, MASS_2, MASS_4 = "0000", "1111", "3333"
-EXACT = SensingRules(closeness_noise=0.0)
+EXACT = SensingRules()
 SHORT_DAY = DayCycle(length_seconds=100.0)  # noon at tick 0, night from tick 33 to 67
 
 
 def seen_by(world, animal, rules=EXACT):
-    return WorldSenses(rules).perceive(world, animal)
+    return WorldSenses(rules, noisy=False).perceive(world, animal)
 
 
 def surface(a, b):
@@ -357,6 +357,10 @@ def test_perceiving_changes_nothing_but_the_random_stream():
     stream = world.rng.getstate()
     for animal in world.animals:
         seen_by(world, animal)
+    assert world.state_digest() == before  # a noise-free look leaves even the stream alone
+    noisy = WorldSenses()
+    for animal in world.animals:
+        noisy.perceive(world, animal)
     assert world.rng.getstate() != stream  # the noise came from the world's generator
     world.rng.setstate(stream)
     assert world.state_digest() == before

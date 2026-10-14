@@ -22,9 +22,9 @@ What the function does, in order:
    inputs are scaled to its own senses. The bearing comes from the most precise organ that detected
    it (vision, then hearing, then smell), divided by the half field of view for vision and by 180
    degrees otherwise, left negative.
-5. The nearest prey or threat also gives the relative-size input, ``log2(mass ratio) / 2``, exact by
-   sight and noisy by the other senses. Calls, touch and crowding are read off the same neighbours,
-   and the daylight input is the conditions' daylight.
+5. The nearest prey or threat also gives the relative-size input, ``log2(mass ratio) / 2``, with the
+   direction error of the organ that found it (vision's falls with acuity). Calls, touch and
+   crowding are read off the same neighbours, and the daylight input is the conditions' daylight.
 6. If a random generator is given, each report gets seeded noise that falls as the organ improves.
 
 Everything not sensed is 0 (daylight aside). Nothing here changes its arguments.
@@ -136,6 +136,8 @@ class SenseOrgans:
     vision_noise: float = 0.0
     hearing_noise: float = 0.0
     smell_noise: float = 0.0
+    closeness_noise: float | None = None
+    """Error on every closeness report (input units). ``None``: the rules' ``closeness_noise``."""
 
     def __post_init__(self) -> None:
         for name in (
@@ -146,8 +148,11 @@ class SenseOrgans:
             "vision_noise",
             "hearing_noise",
             "smell_noise",
+            "closeness_noise",
         ):
             value = getattr(self, name)
+            if value is None and name == "closeness_noise":
+                continue
             if not (math.isfinite(value) and value >= 0.0):
                 raise ValueError(f"{name} must be a finite number, 0 or more, got {value}.")
         if not (0.0 < self.vision_fov_degrees <= 360.0):
@@ -182,6 +187,7 @@ def organs_from_traits(traits: AnimalTraits) -> SenseOrgans:
         vision_noise=traits.vision_noise,
         hearing_noise=traits.hearing_noise,
         smell_noise=traits.smell_noise,
+        closeness_noise=traits.vision_closeness_noise,
     )
 
 
@@ -357,6 +363,9 @@ def sense(
         norm = half_fov if sense_kind == "vision" else math.pi
         return _clamp(-bearing / norm + noise(sense_kind), -1.0, 1.0)
 
+    closeness_noise = (
+        rules.closeness_noise if organs.closeness_noise is None else organs.closeness_noise
+    )
     reported: dict[str, float] = {}
     sizeable: list[tuple[float, int, Neighbour, str]] = []  # prey and threats found, for size
     for target in TARGETS:
@@ -374,7 +383,7 @@ def sense(
             sizeable.append((distance, ident, neighbour, by))
         reported[direction_row] = direction(by, bearing_of(dx, dy))
         reported[closeness_row] = _clamp(
-            1.0 - distance / class_range + noise("vision", rules.closeness_noise),
+            1.0 - distance / class_range + noise("vision", closeness_noise),
             0.0,
             1.0,
         )
@@ -384,7 +393,7 @@ def sense(
         _, _, closest, by = min(sizeable, key=lambda item: item[:2])
         if closest.mass > 0.0:
             ratio = math.log2(closest.mass / mass) / 2.0
-            noisy = ratio + (0.0 if by == "vision" else noise(by))
+            noisy = ratio + noise(by)
             reported["relative_size"] = _clamp(noisy, -1.0, 1.0)
 
     # Calls come only through hearing.

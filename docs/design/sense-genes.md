@@ -1,5 +1,15 @@
 # Sense genes: field of vision, acuity, and what the world must provide
 
+> **Built (`SENSE.16`, 2026-10-14).** Everything in "The genes" through "Predators and prey" and the
+> `SENSE.16` build list is in the code: animal layout version 6, `sense_genes.py`, `trait_defs.py`,
+> `traits.py`, `sensing.py` and `layouts.seed_sense_genes` (called by `founder_animal_dna`, so
+> `World.populate`). Differences from the note: the eye's base reach is passed in units
+> (`vision_reach(base_reach, acuity)`, not the gene level); the closeness error is an organ value
+> (`SenseOrgans.closeness_noise`, with `SensingRules.closeness_noise` as the default for organs that give
+> none) and the relative-size error is the organ's direction error for every sense including vision;
+> seeding sets haploid genomes only (`DiploidDNA` has no `with_value` yet). The world side is still
+> `WORLD.12`.
+
 Design note for `SENSE.15`, written 2026-10-14 by the Research 3 thread. It extends
 [senses.md](senses.md) (`SENSE.1`) with the owner's request of the same day, and it ends with build lists
 for `SENSE.16` (the genes) and `WORLD.12` (the world properties the senses need). The owner questions it
