@@ -635,6 +635,43 @@ settings form, a line that says what is wrong (Start is disabled until nothing i
   in each poll, so every event after the first poll went into a list nobody read. It subscribes a method
   now (`_heard`) and a test polls twice.
 
+### As built: the world view (`UX.12`)
+
+`viewer/panels/world.py` hands the window a `WorldPanel` (toolbar and canvas); the parts are in
+`viewer/worldview/`: `camera` (pan and zoom arithmetic), `layers` (a frame block read as numpy arrays),
+`glide`, `palette` (colour modes) and `canvas` (the `QPainter` widget). The first four need numpy and
+no Qt, so they are tested without a window.
+
+- **Camera.** Drag to pan, wheel to zoom around the pointer (limits: half the fit scale to 60 pixels a
+  unit), double-click or the Fit button to see the whole world; the world stays fitted as the window
+  resizes until the user moves it. World y is up (headings are counterclockwise), screen y down; the
+  flip is in `Camera` only.
+- **What is drawn.** The ground tinted from night to day by the frame's `daylight`, an optional grid,
+  plants, corpses (diamonds), animals, a white wall at the edge and a scale bar. Animals are triangles
+  along the heading, never under 9 pixels, drawn in one path per colour; females have a notch at the
+  back (so sex does not rest on colour), a sleeping animal is dimmed and ringed, a pregnant one has a
+  white dot, the selected one a white ring.
+- **Plant layer.** Painted into a pixmap reused until the plants, the camera or the size change (a
+  frame without a plants block costs nothing for them). On this sandbox's software renderer: 1,000
+  animals and 3,000 plants take about 20 ms a paint with the plants cached, 45 ms when they are repainted.
+- **Colour modes** (`palette.MODES`, the menu in the toolbar): diet (blue plant eaters to vermillion meat
+  eaters, the default), sex, energy, age and family. The colours are Okabe-Ito blue and reddish purple and
+  ramps that change in lightness, so they survive the common colour blindness. Family needs a `family`
+  column (0 to 1, relatives close together) in the animal block: the mode is listed but greyed out until
+  a frame carries it, which is the hook for UX.30 (add the column to `ANIMAL_COLUMNS` and bump
+  `FRAME_FORMAT`; nothing else changes here).
+- **One tick behind.** The canvas keeps the previous pose and shows each animal a fraction of the way from
+  it to the newest frame, over the real time that step takes (simulated time between the two frames over
+  the speed the session is managing, so a computer that falls behind slides more slowly, not in jumps).
+  Paused, stepping, as fast as possible and anything above ten ticks a second are shown exactly. A frame
+  that arrives mid-slide starts from where the picture is, so nothing jumps.
+- **Selecting.** A click selects the nearest animal within reach through `Select` (a click on bare ground
+  sends `Deselect`); the ring follows the session's selection, so it follows the inspector too. A drag
+  is a pan, not a click.
+- **Not built yet.** The overview map when zoomed in, the selected creature's sense overlays and trail
+  (UX.15 draws those; the canvas paints in screen pixels from `camera.to_screen`, so an overlay is
+  one more painting step after the animals), and the "hide the world while fast-forwarding" switch (UX.13).
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

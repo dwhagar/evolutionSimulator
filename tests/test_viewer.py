@@ -219,8 +219,8 @@ def test_the_menus_are_there_and_every_dock_can_be_toggled_from_the_view_menu(wi
 
 def test_the_panels_follow_the_frames(window, controller):
     controller.poll()
-    world = window.panels["world"]
-    assert "30 animals" in world.live.text() and "100 plants" in world.live.text()
+    assert "day 0" in window.panels["controls"].live.text()
+    assert window.panels["world"].canvas.frame is controller.frame
     counts = window.status_labels["counts"].text()
     assert "Animals 30" in counts and "Plants 100" in counts
     assert "Tick 0" in window.status_labels["clock"].text()
@@ -229,7 +229,7 @@ def test_the_panels_follow_the_frames(window, controller):
 def test_a_panel_built_after_the_first_frame_starts_from_it(controller, settings, qapp):
     controller.poll()
     win = MainWindow(controller, settings=settings)
-    assert "30 animals" in win.panels["world"].live.text()
+    assert win.panels["world"].canvas.frame is controller.frame
     win.close()
 
 
