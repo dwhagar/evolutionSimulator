@@ -248,6 +248,18 @@ class World:
         found = self._plant_index.query_with_distance(position, radius)
         return [(self._plants[i], distance) for i, distance in found]
 
+    def plants_in_reach(self, position: Vec, reach: float) -> list[tuple[Plant, float, float]]:
+        """Plants whose canopy edge is within ``reach`` of ``position``, unordered, each with its
+        centre distance and canopy radius."""
+        plants = self._plants
+        return [(plants[i], d, r) for i, d, r in self._plant_index.within_reach(position, reach)]
+
+    def animals_in_reach(self, position: Vec, reach: float) -> list[tuple[Animal, float, float]]:
+        """Animals whose bodies are within ``reach`` of ``position`` (as of the last index
+        refresh), unordered, each with its centre distance and body radius."""
+        animals = self._animals
+        return [(animals[i], d, r) for i, d, r in self._animal_index.within_reach(position, reach)]
+
     def plants_near(self, position: Vec, radius: float) -> list[Plant]:
         return [self._plants[i] for i in self._plant_index.query(position, radius)]
 
@@ -288,7 +300,7 @@ class World:
         traits.learning_rules = self.config.learning
         animal = Animal(self._new_id(), traits, place, facing, parents)
         self._animals[animal.id] = animal
-        self._animal_index.insert(animal.id, animal.position)
+        self._animal_index.insert(animal.id, animal.position, animal.radius)
         self.max_body = max(self.max_body, animal.radius)
         return animal
 
@@ -302,7 +314,7 @@ class World:
     def _insert_plant(self, traits: PlantTraits, place: Vec, parents: tuple[int, ...]) -> Plant:
         plant = Plant(self._new_id(), traits, place, parents)
         self._plants[plant.id] = plant
-        self._plant_index.insert(plant.id, plant.position)
+        self._plant_index.insert(plant.id, plant.position, plant.radius)
         self.max_canopy = max(self.max_canopy, plant.radius)
         return plant
 
@@ -343,8 +355,10 @@ class World:
         # 1. Sense and decide, all from the same start-of-tick world. Sleepers do not.
         for animal in animals:
             if not animal.asleep:
-                percepts = self.senses.perceive(self, animal)
-                animal.last_decision = animal.traits.think(percepts, self.rng)
+                decision = animal.traits.cached_decision(self.rng)
+                if decision is None:
+                    decision = animal.traits.think(self.senses.perceive(self, animal), self.rng)
+                animal.last_decision = decision
 
         # 2. Live, move and eat (or sleep).
         for animal in animals:
@@ -494,7 +508,7 @@ class World:
     def _refresh_animal_index(self) -> None:
         self._animal_index.clear()
         for animal in self.animals:
-            self._animal_index.insert(animal.id, animal.position)
+            self._animal_index.insert(animal.id, animal.position, animal.radius)
 
     def _graze(self, animal: Animal) -> None:
         reach = animal.radius + self.max_canopy

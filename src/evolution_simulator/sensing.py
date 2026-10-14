@@ -238,16 +238,6 @@ class Neighbour:
         return self.role != "plant"
 
 
-@dataclass(frozen=True)
-class _Seen:
-    """One neighbour as the creature sees it: distance between surfaces and bearing."""
-
-    neighbour: Neighbour
-    distance: float
-    bearing: float
-    """Radians, positive to the creature's left, between -pi and pi."""
-
-
 def effective_reach(
     organs: SenseOrgans,
     conditions: SensingConditions | None = None,
@@ -298,37 +288,64 @@ def sense(
 
     reach = effective_reach(organs, conditions, rules)
     half_fov = math.radians(organs.vision_fov_degrees) / 2.0
+    reach_vision, reach_hearing = reach["vision"], reach["hearing"]
+    reach_smell, reach_touch = reach["smell"], reach["touch"]
+    weak_smell = reach_smell * rules.weak_smell
 
-    # Each neighbour in the creature's own frame (forward, left), worked out on plain numbers
-    # because this runs for every neighbour of every animal every tick.
+    # Each neighbour in the creature's own frame, worked out on plain numbers because this runs
+    # for every neighbour of every animal every tick. The distance is between the two surfaces.
+    # Which organs detect a neighbour is settled once, here, from its own class: vision within its
+    # field of view (always when touching), hearing and smell all round, scaled by how loud and
+    # how smelly it is, and smell weak for prey and threats.
     fx, fy = math.cos(heading), math.sin(heading)
     px, py = position.coords
-    seen: list[_Seen] = []
+    best: dict[str, tuple[float, int, Neighbour, dict[str, bool], float, float]] = {}
+    callers: list[tuple[float, Neighbour, float, float]] = []
+    nearest = math.inf
+    crowd = 0
     for n in neighbours:
-        dx, dy = n.position.coords[0] - px, n.position.coords[1] - py
-        centre = math.hypot(dx, dy)
-        bearing = math.atan2(dy * fx - dx * fy, dx * fx + dy * fy) if centre > 0.0 else 0.0
-        seen.append(_Seen(n, max(0.0, centre - radius - n.radius), bearing))
+        role = n.role
+        nx, ny = n.position.coords
+        dx, dy = nx - px, ny - py
+        distance = max(0.0, math.hypot(dx, dy) - radius - n.radius)
+        nearest = min(nearest, distance)
+        sees = False
+        if reach_vision > 0.0 and distance <= reach_vision:
+            sees = distance == 0.0 or (
+                abs(math.atan2(dy * fx - dx * fy, dx * fx + dy * fy)) <= half_fov
+            )
+        hears = reach_hearing > 0.0 and distance <= reach_hearing * n.loudness
+        smell_limit = weak_smell if role in ("prey", "threat") else reach_smell
+        smells = smell_limit > 0.0 and distance <= smell_limit * n.scent
+        if n.alarm_call_radius > 0.0 or n.mating_call_radius > 0.0:
+            callers.append((distance, n, dx, dy))
+        if role == "plant":
+            crowded = False
+        else:
+            crowded = (sees and "vision" in _CROWDING_SENSES) or (
+                hears and "hearing" in _CROWDING_SENSES
+            )
+            crowded = crowded or (smells and "smell" in _CROWDING_SENSES)
+            crowded = crowded or (
+                reach_touch > 0.0 and distance <= reach_touch and ("touch" in _CROWDING_SENSES)
+            )
+            if crowded:
+                crowd += 1
+        if role not in _TARGET_PLAN:
+            continue
+        flags = {"vision": sees, "hearing": hears, "smell": smells}
+        if not any(flags[k] for k in _TARGET_PLAN[role][2]):
+            continue
+        key = (distance, n.ident)
+        held = best.get(role)
+        if held is None or key < held[:2]:
+            best[role] = (distance, n.ident, n, flags, dx, dy)
 
-    def range_for(sense_kind: str, role: str) -> float:
-        """How far this organ reports this class: smell is weak for prey and threats."""
-        if sense_kind == "smell" and role in ("prey", "threat"):
-            return reach["smell"] * rules.weak_smell
-        return reach[sense_kind]
-
-    def detects(sense_kind: str, role: str, s: _Seen) -> bool:
-        limit = range_for(sense_kind, role)
-        if limit <= 0.0:
-            return False
-        if sense_kind == "vision":
-            if s.distance > limit:
-                return False
-            return s.distance == 0.0 or abs(s.bearing) <= half_fov
-        if sense_kind == "hearing":
-            limit *= s.neighbour.loudness
-        elif sense_kind == "smell":
-            limit *= s.neighbour.scent
-        return s.distance <= limit
+    def bearing_of(dx: float, dy: float) -> float:
+        """Radians, positive to the creature's left, between -pi and pi."""
+        if dx == 0.0 and dy == 0.0:
+            return 0.0
+        return math.atan2(dy * fx - dx * fy, dx * fx + dy * fy)
 
     def noise(sense_kind: str, sd: float | None = None) -> float:
         deviation = organs.noise_of(sense_kind) if sd is None else sd
@@ -341,74 +358,62 @@ def sense(
         return _clamp(-bearing / norm + noise(sense_kind), -1.0, 1.0)
 
     reported: dict[str, float] = {}
-    sizeable: list[tuple[float, int, _Seen, str]] = []  # prey and threats found, for relative size
+    sizeable: list[tuple[float, int, Neighbour, str]] = []  # prey and threats found, for size
     for target in TARGETS:
         direction_row, closeness_row, reporters = _TARGET_PLAN[target]
-        class_range = max((range_for(k, target) for k in reporters), default=0.0)
-        best: tuple[float, int, _Seen] | None = None
-        for s in seen:
-            if s.neighbour.role != target:
-                continue
-            if not any(detects(k, target, s) for k in reporters):
-                continue
-            key = (s.distance, s.neighbour.ident)
-            if best is None or key < best[:2]:
-                best = (*key, s)
-        if best is None or class_range <= 0.0:
+        class_range = max(
+            (weak_smell if k == "smell" and target in ("prey", "threat") else reach[k])
+            for k in reporters
+        )
+        found = best.get(target)
+        if found is None or class_range <= 0.0:
             continue
-        found = best[2]
-        by = next(k for k in reporters if detects(k, target, found))
+        distance, ident, neighbour, flags, dx, dy = found
+        by = next(k for k in reporters if flags[k])
         if target in ("prey", "threat"):
-            sizeable.append((found.distance, found.neighbour.ident, found, by))
-        reported[direction_row] = direction(by, found.bearing)
+            sizeable.append((distance, ident, neighbour, by))
+        reported[direction_row] = direction(by, bearing_of(dx, dy))
         reported[closeness_row] = _clamp(
-            1.0 - found.distance / class_range + noise("vision", rules.closeness_noise),
+            1.0 - distance / class_range + noise("vision", rules.closeness_noise),
             0.0,
             1.0,
         )
 
     # Relative size of the nearest prey or threat: vision is exact, other senses are noisy.
     if sizeable and mass > 0.0:
-        _, _, nearest, by = min(sizeable, key=lambda item: item[:2])
-        if nearest.neighbour.mass > 0.0:
-            ratio = math.log2(nearest.neighbour.mass / mass) / 2.0
+        _, _, closest, by = min(sizeable, key=lambda item: item[:2])
+        if closest.mass > 0.0:
+            ratio = math.log2(closest.mass / mass) / 2.0
             noisy = ratio + (0.0 if by == "vision" else noise(by))
             reported["relative_size"] = _clamp(noisy, -1.0, 1.0)
 
     # Calls come only through hearing.
     alarm = mating = 0.0
-    loudest: tuple[float, int, _Seen] | None = None
-    if reach["hearing"] > 0.0:
-        for s in seen:
-            n = s.neighbour
-            if s.distance > reach["hearing"]:
+    loudest: tuple[float, int, float, float] | None = None
+    if reach_hearing > 0.0:
+        for distance, n, dx, dy in callers:
+            if distance > reach_hearing:
                 continue
             for call_radius, is_alarm in (
                 (n.alarm_call_radius, True),
                 (n.mating_call_radius, False),
             ):
-                if call_radius <= 0.0 or s.distance >= call_radius:
+                if call_radius <= 0.0 or distance >= call_radius:
                     continue
-                strength = 1.0 - s.distance / call_radius
+                strength = 1.0 - distance / call_radius
                 if is_alarm:
                     alarm = max(alarm, strength)
                 else:
                     mating = max(mating, strength)
                 if loudest is None or (-strength, n.ident) < loudest[:2]:
-                    loudest = (-strength, n.ident, s)
-    call_direction = direction("hearing", loudest[2].bearing) if loudest is not None else 0.0
-
-    # Touch: anything in contact, or the world's edge.
-    touch_limit = reach["touch"]
-    touching = any(s.distance <= touch_limit for s in seen) or (
-        edge_distance is not None and edge_distance <= touch_limit
+                    loudest = (-strength, n.ident, dx, dy)
+    call_direction = (
+        direction("hearing", bearing_of(loudest[2], loudest[3])) if loudest is not None else 0.0
     )
 
-    # Crowding: animals that the crowding organs can find.
-    crowd = sum(
-        1
-        for s in seen
-        if s.neighbour.is_animal and any(detects(k, s.neighbour.role, s) for k in _CROWDING_SENSES)
+    # Touch: anything in contact, or the world's edge.
+    touching = nearest <= reach_touch or (
+        edge_distance is not None and edge_distance <= reach_touch
     )
 
     return Percepts(

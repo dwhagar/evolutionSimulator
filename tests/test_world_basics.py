@@ -145,6 +145,26 @@ def test_index_query_with_distance_reports_each_distance():
     assert index.query_with_distance(Vec.of(0, 0), 6) == [(1, 1.0), (2, 5.0)]
 
 
+def test_index_within_reach_goes_by_surfaces_not_centres():
+    index = SpatialIndex(10.0)
+    index.insert(1, Vec.of(30, 0), extent=5.0)  # surface 25 from the origin
+    index.insert(2, Vec.of(0, 12), extent=0.0)
+    index.insert(3, Vec.of(-100, 0), extent=20.0)  # surface 80
+    found = sorted(index.within_reach(Vec.of(0, 0), 25))
+    assert found == [(1, 30.0, 5.0), (2, 12.0, 0.0)]
+    assert sorted(index.within_reach(Vec.of(0, 0), 24.9)) == [(2, 12.0, 0.0)]
+    assert sorted(i for i, _, _ in index.within_reach(Vec.of(0, 0), 80)) == [1, 2, 3]
+    index.remove(1)
+    assert [i for i, _, _ in index.within_reach(Vec.of(0, 0), 25)] == [2]
+
+
+def test_index_within_reach_finds_a_wide_item_whose_centre_is_in_a_far_cell():
+    index = SpatialIndex(10.0)
+    index.insert(7, Vec.of(95, 5), extent=40.0)  # many cells away, but the edge is 55 off
+    assert [i for i, _, _ in index.within_reach(Vec.of(0, 5), 55)] == [7]
+    assert index.within_reach(Vec.of(0, 5), 54) == []
+
+
 def test_index_remove_and_duplicates():
     index = SpatialIndex(10.0)
     index.insert(1, Vec.of(1, 1))

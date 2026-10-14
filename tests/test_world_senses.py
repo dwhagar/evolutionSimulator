@@ -9,6 +9,9 @@ import pytest
 from world_support import animal_dna, plant_dna
 
 from evolution_simulator.brain_adapter import Percepts
+from evolution_simulator.dna import DNA
+from evolution_simulator.layouts import ANIMAL_LAYOUT
+from evolution_simulator.learning import LearningRules
 from evolution_simulator.sensing import (
     Neighbour,
     SensingConditions,
@@ -16,6 +19,7 @@ from evolution_simulator.sensing import (
     organs_from_traits,
     sense,
 )
+from evolution_simulator.traits import AnimalTraits
 from evolution_simulator.world import DayCycle, Vec, World, WorldConfig, WorldSenses
 from evolution_simulator.world.senses import (
     classify,
@@ -451,6 +455,41 @@ def test_a_sleeper_too_far_away_is_not_woken():
 
 
 # --- swapping the senses --------------------------------------------------------------------
+
+
+def test_the_world_senses_only_when_the_brain_will_look():
+    class Counting(WorldSenses):
+        def __init__(self):
+            super().__init__()
+            self.asked = []
+
+        def perceive(self, world, animal):
+            self.asked.append(world.tick)
+            return super().perceive(world, animal)
+
+    senses = Counting()
+    world = World(WorldConfig(day_cycle=None, learning=None), senses=senses)
+    animal = world.add_animal(animal_dna(brain={}), HERE, heading=0.0)
+    animal.traits.decision_interval = 3
+    world.run(9)
+    assert senses.asked == [0, 3, 6]  # between brain runs the last decision is repeated
+    assert animal.last_decision is not None
+
+
+def test_cached_decision_repeats_the_last_one_and_keeps_the_log_going():
+    traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(3)), decision_interval=3)
+    traits.curiosity = 0.3
+    traits.learning_rate = 1.0
+    traits.learning_rules = LearningRules()
+    rng = random.Random(1)
+    assert traits.cached_decision(rng) is None  # nothing to repeat yet
+    decided = traits.think(Percepts(threat_closeness=0.7), rng)
+    seen = []
+    traits.learner.observe = lambda state: seen.append(state.threat)
+    assert traits.cached_decision(rng) is decided
+    assert traits.cached_decision(rng) is decided
+    assert seen == [0.7, 0.7]  # the threat from when the brain last looked
+    assert traits.cached_decision(rng) is None  # time to look again
 
 
 def test_the_step_loop_uses_whatever_senses_it_is_given():

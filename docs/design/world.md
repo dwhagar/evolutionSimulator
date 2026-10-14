@@ -161,7 +161,7 @@ will move all of this, so the capacity should be calibrated again once animals s
 
 The loop calls `world.senses.perceive(world, animal)` and expects the brain's `Percepts`
 ([brain_adapter.py](../../src/evolution_simulator/brain_adapter.py)). Pass any object with that method
-to `World(config, senses=...)`. The default is `WorldSenses` (`SENSE.12`), the world's half of the
+to `World(config, senses=...)`. The world calls it only on ticks when the brain will look (see Speed). The default is `WorldSenses` (`SENSE.12`), the world's half of the
 pure sensing step in [sensing.py](../../src/evolution_simulator/sensing.py): the step knows organs and
 neighbours, the world finds and classifies the neighbours.
 
@@ -226,11 +226,22 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   clamps are the biggest single piece), plant growth 8%. The fast presets still cannot be met at
   this size.
   `SENSE.12` made it slower again: about 75 ms per tick at 300 animals and 3000 plants (6 ms at 60
-  and 300), because three senses are now searched and reported instead of one, over a wider
-  reach. Of that, the plant search (`plants_within`) is about a fifth and the sensing step about two
-  fifths of the senses. Pruning the plants to two and moving the step's neighbour frame to plain
-  floats already got back about half of the first measurement; more would come from not searching
-  at all for senses an animal does not have, or from caching per cell. A follow-up for `WORLD.9`.
+  and 300), because three senses are now searched and reported instead of one, over a wider reach.
+  `WORLD.13` brought it to about 44 ms (5 ms at 60 and 300) with three changes (the first alters only what the learning log
+  records, the others nothing an animal perceives):
+  - **Sense only when the brain will look.** The brain runs every `decision_interval` ticks (1 to
+    4) and repeats its last decision in between, so the world asks `AnimalTraits.cached_decision`
+    first and calls the senses only when it returns nothing. An animal that is logging its day
+    (`BRAIN.24`) logs the threat it saw when the brain last looked instead of re-sensing every tick.
+  - **Search by surfaces.** The grid stores each item's radius (`SpatialIndex.within_reach`,
+    `World.plants_in_reach`, `World.animals_in_reach`), so a search returns exactly the things whose
+    surfaces are in reach, unsorted, without the widest-canopy margin, extra lookups or a sort.
+  - **One detection pass in `sense()`.** Each neighbour is measured once and its vision, hearing and
+    smell detection settled once, instead of once per class and again for crowding.
+
+  What is left: plant growth (about 7 ms for 3000 plants), the brain, and the plant loop in
+  `WorldSenses`. The 25 ms of before `SENSE.12` is not quite reached; smell reaching far over many
+  faint plants is the part that costs.
 
 ## Follow-ups
 
