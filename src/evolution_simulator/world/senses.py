@@ -68,13 +68,26 @@ def relative_direction(heading: float, origin: Vec, target: Vec) -> float:
 
 
 def classify(viewer: Animal, other: Animal) -> str:
-    """What ``other`` is to ``viewer``: ``prey``, ``threat``, ``mate`` or ``other``."""
+    """What ``other`` is to ``viewer``: ``young`` (its own child, still dependent on it), ``prey``,
+    ``threat``, ``mate`` or ``other``."""
+    if viewer.id in other.parents and other.traits.lived_ticks < viewer.traits.dependence_ticks:
+        return "young"
     ratio = other.traits.mass / viewer.traits.mass
     if ratio <= PREY_MASS_RATIO:
         return "prey" if viewer.traits.effective_carn_eff > MEAT_EATER else "other"
     if ratio >= THREAT_MASS_RATIO:
         return "threat" if other.traits.effective_carn_eff > MEAT_EATER else "other"
     return "mate"
+
+
+def _similarity_to(viewer: Animal, other: Animal, unrelated: float):
+    """A function giving how alike ``other``'s genome is to ``viewer``'s, 1 identical and 0 as
+    different as strangers; the genomes are only compared if the sensing step asks."""
+
+    def similarity() -> float:
+        return max(0.0, 1.0 - viewer.traits.dna.distance(other.traits.dna) / unrelated)
+
+    return similarity
 
 
 def loudness(animal: Animal) -> float:
@@ -107,9 +120,12 @@ class WorldSenses:
         rules = self._rules if self._rules is not None else world.config.sensing
         traits = animal.traits
         organs = organs_from_traits(traits)
-        conditions = SensingConditions(daylight=world.daylight, asleep=animal.asleep)
+        conditions = SensingConditions(
+            daylight=world.daylight, asleep=animal.asleep, clock=world.day_phase
+        )
         reach = effective_reach(organs, conditions, rules)
         farthest = max(reach.values())
+        unrelated = world.config.traits.reproduction.similarity_unrelated
         position = animal.position
 
         neighbours: list[Neighbour] = []
@@ -160,10 +176,11 @@ class WorldSenses:
                 if other is animal:
                     continue
                 alarm, mating = world.calls.get(other.id, (0.0, 0.0))
+                role = classify(animal, other)
                 neighbours.append(
                     Neighbour(
                         ident=other.id,
-                        role=classify(animal, other),
+                        role=role,
                         position=other.position,
                         radius=other.radius,
                         loudness=loudness(other),
@@ -171,6 +188,9 @@ class WorldSenses:
                         alarm_call_radius=alarm,
                         mating_call_radius=mating,
                         mass=other.traits.mass,
+                        similarity=_similarity_to(animal, other, unrelated)
+                        if role == "mate"
+                        else 0.0,
                     )
                 )
         if farthest > 0.0 and traits.effective_carn_eff > MEAT_EATER:
@@ -199,4 +219,5 @@ class WorldSenses:
             world.rng if self._noisy else None,
             edge_distance=world.edge_distance(position) - animal.radius,
             mass=traits.mass,
+            edge_direction=world.edge_vector(position),
         )

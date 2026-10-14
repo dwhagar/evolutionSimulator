@@ -166,6 +166,11 @@ def warm_net():
         net.w1[fresh, idx["prey_closeness"]] = level(1.867)
         net.b1[fresh] = level(-0.933)
         net.w2[2, fresh] = level(2.0)
+    # SENSE.14: the new inputs start neutral; young pull like a mate, the edge pushes like a threat.
+    if net.w1[0, idx["young_direction"]] == zero:
+        net.w1[0, idx["young_direction"]] = level(0.667)
+        net.w1[1, idx["young_closeness"]] = level(1.733)
+        net.w1[0, idx["edge_direction"]] = level(-1.2)
     return net
 
 

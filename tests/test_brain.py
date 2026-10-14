@@ -49,8 +49,8 @@ def reference_forward(shape: BrainShape, values: list[float], x: list[float]) ->
 
 
 def test_default_shape_is_the_designed_network():
-    assert (DEFAULT_SHAPE.inputs, DEFAULT_SHAPE.hidden, DEFAULT_SHAPE.outputs) == (20, 8, 6)
-    assert DEFAULT_SHAPE.weight_count == 222
+    assert (DEFAULT_SHAPE.inputs, DEFAULT_SHAPE.hidden, DEFAULT_SHAPE.outputs) == (28, 8, 6)
+    assert DEFAULT_SHAPE.weight_count == 286
     assert DEFAULT_SHAPE.signed_outputs == (True, False, False, False, False, False)
     assert len(INPUT_NAMES) == DEFAULT_SHAPE.inputs
     assert len(OUTPUT_NAMES) == DEFAULT_SHAPE.outputs
@@ -58,7 +58,7 @@ def test_default_shape_is_the_designed_network():
 
 def test_groups_are_one_per_hidden_neuron_then_the_output_biases():
     groups = DEFAULT_SHAPE.group_sizes
-    assert groups == (27,) * 8 + (6,)
+    assert groups == (35,) * 8 + (6,)
     assert sum(groups) == DEFAULT_SHAPE.weight_count
 
 
@@ -158,7 +158,7 @@ def test_values_round_trip_and_equality():
     assert Brain.from_values(DEFAULT_SHAPE, brain.to_values()) == brain
     assert hash(brain) == hash(Brain.from_values(DEFAULT_SHAPE, values))
     assert brain != Brain.from_values(DEFAULT_SHAPE, random_values(DEFAULT_SHAPE, 9))
-    assert repr(brain) == "Brain(20-8-6)"
+    assert repr(brain) == "Brain(28-8-6)"
 
 
 def test_brain_is_immutable():
@@ -242,9 +242,15 @@ def test_inputs_are_in_the_documented_order():
         crowding=0.35,
     )
     inputs = build_inputs(
-        percepts, energy_ratio=0.75, health_ratio=0.5, vitality=0.9, ready_to_mate=True, pain=0.0
+        percepts,
+        energy_ratio=0.75,
+        health_ratio=0.5,
+        vitality=0.9,
+        ready_to_mate=True,
+        pain=0.0,
+        tiredness=0.0,
     )
-    assert len(inputs) == len(INPUT_NAMES) == 20
+    assert len(inputs) == len(INPUT_NAMES) == 28
     named = dict(zip(INPUT_NAMES, inputs))
     assert named["energy_ratio"] == 0.75
     assert named["health_ratio"] == 0.5
@@ -260,10 +266,16 @@ def test_inputs_are_in_the_documented_order():
 
 def test_nothing_sensed_gives_zeros_for_the_world_inputs():
     inputs = build_inputs(
-        Percepts(), energy_ratio=1.0, health_ratio=1.0, vitality=1.0, ready_to_mate=False, pain=0.0
+        Percepts(),
+        energy_ratio=1.0,
+        health_ratio=1.0,
+        vitality=1.0,
+        ready_to_mate=False,
+        pain=0.0,
+        tiredness=0.0,
     )
     assert inputs[:4] == (1.0, 1.0, 1.0, 0.0)
-    assert inputs[4:] == (0.0,) * 16
+    assert inputs[4:] == (0.0,) * 24
 
 
 def test_inputs_are_clamped_and_must_be_finite():
@@ -274,6 +286,7 @@ def test_inputs_are_clamped_and_must_be_finite():
         vitality=5.0,
         ready_to_mate=False,
         pain=0.0,
+        tiredness=0.0,
     )
     assert inputs[:3] == (1.0, 0.0, 1.0)
     assert inputs[4] == -1.0
@@ -286,6 +299,7 @@ def test_inputs_are_clamped_and_must_be_finite():
             vitality=1.0,
             ready_to_mate=False,
             pain=0.0,
+            tiredness=0.0,
         )
     with pytest.raises(ValueError):
         build_inputs(
@@ -295,6 +309,7 @@ def test_inputs_are_clamped_and_must_be_finite():
             vitality=1.0,
             ready_to_mate=False,
             pain=0.0,
+            tiredness=0.0,
         )
 
 
@@ -316,7 +331,13 @@ def test_decision_names_outputs_and_thresholds_actions():
 def test_a_neutral_temperament_changes_nothing():
     percepts = Percepts(prey_closeness=0.4, threat_closeness=0.6, plant_closeness=0.3)
     plain = build_inputs(
-        percepts, energy_ratio=0.5, health_ratio=0.5, vitality=0.5, ready_to_mate=True, pain=0.0
+        percepts,
+        energy_ratio=0.5,
+        health_ratio=0.5,
+        vitality=0.5,
+        ready_to_mate=True,
+        pain=0.0,
+        tiredness=0.0,
     )
     assert (
         build_inputs(
@@ -326,6 +347,7 @@ def test_a_neutral_temperament_changes_nothing():
             vitality=0.5,
             ready_to_mate=True,
             pain=0.0,
+            tiredness=0.0,
             temperament=Temperament(),
         )
         == plain
@@ -338,6 +360,7 @@ def test_a_neutral_temperament_changes_nothing():
             vitality=0.5,
             ready_to_mate=True,
             pain=0.0,
+            tiredness=0.0,
             temperament=Temperament(0.5, 0.5),
         )
         == plain
@@ -358,6 +381,7 @@ def test_fear_scales_only_the_threat_closeness_and_aggression_only_the_prey_clos
                     vitality=0.5,
                     ready_to_mate=True,
                     pain=0.0,
+                    tiredness=0.0,
                     temperament=t,
                 ),
             )
@@ -385,6 +409,7 @@ def test_temperament_is_monotonic_stays_in_range_and_cannot_invent_a_sense():
             vitality=0.5,
             ready_to_mate=True,
             pain=0.0,
+            tiredness=0.0,
             temperament=Temperament(fear=f / 10),
         )[9]
         for f in range(11)
@@ -397,9 +422,10 @@ def test_temperament_is_monotonic_stays_in_range_and_cannot_invent_a_sense():
         vitality=0.5,
         ready_to_mate=True,
         pain=0.0,
+        tiredness=0.0,
         temperament=Temperament(1.0, 1.0),
     )
-    assert nothing[4:] == (0.0,) * 16
+    assert nothing[4:] == (0.0,) * 24
 
 
 def test_temperament_values_are_validated():

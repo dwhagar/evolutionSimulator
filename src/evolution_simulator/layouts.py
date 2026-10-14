@@ -26,15 +26,15 @@ BRAIN_GENE = BlockSpec(
     groups=DEFAULT_BLUEPRINT.group_sizes,
     segment="brain",
 )
-"""The brain: 16 slots of 28 values (gate, bias, 20 incoming and 6 outgoing weights) and the 6
-output biases, 454 values of two digits each (908 digits), one group per slot."""
+"""The brain: 16 slots of 36 values (gate, bias, 28 incoming and 6 outgoing weights) and the 6
+output biases, 582 values of two digits each (1,164 digits), one group per slot."""
 
 PLANT_MUTATION_PER_DIGIT: float = 0.005
 """Chance a plant digit changes per child: half the animal body's 0.01, so plants evolve slower."""
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=7,
+    version=8,
     specs=(
         # Genes that feed one trait or one system sit together, tagged as a cluster (DNA.15), so
         # crossover tends to inherit them together (see docs/design/gene-clusters.md).

@@ -928,8 +928,8 @@ _BODY = "3302332321121021200230232133200030321201111300230220212303212"
 _BODY = _BODY[:24] + "1111" + _BODY[24:]  # sight_acuity (SENSE.16), 0.33, after sight_fov
 _AT = 60  # where the reproduction genes sat before the clusters (after the fifteen 4-digit genes)
 PINNED_ANIMAL = dna_from_v6(
-    _BODY[:_AT] + "211" + "123" + "220" + "301" + "132" + _BODY[_AT:] + "0" * 16, "0" * 908
-)  # 16: brain_gain, reaction_time, curiosity, learning_rate; 908: the brain
+    _BODY[:_AT] + "211" + "123" + "220" + "301" + "132" + _BODY[_AT:] + "0" * 16, "0" * 1164
+)  # 16: brain_gain, reaction_time, curiosity, learning_rate; 1164: the brain
 PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122" + "000")
 
 
@@ -990,8 +990,8 @@ def test_pinned_animal_phenotype():
     assert t.body_radius == pytest.approx(0.699381521)
     assert t.tactile_range == pytest.approx(1.616805516)
     # repair, readiness, drive, fertility and recovery upkeep and the brain (one hidden neuron and six
-    # outputs: 7 * 0.0005 + 26 * 0.0001, as every gate is off); the sense bill is on area (SENSE.11)
-    assert t.basal_metabolism == pytest.approx(0.619096544)
+    # outputs: 7 * 0.0005 + 34 * 0.0001, as every gate is off); the sense bill is on area (SENSE.11)
+    assert t.basal_metabolism == pytest.approx(0.619896544)
     assert t.call_radius == pytest.approx(13.411764706)
     assert t.call_energy_cost == pytest.approx(2.841176471)
     assert t.sex_type == 2

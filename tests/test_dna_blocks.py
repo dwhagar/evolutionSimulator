@@ -113,11 +113,11 @@ def test_block_units_follow_the_groups():
 
 
 def test_animal_layout_has_the_brain_after_the_body():
-    assert BRAIN_GENE.count == DEFAULT_BLUEPRINT.value_count == 454
-    assert BRAIN_GENE.length == 908
+    assert BRAIN_GENE.count == DEFAULT_BLUEPRINT.value_count == 582
+    assert BRAIN_GENE.length == 1164
     assert ANIMAL_LAYOUT.gene("brain").block is BRAIN_GENE
     assert BODY == (0, 96)
-    assert BRAIN == (96, 1004)
+    assert BRAIN == (96, 1260)
     assert ANIMAL_LAYOUT.gene("learning_rate").end == BODY[1]
 
 
@@ -164,7 +164,7 @@ def test_mutation_defaults_do_not_change_layout_identity():
 
 
 def test_animal_layout_version_covers_the_brain():
-    assert ANIMAL_LAYOUT.version == 7
+    assert ANIMAL_LAYOUT.version == 8
     old = {"layout": "animal", "layout_version": 1, "sequence": "0" * 65}
     with pytest.raises(ValueError):
         dna_from_dict(old)
@@ -186,7 +186,7 @@ def test_values_reads_a_block_onto_its_range():
 def test_values_of_the_brain_cover_the_range():
     low = animal("0" * N).values("brain")
     high = animal("3" * N).values("brain")
-    assert len(low) == len(high) == 454
+    assert len(low) == len(high) == 582
     assert set(low) == {-2.0} and set(high) == {2.0}
     for seed in range(5):
         values = DNA.random(ANIMAL_LAYOUT, rng(seed)).values("brain")
@@ -200,14 +200,14 @@ def test_values_rejects_plain_genes():
 
 def test_a_block_is_also_readable_as_a_plain_gene_slice():
     dna = DNA.random(ANIMAL_LAYOUT, rng(2))
-    assert len(dna.slice_of("brain")) == 908
+    assert len(dna.slice_of("brain")) == 1164
 
 
 def test_replaced_swaps_one_gene_only():
     dna = DNA.random(ANIMAL_LAYOUT, rng(1))
-    digits = BRAIN_GENE.encode([1.0] * 454)
+    digits = BRAIN_GENE.encode([1.0] * 582)
     child = dna.replaced("brain", digits)
-    assert child.values("brain") == pytest.approx((1.0 + 0.0,) * 454, abs=0.14)
+    assert child.values("brain") == pytest.approx((1.0 + 0.0,) * 582, abs=0.14)
     assert child.sequence[: BRAIN[0]] == dna.sequence[: BRAIN[0]]
     with pytest.raises(ValueError):
         dna.replaced("brain", (0, 1))

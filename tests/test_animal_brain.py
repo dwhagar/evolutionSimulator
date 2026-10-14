@@ -31,12 +31,12 @@ BODY = BODY[:24] + "0000" + BODY[24:]  # sight_acuity (SENSE.16) at zero, after 
 OPERATING = (
     "0" * 16
 )  # brain_gain, reaction_time, curiosity, learning_rate: gain 0.5, think every tick
-BRAIN = "".join(str((i * 7 + i // 5) % 4) for i in range(908))  # fixed, varied, not saturated
+BRAIN = "".join(str((i * 7 + i // 5) % 4) for i in range(1164))  # fixed, varied, not saturated
 PINNED = dna_from_v6(BODY + OPERATING, BRAIN)
 FAINT = (
-    "13" * 454
+    "13" * 582
 )  # every value is level 7 of 16: -0.133, so every gate is off and weights are dead
-STRONG = "3" * 908  # every value is +2.0: every gate on, every weight live
+STRONG = "3" * 1164  # every value is +2.0: every gate on, every weight live
 
 SEEN = Percepts(
     plant_direction=-0.5, plant_closeness=0.8, threat_direction=0.2, threat_closeness=0.1
@@ -56,7 +56,7 @@ def test_the_brain_is_built_from_the_genome_at_birth():
         PINNED.values("brain"), dead_zone=BRAIN_DEAD_ZONE, gain=traits.brain.gain
     )
     assert traits.brain == expected
-    assert traits.brain.shape.inputs == DEFAULT_SHAPE.inputs == 20
+    assert traits.brain.shape.inputs == DEFAULT_SHAPE.inputs == 28
     assert traits.brain.shape.hidden == len(DEFAULT_BLUEPRINT.slots_on(PINNED.values("brain")))
     assert len(traits.brain.to_values()) == traits.brain.shape.weight_count
 
@@ -86,11 +86,11 @@ def test_upkeep_charges_per_neuron_and_per_active_connection():
     # every gate off keeps one hidden neuron, whose weights are all inside the dead zone
     assert faint.brain.shape.hidden == 1 and faint.brain.active_connections() == 0
     assert faint.brain_upkeep == pytest.approx(BRAIN_NEURON_COST * 7)
-    # every gate on: 16 hidden neurons, each with 20 inputs and 6 outputs, all live
+    # every gate on: 16 hidden neurons, each with 28 inputs and 6 outputs, all live
     assert strong.brain.shape.hidden == 16
-    assert strong.brain.active_connections() == 16 * (20 + 6)
+    assert strong.brain.active_connections() == 16 * (28 + 6)
     assert strong.brain_upkeep == pytest.approx(
-        BRAIN_NEURON_COST * 22 + BRAIN_CONNECTION_COST * 416
+        BRAIN_NEURON_COST * 22 + BRAIN_CONNECTION_COST * 544
     )
 
 
@@ -179,6 +179,7 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
                 vitality=traits.vitality,
                 ready_to_mate=True,
                 pain=0.0,
+                tiredness=0.0,
                 temperament=Temperament(
                     traits.current_aggression,
                     traits._effective_fear(),
@@ -195,12 +196,12 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
 def test_pinned_decision_for_a_fixed_genome():
     # Checked against a separate forward pass written from the genome values (gates, dead zone, gain).
     decision = adult(PINNED).think(SEEN)
-    assert decision.turn == pytest.approx(0.928239061)
-    assert decision.speed == pytest.approx(0.476344698)
-    assert decision.eat_or_attack == pytest.approx(0.911143506)
-    assert decision.seek_mating == pytest.approx(0.127545809)
-    assert decision.alarm_call == pytest.approx(0.719130673)
-    assert decision.mating_call == pytest.approx(0.838283436)
+    assert decision.turn == pytest.approx(-0.958150225)
+    assert decision.speed == pytest.approx(0.719130673)
+    assert decision.eat_or_attack == pytest.approx(0.838283436)
+    assert decision.seek_mating == pytest.approx(0.476344698)
+    assert decision.alarm_call == pytest.approx(0.911143506)
+    assert decision.mating_call == pytest.approx(0.127545809)
     assert decision.eats_or_attacks is True and decision.seeks_mating is False
 
 
@@ -408,6 +409,7 @@ def mate_input(percepts: Percepts, drive: float) -> float:
         vitality=1.0,
         ready_to_mate=True,
         pain=0.0,
+        tiredness=0.0,
         temperament=Temperament(repro_drive=drive),
     )
     return inputs[INPUT_NAMES.index("mate_closeness")]

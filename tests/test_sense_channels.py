@@ -29,15 +29,16 @@ BODY = {
     "vitality": 0.5,
     "ready_to_mate": True,
     "pain": 0.0,
+    "tiredness": 0.0,
 }
 
 
 # --- the table ---------------------------------------------------------------
 
 
-def test_the_table_is_the_twenty_inputs_in_their_documented_order():
+def test_the_table_is_the_inputs_in_their_documented_order():
     assert INPUT_NAMES == tuple(c.name for c in INPUT_CHANNELS)
-    assert len(INPUT_CHANNELS) == DEFAULT_SHAPE.inputs == DEFAULT_BLUEPRINT.inputs == 20
+    assert len(INPUT_CHANNELS) == DEFAULT_SHAPE.inputs == DEFAULT_BLUEPRINT.inputs == 28
     assert INPUT_NAMES[:4] == ("energy_ratio", "health_ratio", "vitality", "ready_to_mate")
     assert INPUT_NAMES[4:12] == (
         "plant_direction",
@@ -56,14 +57,24 @@ def test_the_table_is_the_twenty_inputs_in_their_documented_order():
         "call_direction",
         "crowding",
     )
-    assert INPUT_NAMES[17:] == ("pain", "daylight", "relative_size")  # SENSE.9
+    assert INPUT_NAMES[17:20] == ("pain", "daylight", "relative_size")  # SENSE.9
+    assert INPUT_NAMES[20:] == (  # SENSE.14
+        "young_direction",
+        "young_closeness",
+        "mate_similarity",
+        "tiredness",
+        "edge_direction",
+        "edge_closeness",
+        "clock_sin",
+        "clock_cos",
+    )
 
 
 def test_ranges_match_the_design_note():
     by_name = {c.name: c for c in INPUT_CHANNELS}
     for name in INPUT_NAMES:
         c = by_name[name]
-        if c.role == "bearing" or name == "relative_size":
+        if c.role == "bearing" or name in ("relative_size", "clock_sin", "clock_cos"):
             assert (c.low, c.high) == (-1.0, 1.0)
         else:
             assert (c.low, c.high) == (0.0, 1.0)
@@ -71,14 +82,16 @@ def test_ranges_match_the_design_note():
 
 def test_body_rows_have_no_senses_and_world_rows_make_the_percepts():
     body = body_channels()
-    assert [c.name for c in body] == [*INPUT_NAMES[:4], "pain"]
+    assert [c.name for c in body] == [*INPUT_NAMES[:4], "pain", "tiredness"]
     assert all(c.senses == () for c in body)
-    assert [c.name for c in world_channels()] == list(INPUT_NAMES[4:17] + INPUT_NAMES[18:])
+    assert [c.name for c in world_channels()] == [
+        name for name in INPUT_NAMES[4:] if name not in ("pain", "tiredness")
+    ]
 
 
-def test_daylight_is_ambient_and_the_only_input_the_sensing_ignores():
-    assert [c.name for c in INPUT_CHANNELS if c.ambient] == ["daylight"]
-    assert Percepts(daylight=0.7).senses_nothing  # the time of day is not a sense
+def test_the_time_of_day_is_ambient_and_the_only_input_the_sensing_ignores():
+    assert [c.name for c in INPUT_CHANNELS if c.ambient] == ["daylight", "clock_sin", "clock_cos"]
+    assert Percepts(daylight=0.7, clock_sin=0.5, clock_cos=-0.5).senses_nothing  # time is no sense
     assert not Percepts(relative_size=-0.5).senses_nothing
     assert senses_reporting("relative_size") == ("vision", "hearing")
     assert senses_reporting("daylight") == ()
@@ -110,6 +123,7 @@ def test_temperament_scaled_channels_name_real_temperament_fields():
         "prey_closeness": "aggression",
         "threat_closeness": "fear",
         "mate_closeness": "repro_drive",
+        "young_closeness": "parenting",
     }
     fields = {f.name for f in dataclasses.fields(Temperament)}
     assert set(scaled.values()) <= fields
@@ -192,7 +206,7 @@ def test_inputs_come_out_in_table_order_with_body_values_in_their_rows():
     named = dict(zip(INPUT_NAMES, inputs))
     assert named["energy_ratio"] == 0.5 and named["ready_to_mate"] == 1.0
     assert named["call_direction"] == -0.5
-    assert len(inputs) == 20
+    assert len(inputs) == 28
 
 
 def test_body_values_must_be_given_by_name_and_all_of_them():
@@ -214,9 +228,9 @@ def test_a_new_input_is_one_row():
     assert "thirst" not in {f.name for f in dataclasses.fields(FuturePercepts)}  # body, not percept
     build = inputs_builder(table, lambda name, t: 1.0)
     inputs = build(FuturePercepts(wind=0.75, plant_closeness=0.2), thirst=0.4, **BODY)
-    assert len(inputs) == 22
+    assert len(inputs) == 30
     assert inputs[4] == 0.4  # thirst sits after the four old body rows
     assert inputs[-1] == 0.75
     assert inputs[5] == 0.0  # plant_direction, shifted by one
     assert inputs[6] == 0.2  # plant_closeness, shifted by one
-    assert len(INPUT_CHANNELS) == 20  # the real table is untouched
+    assert len(INPUT_CHANNELS) == 28  # the real table is untouched
