@@ -208,6 +208,7 @@ class WorldSenses:
                         carrion=True,
                     )
                 )
+        edge_gap, edge_direction = world.edge_state(position)
         return sense(
             position,
             animal.heading,
@@ -217,7 +218,8 @@ class WorldSenses:
             conditions,
             rules,
             world.rng if self._noisy else None,
-            edge_distance=world.edge_distance(position) - animal.radius,
+            edge_distance=edge_gap - animal.radius,
             mass=traits.mass,
-            edge_direction=world.edge_vector(position),
+            edge_direction=edge_direction,
+            reach=reach,
         )

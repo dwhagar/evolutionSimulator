@@ -90,8 +90,9 @@ def what_the_scenario_covers(world: World) -> dict[str, int]:
 
 # --- the full-state comparison ------------------------------------------------------------------
 
-_IGNORED = {(SpatialIndex, "_max_extent")}
-"""Attributes that record history only to widen a search and cannot change what is found."""
+_IGNORED = {(SpatialIndex, "_max_extent"), (World, "_light")}
+"""Attributes that only widen a search or keep a value worked out from the tick and the rules, so
+they cannot change what happens."""
 
 
 def flatten(obj: Any, path: str = "world") -> dict[str, Any]:

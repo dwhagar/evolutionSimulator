@@ -918,6 +918,8 @@ class PlantTraits(BaseTraits):
         self.current_energy = self.current_biomass
         self.current_health = self.max_damage_capacity * plant.start_health
         self.growth_cooldown: int = 0
+        self._lifespan_ticks: float = self.phenotype["lifespan_days"] * rules.time.ticks_per_day
+        """Fixed for life (genes and rules do not change), and read every tick."""
         self.lived_ticks: float = 0.0
         """Reference ticks (hours) lived so far; the plant dies of old age at ``lifespan_ticks``."""
 
@@ -944,7 +946,7 @@ class PlantTraits(BaseTraits):
     @property
     def lifespan_ticks(self) -> float:
         """Reference ticks (hours) a plant lives if nothing kills it: the ``longevity`` gene in days."""
-        return self.phenotype["lifespan_days"] * self.rules.time.ticks_per_day
+        return self._lifespan_ticks
 
     @property
     def seeding_interval_ticks(self) -> float:
