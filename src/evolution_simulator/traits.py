@@ -167,7 +167,9 @@ class AnimalTraits(BaseTraits):
             raise ValueError(f"dt must be above zero, got {dt}.")
         if decision_interval is None:
             # The gene is a time in reference ticks (hours); a shorter world tick means more ticks.
-            decision_interval = max(1, round(t["decision_interval"] / dt))
+            decision_interval = max(
+                1, round(t["decision_interval"] * rules.brain.interval_scale / dt)
+            )
         if decision_interval < 1:
             raise ValueError(f"Decision interval must be at least 1 tick, got {decision_interval}.")
         super().__init__(dna, t)
@@ -596,6 +598,10 @@ class AnimalTraits(BaseTraits):
             decision = self.wanderer.apply(decision, percepts, rng)
         self._decision = decision
         self._ticks_since_decision = 1
+        factor = self.rules.brain.idle_interval_factor
+        if factor > 1.0 and percepts.senses_nothing:
+            # Nothing near: look again later. The count starts below 1 for the extra wait.
+            self._ticks_since_decision = 1 - round((factor - 1.0) * self.decision_interval)
         return decision
 
     @property
@@ -613,6 +619,12 @@ class AnimalTraits(BaseTraits):
         if percepts.threat_closeness > 0.0 and self._decided_threat <= 0.0:
             return True
         return bool(percepts.touching) and not self._decided_touch
+
+    @property
+    def looks_every_tick(self) -> bool:
+        """Whether the brain runs on every tick, so there is no interval for a touch to cut short
+        (an idle wait, ``WORLD.17``, counts below zero)."""
+        return self.decision_interval <= 1 and self._ticks_since_decision >= 0
 
     @property
     def decided_touch(self) -> bool:

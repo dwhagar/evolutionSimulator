@@ -258,6 +258,42 @@ reached the 5,000 cap. The starter reserve (15%) and the night upkeep are unchan
 high (about 9% of a cohort lives 240 ticks, from crowding by the parent's neighbourhood), which is the soil
 limit working; it only stopped being a daily pulse.
 
+## Speed (WORLD.14, WORLD.17)
+
+A tick at 300 animals and 3,000 plants costs about 35 ms (about 140 ms at 1,000 animals). `WORLD.14`
+took the cheap savings (about 8% to 10%: night learning, DNA distance, the input builder, the
+per-tick light lookup) and left a flat profile: about 22% spatial queries, 30% sensing and thinking
+(about 200 microseconds per awake animal), 9% plants. More than that needs a change in behaviour, so
+`WORLD.17` adds two options to `TraitRules.brain` that default to today's behaviour (a run with the
+defaults has the same `state_digest` as before):
+
+- **`interval_scale`** (1.0): every animal's decision interval, as its genes give it, is multiplied by this
+  when it is made (so an interval of 1 to 4 hours becomes 2 to 8 at 2.0). The brain runs less often and
+  the animal repeats its last decision in between; contact and pain still cut the wait short
+  (`BRAIN.22`). The brain upkeep follows the interval (a slower thinker is cheaper, as between animals).
+- **`idle_interval_factor`** (1.0): an animal whose last look sensed nothing at all (no creature, plant,
+  contact, call, crowd or wall: `Percepts.senses_nothing`) waits this many times its interval before it
+  looks again. Contact or pain end the wait at once. It saves nothing where animals always sense a
+  plant, and a lot where they roam sparse ground.
+
+Measured on the code at the time (seed 1, best of one run, process time; ticks 20 to 120 at 300 animals,
+20 to 60 at 1,000):
+
+| Option | 300 animals + 3,000 plants | 1,000 animals + 3,000 plants | 300 animals + 200 plants |
+|---|---|---|---|
+| default | 35.8 ms | 143.5 ms | 21.2 ms |
+| `interval_scale` 2 | 27.6 ms | 116.2 ms | |
+| `interval_scale` 3 | 25.8 ms | 88.6 ms | |
+| `idle_interval_factor` 4 | 35.0 ms | 143.7 ms | 18.2 ms |
+| `idle_interval_factor` 8 | 32.4 ms | 146.8 ms | 14.7 ms |
+| scale 2 with idle 4 | 25.4 ms | 98.2 ms | 9.3 ms |
+
+What the options do to a run is not yet known: the default founder run (100 seeded animals, 800 plants,
+1,000 by 1,000) still dies out in about 500 ticks with no births (`WORLD.15`) under every setting, so it
+cannot tell them apart. Animals alive at tick 250 and 500, three seeds, default against each option, are
+within the seed-to-seed spread (76 to 84 and 6 to 15). The comparison that matters (does a population
+that breeds still breed, at the same size and with the same genes) has to wait for `WORLD.15`.
+
 ## Senses are swappable
 
 The loop calls `world.senses.perceive(world, animal)` and expects the brain's `Percepts`

@@ -147,6 +147,22 @@ class BrainRules:
     animal whatever the world's learning switch says (``TRAIT.9``)."""
     pain_full_fraction: float = 0.2
     """Losing this fraction of maximum health since the last decision reads as full pain."""
+    interval_scale: float = 1.0
+    """Speed option (``WORLD.17``): every animal's decision interval, as its genes give it, is
+    multiplied by this when it is made (rounded to whole ticks, at least 1), so the brain runs less
+    often and the run costs less. 1 is the genes' own interval. The brain upkeep follows the
+    interval, as it does between animals: a slower thinker is cheaper."""
+    idle_interval_factor: float = 1.0
+    """Speed option (``WORLD.17``): an animal whose last look sensed nothing at all (no creature,
+    plant, contact, call, crowd or wall) waits this many times its decision interval before it looks
+    again. Contact or pain still make it look at once. 1 is off: the interval is the same whatever
+    it sensed."""
+
+    def __post_init__(self) -> None:
+        for name in ("interval_scale", "idle_interval_factor"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 1.0):
+                raise ValueError(f"{name} must be 1 or more, got {value}.")
 
 
 @dataclass(frozen=True)
