@@ -49,14 +49,14 @@ All take an injected `random.Random` and return a new genome; a parent is never 
 
 | Method | Behaviour |
 | --- | --- |
-| `mutated(rng, rate=None, mutations_per_segment=None)` | A changed digit moves to one of the other three digits. With `rate`, every digit changes with that probability whatever its segment. With `mutations_per_segment={"brain": 1.0}`, each named segment gets that expected number of changed digits per child; segments left out keep the layout's `default_mutations`. With neither, the layout defaults apply: 0.01 per digit for the plant and the animal body, 1.0 per child for the animal brain. The two settings cannot be combined. |
+| `mutated(rng, rate=None, mutations_per_segment=None, position_bias=None, locality=None, gene_biases=None)` | A changed digit moves to another digit. **How many** change: with `rate`, every digit changes with that probability whatever its segment; with `mutations_per_segment={"brain": 1.0}`, each named segment gets that expected number of changed digits per child; with neither, the layout's `default_mutations` apply (0.01 per digit for the plant and the animal body, 1.0 per child for the animal brain). The two cannot be combined. **Which** digits (`DNA.8`, [#15](https://github.com/dwhagar/evolutionSimulator/issues/15) option B): inside each value, every more significant digit is `position_bias` times as likely to change as the one below it (default 0.5, plants 0.75; 1.0 is the old even spread), so most mutations are small nudges and a few are big jumps. The total number of changes does not depend on it. `gene_biases={"size": 0.3}` sets it per gene, for example from `TraitSet.position_biases()`. **What** it becomes ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)): with chance `locality` (default 0.0, fully random) it moves to a neighbouring digit (+-1), otherwise to one of the other three digits with equal chance. |
 | `crossover_linked(partner, rng, mean_cuts=1.0, gene_fidelity=0.9)` | **The default** (`DNA.7`). A few cut points, starting from a random parent and switching parent at each cut, so neighbouring genes travel together. `mean_cuts` is the expected number of cuts (a value below 1 is the chance of one cut). `gene_fidelity` is how closely a cut follows the gene table: 1.0 always cuts between whole genes (a brain neuron stays whole), 0.0 always cuts at a random digit inside the unit, and the default 0.9 is mostly between genes with the occasional odd cut inside one. |
 | `crossover(partner, rng)` | Uniform per-digit crossover (the prototype's operator); no longer the default. |
 | `crossover_one_point(partner, rng)` | Front of this genome, back of the partner, one random cut. |
 | `crossover_by_gene(partner, rng)` | Each whole gene from either parent (a block counts as one gene). |
 | `crossover_by_unit(partner, rng)` | Each whole **unit** from either parent: a gene, or one group inside a block. For the brain that is a whole hidden neuron with its incoming and outgoing weights, so a child never gets a blend inside a neuron. The same as `crossover_by_gene` on a layout with no blocks. |
-| `clone_with_mutation(rng, rate=None, mutations_per_segment=None)` | Asexual path. |
-| `reproduce(partner, rng, rate=None, crossover=None, mutations_per_segment=None)` | Single entry point: no partner clones, a partner crosses over, then mutates. `crossover=` swaps in any of the strategies above; the default is `crossover_linked`, and `functools.partial(DNA.crossover_linked, mean_cuts=2, gene_fidelity=1.0)` changes its settings. |
+| `clone_with_mutation(rng, ...)` | Asexual path; the same mutation settings as `mutated`. |
+| `reproduce(partner, rng, rate=None, crossover=None, mutations_per_segment=None, position_bias=None, locality=None, gene_biases=None)` | Single entry point: no partner clones, a partner crosses over, then mutates. `crossover=` swaps in any of the strategies above; the default is `crossover_linked`, and `functools.partial(DNA.crossover_linked, mean_cuts=2, gene_fidelity=1.0)` changes its settings. |
 
 The prototype's `+` operator is gone because it cannot take an RNG or a rate. Mixing two species
 (different layouts) raises `TypeError`.
@@ -123,7 +123,9 @@ Flagged by the research threads; not changed without the owner's call.
 
 - **Digit position matters** ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)). The first digit of a four-digit gene carries three quarters of its range, so
   one mutation there can move a value by 0.25 to 0.75, while a last-digit change moves it by about 0.004.
-  A Gray code would smooth this.
+  Resolved by `DNA.8` as option B: `mutated` favours the low digits (`position_bias`, default 0.5) and
+  keeps a small chance of a big jump (about 1 change in 15 hits the top digit at 0.5, 1 in 7 for plants
+  at 0.75). A Gray code was not needed.
 - **Uniform per-digit crossover blends inside a gene** ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)). Parents at 0.0 and 1.0 can give a child at
   0.75. Resolved by `DNA.7`: `reproduce` now defaults to `crossover_linked`, which cuts mostly between
   genes (and between whole brain neurons) with a small, configurable chance of a cut inside one. The
@@ -132,8 +134,9 @@ Flagged by the research threads; not changed without the owner's call.
   birth is a change to `reproduce`.
 - **`fertility` is decoded but nothing reads it**, so it drifts neutrally.
 - **Mutation rate is per digit for the body and plants**, so the same 0.01 gives 0.65 changes per animal body
-  but 0.24 per plant. The research note suggests defining it as expected changes per genome instead
-  (`DNA.8`); not done. The brain segment is already set as expected changes (1.0 per child).
+  but 0.24 per plant. Both are now readable as expected changes per child: `layout.default_mutations`
+  holds them per segment and any call can set them with `mutations_per_segment` (`DNA.8`). The defaults
+  are unchanged; whether plants should mutate more slowly is `REPRO.3`.
 - **Animal drive flags start unset** until the first tick, because `__init__` never calls
   `_update_needs_and_drives()`.
 - **`somatic_maint` is cheap and cuts wear up to 4.5 times**, so selection will push it to the maximum

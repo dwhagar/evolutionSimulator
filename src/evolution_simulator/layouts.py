@@ -70,6 +70,8 @@ PLANT_LAYOUT = GenomeLayout(
         GeneSpec("seed_clutch"),
         GeneSpec("root_reach"),
     ),
+    # Plants evolve slowly, so keep big jumps likelier than the animals' default of 0.5.
+    position_bias=0.75,
 )
 
 LAYOUTS: tuple[GenomeLayout, ...] = (ANIMAL_LAYOUT, PLANT_LAYOUT)

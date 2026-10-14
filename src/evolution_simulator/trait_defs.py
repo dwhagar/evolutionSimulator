@@ -16,7 +16,7 @@ from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from enum import Enum
 
-from evolution_simulator.dna import DNA, GenomeLayout
+from evolution_simulator.dna import DNA, GenomeLayout, position_bias_for_step
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 
 DEFAULT_MUTATION_STEP: float = 0.05
@@ -44,7 +44,8 @@ class TraitDef:
 
     ``genes`` lists the gene IDs it reads; with more than one, the mean of their values is used.
     ``mutation_step`` is the typical mutation size as a fraction of the range. It is data for the
-    mutation operator to use when it supports per-trait steps; no operator reads it yet.
+    mutation operator: ``TraitSet.position_biases()`` turns it into the per-gene bias that
+    ``DNA.mutated(gene_biases=...)`` reads, so a trait with a small step changes mostly in its low digits.
     """
 
     name: str
@@ -138,6 +139,30 @@ class TraitSet:
     def traits_reading(self, gene_id: str) -> tuple[TraitDef, ...]:
         """Which traits depend on a gene (what a mutation there can change)."""
         return tuple(trait for trait in self.defs if gene_id in trait.genes)
+
+    def position_biases(self) -> Mapping[str, float]:
+        """Per-gene position bias for ``DNA.mutated(gene_biases=...)``, from the traits' steps.
+
+        For each single-value gene a trait reads, the bias at which a typical mutation moves the
+        gene by about the trait's ``mutation_step`` (see ``position_bias_for_step``). A trait that
+        averages several genes moves only a share of one gene's change, so its step is scaled up
+        by the number of genes; a gene read by several traits uses their mean step. Genes no trait
+        reads (and gene blocks) are left out and use the caller's default.
+        """
+        steps: dict[str, list[float]] = {}
+        for trait in self.defs:
+            if trait.kind is Kind.CATEGORY:
+                continue
+            for gene_id in trait.genes:
+                steps.setdefault(gene_id, []).append(
+                    min(1.0, trait.mutation_step * len(trait.genes))
+                )
+        return {
+            gene_id: position_bias_for_step(
+                self.layout.gene(gene_id).length, sum(wanted) / len(wanted)
+            )
+            for gene_id, wanted in steps.items()
+        }
 
     def unread_genes(self) -> tuple[str, ...]:
         """Layout genes that no trait reads. Gene blocks are left out: the brain reads those."""
