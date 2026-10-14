@@ -62,18 +62,22 @@ shape 0.1 are in the table above; these are the rest.
 
 | ID | Item | Status | Needs |
 | --- | --- | --- | --- |
-| BRAIN.1 | Brain research: a simple neural network, written for a reader new to the topic (`docs/design`), with questions for the owner raised as issues BRAIN.3 to BRAIN.8 | in progress | Research 1 |
-| BRAIN.2 | Foundations 2: build the brain | blocked | BRAIN.1, owner's answers to BRAIN.3 to BRAIN.8 |
-| BRAIN.3 | Decide: neural network or a fixed decision rule | waiting on owner | BRAIN.1 |
-| BRAIN.4 | Decide: does a creature have memory | waiting on owner | BRAIN.1 |
-| BRAIN.5 | Decide: energy cost of thinking | waiting on owner | BRAIN.1 |
-| BRAIN.6 | Decide: learning during a creature's life | waiting on owner | BRAIN.1 |
-| BRAIN.7 | Decide: starting brains (random, hand-made, or inherited) | waiting on owner | BRAIN.1 |
-| BRAIN.8 | Decide: fixed or evolvable brain size | waiting on owner | BRAIN.1 |
+| BRAIN.2 | Foundations 2: build the `Brain` object (`decide(inputs) -> outputs`, pure function) and hook it into animals | blocked | BRAIN.3 at least (default: network), DNA.11, DNA.12, WORLD.1 |
+| BRAIN.9 | Seed the first generation by fitting weights to the current fixed rule (95%+ agreement on random inputs, tested) | blocked | BRAIN.2, BRAIN.7 |
+| DNA.11 | Gene-block descriptor for arrays of brain weights (2-digit genes, about 396 digits, animal genome about 461) | blocked | BRAIN.3 |
+| DNA.12 | Mutation set per segment as expected changes, and per-neuron block crossover, so brain genes do not take over the mutation rate | blocked | BRAIN.3, DNA.8 |
+| BRAIN.3 | Decide: neural network or a fixed decision rule ([#23](https://github.com/dwhagar/evolutionSimulator/issues/23)) | waiting on owner | |
+| BRAIN.4 | Decide: does a creature have memory ([#24](https://github.com/dwhagar/evolutionSimulator/issues/24)) | waiting on owner | |
+| BRAIN.5 | Decide: energy cost of thinking ([#25](https://github.com/dwhagar/evolutionSimulator/issues/25)) | waiting on owner | |
+| BRAIN.6 | Decide: learning during a creature's life ([#26](https://github.com/dwhagar/evolutionSimulator/issues/26)) | waiting on owner | |
+| BRAIN.7 | Decide: starting brains (random, hand-made, or inherited) ([#27](https://github.com/dwhagar/evolutionSimulator/issues/27)) | waiting on owner | |
+| BRAIN.8 | Decide: fixed or evolvable brain size ([#28](https://github.com/dwhagar/evolutionSimulator/issues/28)) | waiting on owner | |
 | DNA.9 | Decide sex at birth versus inherited | blocked | REPRO.1 |
 | WORLD.2 | First world and step loop: place organisms, run ticks, feed, reproduce | blocked | WORLD.1 |
 
-Behaviour as genes or a brain was closed for now in [#9](https://github.com/dwhagar/evolutionSimulator/issues/9); BRAIN.1 reopens the question in depth.
+Behaviour as genes or a brain was closed for now in [#9](https://github.com/dwhagar/evolutionSimulator/issues/9); BRAIN.1 reopened the question in depth.
+
+The energy cost per neuron (BRAIN.5) feeds the constants config, TRAIT.3. DOCS.5 should describe the brain as a third piece next to DNA and traits once BRAIN.2 exists.
 
 ## Done
 
@@ -82,6 +86,7 @@ Behaviour as genes or a brain was closed for now in [#9](https://github.com/dwha
 | DOCS.1 | Docs tree, roadmap, TODO and changelog | [#1](https://github.com/dwhagar/evolutionSimulator/pull/1) |
 | DOCS.2 | Research: DNA and reproduction | [#13](https://github.com/dwhagar/evolutionSimulator/pull/13) |
 | DOCS.3 | Research: basic life-form traits | [#12](https://github.com/dwhagar/evolutionSimulator/pull/12) |
+| BRAIN.1 | Brain research: a small neural network for animals ([docs/design/brain.md](docs/design/brain.md)); owner decisions filed as BRAIN.3 to BRAIN.8 | [#29](https://github.com/dwhagar/evolutionSimulator/pull/29) |
 | DOCS.4 | Set the first milestone: 0.1, data models for DNA and traits | [#21](https://github.com/dwhagar/evolutionSimulator/pull/21) |
 | INFRA.1 | Automatic `MAJOR.minor.build` versioning ([docs/versioning.md](docs/versioning.md)) | [#1](https://github.com/dwhagar/evolutionSimulator/pull/1) |
 | INFRA.2 | Weekly scheduled CI (Mondays 07:00 UTC) | [#1](https://github.com/dwhagar/evolutionSimulator/pull/1) |
