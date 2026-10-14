@@ -17,7 +17,16 @@ from world_support import animal_dna, hourly_world, plant_dna, world_config
 
 from evolution_simulator.diploid import DiploidDNA
 from evolution_simulator.layouts import LAYOUTS, founder_animal_dna, founder_plant_dna
-from evolution_simulator.world import Bounds, DayCycle, Vec, World, WorldConfig, WorldSenses
+from evolution_simulator.world import (
+    AttackRules,
+    Bounds,
+    CorpseRules,
+    DayCycle,
+    Vec,
+    World,
+    WorldConfig,
+    WorldSenses,
+)
 from evolution_simulator.world import persistence as saves
 from evolution_simulator.world.persistence import (
     FORMAT_VERSION,
@@ -176,9 +185,11 @@ def test_a_changed_config_and_its_rules_round_trip():
     config = replace(
         base,
         seed=9,
-        graze_amount=7.5,
         traits=replace(
             base.traits,
+            world=replace(base.traits.world, graze_amount=7.5, calls_enabled=False),
+            attack=AttackRules(damage=40.0),
+            corpses=CorpseRules(bite=30.0),
             body=replace(base.traits.body, energy_capacity=150.0),
             day_cycle=DayCycle(length_seconds=36000.0, night_below=0.4),
             plant_limits=replace(base.plants, capacity=0.02),
@@ -330,7 +341,7 @@ def test_a_save_that_was_edited_fails_the_digest_check():
 
 def test_a_setting_the_rules_no_longer_have_is_refused():
     data = world_to_dict(rich_world_at(3))
-    data["world"]["config"]["graze_amounts"] = 1.0
+    data["world"]["config"]["traits"]["world"]["graze_amounts"] = 1.0
     with pytest.raises(SaveFormatError, match="graze_amounts"):
         world_from_dict(data)
 
@@ -338,7 +349,7 @@ def test_a_setting_the_rules_no_longer_have_is_refused():
 def test_a_setting_the_save_lacks_takes_its_default():
     world = rich_world_at(3)
     data = world_to_dict(world)
-    del data["world"]["config"]["birth_scatter"]
+    del data["world"]["config"]["traits"]["world"]["birth_scatter"]
     del data["world"]["config"]["traits"]["body"]["energy_capacity"]
     restored = world_from_dict(data)
     assert restored.config.birth_scatter == WorldConfig().birth_scatter
@@ -398,6 +409,21 @@ def test_a_format_3_save_has_its_day_time_and_plant_settings_moved_into_the_trai
         "speed": time.pop("speed"),
     }
     old["format_version"] = 3
+    restored = world_from_dict(old)
+    assert_same_world(restored, world)
+    assert restored.config == world.config
+
+
+def test_a_format_4_save_has_its_bite_corpse_and_world_settings_moved_into_the_trait_rules():
+    world = rich_world_at(10)
+    assert world.config.mating_reach != WorldConfig().mating_reach  # a setting worth carrying
+    old = world_to_dict(world)
+    config = old["world"]["config"]
+    traits = config["traits"]
+    config["attack"] = traits.pop("attack")  # where format 4 kept them
+    config["corpses"] = traits.pop("corpses")
+    config.update(traits.pop("world"))
+    old["format_version"] = 4
     restored = world_from_dict(old)
     assert_same_world(restored, world)
     assert restored.config == world.config

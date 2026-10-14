@@ -29,16 +29,20 @@ on 60 random genomes over 40 ticks).
   layout depends on them. Changing a range is a decision about the genes, not a tuning of a run.
 - **The fixed shape of a formula**: half of a care fraction per parent, the one half in a half-life, a
   square in the cost of a sense. Only numbers somebody might want to retune are fields.
-- **Settings that are not tuning**: `WorldConfig` keeps the bounds, the seed, `graze_amount`,
-  `mating_reach`, `birth_scatter`, `calls_enabled`, the bite and corpse rules (`attack`, `corpses`) and the
-  population caps. Everything else a run tunes is in the tree (`TRAIT.10`): `LearningRules`
+- **Settings that are not tuning**: `WorldConfig` keeps the bounds, the seed and the population caps.
+  Everything else a run tunes is in the tree (`TRAIT.10`, `TRAIT.11`): `LearningRules`
   (`TraitRules.learning`, `None` turns learning off), `SleepRules` (`sleep`), `DayCycle` (`day_cycle`, `None`
-  for permanent daylight and no sleep), the world's soil and shade limits `PlantRules` (`plant_limits`) and the
-  tick length and speed (`time.seconds_per_tick`, `time.speed`; the old `TimeScale`). `WorldConfig` reads them
-  through properties of the old names (`learning`, `sleep`, `day_cycle`, `plants`, `time_scale`), so reading
+  for permanent daylight and no sleep), the world's soil and shade limits `PlantRules` (`plant_limits`), the
+  tick length and speed (`time.seconds_per_tick`, `time.speed`; the old `TimeScale`), the bite and corpse
+  rules `AttackRules` (`attack`) and `CorpseRules` (`corpses`), and `WorldRules` (`world`: `graze_amount`,
+  `mating_reach`, `birth_scatter`, `calls_enabled`). `WorldConfig` reads them
+  through properties of the old names (`learning`, `sleep`, `day_cycle`, `plants`, `time_scale`, `attack`,
+  `corpses`, `graze_amount`, `mating_reach`, `birth_scatter`, `calls_enabled`), so reading
   `config.day_cycle` still works; to change one, use `config.with_rules(day_cycle=...)` (a section that
   already holds the value leaves the config untouched) or `config.with_time_scale(TimeScale.from_preset("day"))`.
-  Saves written before the move are upgraded when loaded (save formats 2 to 4).
+  These are no longer constructor arguments of `WorldConfig`; tests that want them by their old names use
+  `world_config(...)` from `tests/world_support.py`. Saves written before the move are upgraded when loaded
+  (save formats 2 to 5).
 
 ## Where each old name went
 
@@ -299,3 +303,34 @@ Learning during life (`BRAIN.24`): the log, the reward and the size of a night's
 | `night_cap` | `0.5` | The most any one number may change in one night (an eighth of a weight's range). |
 | `fade` | `0.0` | Share of the learned offsets lost each night (forgetting); off by default. |
 | `max_offset` | `2.0` | The most a number's total learned change may reach, so repeated nights cannot run away. |
+
+### `attack` (`AttackRules`)
+
+Bites (`BRAIN.10`). `TraitRules.attack` holds them for a run (`TRAIT.11`).
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `damage` | `30.0` | Damage of one bite at carnivore efficiency 1 against prey of the attacker's own mass; a full-health animal of average size has 200, so a good hunter needs several bites. |
+
+### `corpses` (`CorpseRules`)
+
+What the dead leave (`WORLD.12`): meat that rots and that meat eaters smell and eat. `TraitRules.corpses` holds them for a run (`TRAIT.11`).
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `meat_share` | `0.5` | Share of a dead animal's maximum energy that is left as meat. |
+| `bite` | `25.0` | Meat one animal can take from a corpse in one reference tick (an hour). |
+| `rot_halflife` | `72.0` | Reference ticks (hours) for half the meat to rot away. |
+| `scent_meat` | `100.0` | A corpse with this much meat or more can be smelled as far as a meat eater's smell reaches; one with less is smelled from proportionally closer. |
+| `gone_below` | `1.0` | A corpse with less meat than this is removed. |
+
+### `world` (`WorldRules`)
+
+How the world applies its rules to organisms (`TRAIT.11`). `TraitRules.world` holds them for a run.
+
+| Field | Default | Meaning |
+| --- | --- | --- |
+| `graze_amount` | `5.0` | Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer tick takes proportionally less or more. |
+| `mating_reach` | `3.0` | Two animals mate only if their centres are this close or closer. |
+| `birth_scatter` | `1.0` | A litter appears within this distance of its mother. |
+| `calls_enabled` | `true` | Whether animals can call (their brains' call outputs, paid for with `call_energy_cost`). Turn it off to study a silent world. |

@@ -11,10 +11,10 @@ arrives. ``DEFAULT_RULES`` is what everything uses unless it is given another.
   rules can sit side by side and a test can change one number: ``replace(rules.life, wear_base=0.05)``
   and ``replace(DEFAULT_RULES, life=...)`` give a new tree without touching the default.
 * ``WorldConfig.traits`` holds the rules for a run. The settings of the world that used to sit
-  beside it are moving into the tree (``TRAIT.10``): ``learning``, ``sleep``, ``day_cycle``, the
-  tick length and speed (``time``) and the plants' soil and shade limits (``plant_limits``) are all
-  there now. ``WorldConfig`` reads
-  them from the tree, so a run has one source of tuning constants.
+  beside it have moved into the tree (``TRAIT.10``, ``TRAIT.11``): ``learning``, ``sleep``, ``day_cycle``,
+  the tick length and speed (``time``), the plants' soil and shade limits (``plant_limits``), bites
+  (``attack``), corpses (``corpses``) and the grazing, mating reach, birth scatter and call switch
+  (``world``). ``WorldConfig`` reads them from the tree, so a run has one source of tuning constants.
 * What is **not** here: the ranges of the traits (how far a gene stretches a trait, such as
   ``SIGHT_REACH`` or ``COOLDOWN_DAYS_RANGE``), which are the trait table's data (``trait_defs.py``);
   the fixed structure of a formula (half of a care fraction per parent, a half-life's one half); and
@@ -503,6 +503,78 @@ class PlantRules:
 
 
 @dataclass(frozen=True)
+class AttackRules:
+    """Bites (``BRAIN.10``); ``TraitRules.attack`` holds them for a run (``TRAIT.11``)."""
+
+    damage: float = 30.0
+    """Damage of one bite at carnivore efficiency 1 against prey of the attacker's own mass; a
+    full-health animal of average size has 200, so a good hunter needs several bites."""
+
+    def __post_init__(self) -> None:
+        if not math.isfinite(self.damage) or self.damage < 0.0:
+            raise ValueError(f"damage must be zero or more, got {self.damage}.")
+
+    def bite(self, carnivore_eff: float, attacker_mass: float, prey_mass: float) -> float:
+        """The damage of one bite."""
+        return self.damage * carnivore_eff * math.sqrt(attacker_mass / prey_mass)
+
+
+@dataclass(frozen=True)
+class CorpseRules:
+    """What the dead leave (``WORLD.12``): meat that rots and that meat eaters smell and eat;
+    ``TraitRules.corpses`` holds them for a run (``TRAIT.11``)."""
+
+    meat_share: float = 0.5
+    """Share of a dead animal's maximum energy that is left as meat."""
+    bite: float = 25.0
+    """Meat one animal can take from a corpse in one reference tick (an hour)."""
+    rot_halflife: float = 72.0
+    """Reference ticks (hours) for half the meat to rot away."""
+    scent_meat: float = 100.0
+    """A corpse with this much meat or more can be smelled as far as a meat eater's smell reaches;
+    one with less is smelled from proportionally closer, like a plant's biomass."""
+    gone_below: float = 1.0
+    """A corpse with less meat than this is removed."""
+
+    def __post_init__(self) -> None:
+        for name in ("meat_share", "bite", "rot_halflife", "scent_meat", "gone_below"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be zero or more, got {value}.")
+        if self.rot_halflife == 0.0 or self.scent_meat == 0.0:
+            raise ValueError("rot_halflife and scent_meat must be above zero.")
+
+    def meat(self, max_energy: float) -> float:
+        """The meat a dead animal with this energy store leaves."""
+        return self.meat_share * max_energy
+
+
+@dataclass(frozen=True)
+class WorldRules:
+    """The small settings of how the world applies its rules to organisms (``TRAIT.11``);
+    ``TraitRules.world`` holds them for a run."""
+
+    graze_amount: float = 5.0
+    """Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer
+    tick takes proportionally less or more."""
+    mating_reach: float = 3.0
+    """Two animals mate only if their centres are this close or closer."""
+    birth_scatter: float = 1.0
+    """A litter appears within this distance of its mother."""
+    calls_enabled: bool = True
+    """Whether animals can call (their brains' call outputs, paid for with ``call_energy_cost``).
+    A call is made only by an animal with a call radius (the encoder gene) that can afford it,
+    so a brain that calls on every tick starves itself; seeded founders do not call at all and
+    calling has to be evolved. Turn it off to study a silent world."""
+
+    def __post_init__(self) -> None:
+        for name in ("graze_amount", "mating_reach", "birth_scatter"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value < 0.0:
+                raise ValueError(f"{name} must be zero or more, got {value}.")
+
+
+@dataclass(frozen=True)
 class TraitRules:
     """All the organism constants of a run."""
 
@@ -524,6 +596,12 @@ class TraitRules:
     """Who sleeps at night and what sleep does (``WORLD.5``, ``TRAIT.10``)."""
     learning: LearningRules | None = field(default_factory=LearningRules)
     """Learning during life (``BRAIN.24``, ``TRAIT.10``); ``None`` turns it off."""
+    attack: AttackRules = field(default_factory=AttackRules)
+    """Bites (``BRAIN.10``, ``TRAIT.11``)."""
+    corpses: CorpseRules = field(default_factory=CorpseRules)
+    """What the dead leave (``WORLD.12``, ``TRAIT.11``)."""
+    world: WorldRules = field(default_factory=WorldRules)
+    """Grazing, mating reach, birth scatter and whether animals call (``TRAIT.11``)."""
 
 
 DEFAULT_RULES = TraitRules()
