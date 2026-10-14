@@ -206,7 +206,9 @@ def test_inputs_are_in_the_documented_order():
         call_direction=-0.9,
         crowding=0.35,
     )
-    inputs = build_inputs(0.75, 0.5, 0.9, True, percepts)
+    inputs = build_inputs(
+        percepts, energy_ratio=0.75, health_ratio=0.5, vitality=0.9, ready_to_mate=True
+    )
     assert len(inputs) == len(INPUT_NAMES) == 17
     named = dict(zip(INPUT_NAMES, inputs))
     assert named["energy_ratio"] == 0.75
@@ -222,20 +224,36 @@ def test_inputs_are_in_the_documented_order():
 
 
 def test_nothing_sensed_gives_zeros_for_the_world_inputs():
-    inputs = build_inputs(1.0, 1.0, 1.0, False, Percepts())
+    inputs = build_inputs(
+        Percepts(), energy_ratio=1.0, health_ratio=1.0, vitality=1.0, ready_to_mate=False
+    )
     assert inputs[:4] == (1.0, 1.0, 1.0, 0.0)
     assert inputs[4:] == (0.0,) * 13
 
 
 def test_inputs_are_clamped_and_must_be_finite():
-    inputs = build_inputs(2.0, -1.0, 5.0, False, Percepts(plant_direction=-3.0, crowding=9.0))
+    inputs = build_inputs(
+        Percepts(plant_direction=-3.0, crowding=9.0),
+        energy_ratio=2.0,
+        health_ratio=-1.0,
+        vitality=5.0,
+        ready_to_mate=False,
+    )
     assert inputs[:3] == (1.0, 0.0, 1.0)
     assert inputs[4] == -1.0
     assert inputs[16] == 1.0
     with pytest.raises(ValueError):
-        build_inputs(math.nan, 1.0, 1.0, False, Percepts())
+        build_inputs(
+            Percepts(), energy_ratio=math.nan, health_ratio=1.0, vitality=1.0, ready_to_mate=False
+        )
     with pytest.raises(ValueError):
-        build_inputs(1.0, 1.0, 1.0, False, Percepts(mate_closeness=math.inf))
+        build_inputs(
+            Percepts(mate_closeness=math.inf),
+            energy_ratio=1.0,
+            health_ratio=1.0,
+            vitality=1.0,
+            ready_to_mate=False,
+        )
 
 
 def test_decision_names_outputs_and_thresholds_actions():
@@ -255,16 +273,50 @@ def test_decision_names_outputs_and_thresholds_actions():
 
 def test_a_neutral_temperament_changes_nothing():
     percepts = Percepts(prey_closeness=0.4, threat_closeness=0.6, plant_closeness=0.3)
-    plain = build_inputs(0.5, 0.5, 0.5, True, percepts)
-    assert build_inputs(0.5, 0.5, 0.5, True, percepts, Temperament()) == plain
-    assert build_inputs(0.5, 0.5, 0.5, True, percepts, Temperament(0.5, 0.5)) == plain
+    plain = build_inputs(
+        percepts, energy_ratio=0.5, health_ratio=0.5, vitality=0.5, ready_to_mate=True
+    )
+    assert (
+        build_inputs(
+            percepts,
+            energy_ratio=0.5,
+            health_ratio=0.5,
+            vitality=0.5,
+            ready_to_mate=True,
+            temperament=Temperament(),
+        )
+        == plain
+    )
+    assert (
+        build_inputs(
+            percepts,
+            energy_ratio=0.5,
+            health_ratio=0.5,
+            vitality=0.5,
+            ready_to_mate=True,
+            temperament=Temperament(0.5, 0.5),
+        )
+        == plain
+    )
 
 
 def test_fear_scales_only_the_threat_closeness_and_aggression_only_the_prey_closeness():
     percepts = Percepts(prey_closeness=0.4, threat_closeness=0.4, plant_closeness=0.4)
 
     def named(t: Temperament) -> dict[str, float]:
-        return dict(zip(INPUT_NAMES, build_inputs(0.5, 0.5, 0.5, True, percepts, t)))
+        return dict(
+            zip(
+                INPUT_NAMES,
+                build_inputs(
+                    percepts,
+                    energy_ratio=0.5,
+                    health_ratio=0.5,
+                    vitality=0.5,
+                    ready_to_mate=True,
+                    temperament=t,
+                ),
+            )
+        )
 
     timid = named(Temperament(aggression=0.5, fear=1.0))
     assert timid["threat_closeness"] == pytest.approx(0.4 * 1.6)
@@ -281,10 +333,25 @@ def test_fear_scales_only_the_threat_closeness_and_aggression_only_the_prey_clos
 def test_temperament_is_monotonic_stays_in_range_and_cannot_invent_a_sense():
     percepts = Percepts(threat_closeness=0.7)
     seen = [
-        build_inputs(0.5, 0.5, 0.5, True, percepts, Temperament(fear=f / 10))[9] for f in range(11)
+        build_inputs(
+            percepts,
+            energy_ratio=0.5,
+            health_ratio=0.5,
+            vitality=0.5,
+            ready_to_mate=True,
+            temperament=Temperament(fear=f / 10),
+        )[9]
+        for f in range(11)
     ]
     assert seen == sorted(seen) and seen[-1] == 1.0  # 0.7 * 1.6 is clamped to 1
-    nothing = build_inputs(0.5, 0.5, 0.5, True, Percepts(), Temperament(1.0, 1.0))
+    nothing = build_inputs(
+        Percepts(),
+        energy_ratio=0.5,
+        health_ratio=0.5,
+        vitality=0.5,
+        ready_to_mate=True,
+        temperament=Temperament(1.0, 1.0),
+    )
     assert nothing[4:] == (0.0,) * 13
 
 

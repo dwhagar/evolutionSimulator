@@ -119,12 +119,12 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
     expected = decode_outputs(
         traits.brain.decide(
             build_inputs(
-                traits.current_energy / traits.max_energy,
-                traits.current_health / traits.max_damage_capacity,
-                traits.vitality,
-                True,
                 SEEN,
-                Temperament(traits.current_aggression, traits._effective_fear()),
+                energy_ratio=traits.current_energy / traits.max_energy,
+                health_ratio=traits.current_health / traits.max_damage_capacity,
+                vitality=traits.vitality,
+                ready_to_mate=True,
+                temperament=Temperament(traits.current_aggression, traits._effective_fear()),
             )
         )
     )

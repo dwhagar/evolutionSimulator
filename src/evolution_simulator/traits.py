@@ -293,11 +293,11 @@ class AnimalTraits(BaseTraits):
             self._ticks_since_decision += 1
             return self._decision
         inputs = build_inputs(
+            percepts,
             energy_ratio=self.current_energy / self.max_energy,
             health_ratio=self.current_health / self.max_damage_capacity,
             vitality=self.vitality,
             ready_to_mate=self.mating_cooldown == 0,
-            percepts=percepts,
             temperament=Temperament(
                 aggression=self.current_aggression, fear=min(1.0, self._effective_fear())
             ),
