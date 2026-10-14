@@ -48,14 +48,18 @@ class RunSetup:
         )
 
     @classmethod
-    def from_json(cls, text: str) -> RunSetup:
-        """The setup ``to_json`` wrote; ``ValueError`` if the text is not one."""
+    def from_json(cls, text: str, *, strict: bool = False) -> RunSetup:
+        """The setup ``to_json`` wrote; ``ValueError`` if the text is not one. A part left out
+        keeps its default, and ``strict`` refuses text with none of the parts at all (a file of
+        something else that happens to be JSON)."""
         try:
             data: Any = json.loads(text)
         except json.JSONDecodeError as error:
             raise ValueError(f"not a saved setup: {error}") from None
         if not isinstance(data, dict):
             raise ValueError("not a saved setup")  # noqa: TRY004
+        if strict and not {"animals", "plants", "seeded", "config"} & data.keys():
+            raise ValueError("not a saved setup: it has none of the setup's parts")
         defaults = cls()
         for name in ("animals", "plants"):
             if not isinstance(data.get(name, 0), int) or isinstance(data.get(name), bool):
