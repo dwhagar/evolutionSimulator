@@ -60,6 +60,8 @@ from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.vector import Vec
 
 INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
+FOUNDER_PLANT_TRIES: int = 50
+"""Draws ``populate`` makes to find a founder plant that can pay its way before it takes the last."""
 """Grid cell for neighbour searches: the longest sense range any animal can have (100 units)."""
 
 
@@ -67,12 +69,14 @@ INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
 class PlantRules:
     """How neighbouring plants limit each other's growth (WORLD.8).
 
-    **Soil.** Within ``neighbourhood`` units of a plant, the plants (itself included) hold some
-    biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the plant
-    keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice starvation,
-    at or above capacity). This is a logistic limit, and what keeps a population from running to
-    the cap however fast the plants grow. It is the same for every plant on purpose: if root
-    reach set the neighbourhood, evolution would shrink roots to dodge it.
+    **Soil.** Within ``neighbourhood`` units of a plant, its neighbours (not the plant itself) hold
+    some biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the
+    plant keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice
+    starvation, at or above capacity). This is a logistic limit, and what keeps a population from
+    running to the cap however fast the plants grow. It is the same for every plant on purpose: if
+    root reach set the neighbourhood, evolution would shrink roots to dodge it. A plant's own
+    biomass is left out so a lone plant of any size can grow to full size and seed (``WORLD.11``):
+    counted in, a default plant (80 biomass) stalled at about 22 and no big plant ever seeded.
 
     **Light.** Each heavier neighbour whose canopy covers the plant adds ``1 - distance / canopy
     radius`` to its shade load, and the plant keeps ``1 / (1 + shade_strength * load)`` of the
@@ -379,10 +383,20 @@ class World:
         is False, which leaves the brains random: those mostly die before they breed.
         """
         for _ in range(plants):
-            self.add_plant(founder_plant_dna(self.rng))
+            self.add_plant(self._founder_plant())
         for _ in range(animals):
             founder = founder_animal_dna(self.rng)
             self.add_animal(seeded_dna(self.rng, base=founder) if seeded else founder)
+
+    def _founder_plant(self) -> DNA:
+        """A random plant that can pay its way (``founder_upkeep_share``): most of the ones that
+        cannot would die as seedlings (``WORLD.11``). Gives up after a few draws and takes the last."""
+        rules = self.config.traits
+        for _ in range(FOUNDER_PLANT_TRIES):
+            dna = founder_plant_dna(self.rng)
+            if PlantTraits(dna, rules).upkeep_share <= rules.plant.founder_upkeep_share:
+                break
+        return dna
 
     # -------------------------------------------------------------------------
     # The step loop
@@ -506,11 +520,12 @@ class World:
             shade_load = 0.0
             reach = max(rules.neighbourhood, self.max_canopy)
             for other, distance in self.plants_within(plant.position, reach):
+                if other is plant:
+                    continue
                 if distance <= rules.neighbourhood:
                     biomass += other.traits.current_biomass
                 if (
-                    other is not plant
-                    and distance < other.radius
+                    distance < other.radius
                     and other.traits.current_biomass > plant.traits.current_biomass
                 ):
                     shade_load += 1.0 - distance / other.radius

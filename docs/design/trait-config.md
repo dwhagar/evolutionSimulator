@@ -210,6 +210,7 @@ A plant's body, growth and seeding (`REPRO.3`, `TRAIT.8`).
 | `seed_ready_vitality` | `0.4` | ...and its vitality is above this. |
 | `longevity_growth` | `0.3` | Growth is multiplied by `1 - longevity_growth * longevity`. |
 | `longevity_seeds` | `0.4` | The seed budget share is multiplied by `1 - longevity_seeds * longevity`. |
+| `founder_upkeep_share` | `0.3` | A first generation's plants must be able to pay their way: `World.populate` redraws a random plant whose full-size upkeep is more than this share of its growth (`WORLD.11`). Measured: of random plants, those above 0.4 all died as seedlings and those below 0.3 mostly lived (about 40% of random plants were above 0.4). |
 
 ### `organs` (`OrganRules`)
 

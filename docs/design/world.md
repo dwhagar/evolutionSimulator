@@ -201,7 +201,7 @@ The finding: with the prototype constants 300 random plants reached the 5000 cap
 ticks, because a plant's growth (0.2 to 1.0 a tick) is several times its upkeep (about 0.1) and
 nothing took it away. Plants now limit each other (`PlantRules` in `WorldConfig`):
 
-- **Soil.** Within 25 units, a plant's own biomass and its neighbours' add up. The plant keeps
+- **Soil.** Within 25 units, the biomass of a plant's neighbours (not its own, `WORLD.11`) adds up. The plant keeps
   `1 - biomass per unit of ground / capacity` of its soil access (`capacity` is 0.015 biomass per
   unit of ground), nothing at or above capacity. It is a logistic limit that does not depend on
   how fast plants grow. The neighbourhood is the same for every plant on purpose: when root radius
@@ -222,6 +222,40 @@ The daily swing comes from seedlings: they start at 15% of their body mass and t
 leaves them burning upkeep all night on a floor of 0.05 sunlight, so most die before dawn. That is
 a `TRAIT.3` tuning matter (starter reserve or night upkeep), not a world rule. Animals eating plants
 will move all of this, so the capacity should be calibrated again once animals survive.
+
+### Seedling survival and founders (WORLD.11)
+
+Two things killed the plants of an hourly world, both measured on 300 random founder plants in a 1000 by 1000
+world with no animals, seeds 1 to 3, 3,000 ticks.
+
+- **A plant's own biomass filled its soil limit.** The limit holds `capacity x ground` = 0.015 x 1,963 = 29
+  biomass within 25 units, and a plant's growth is about ten times its upkeep, so a plant stalls where the soil
+  access falls to a tenth, at about 26 biomass counting itself. A default plant is 80 (up to 200), so it never
+  reached the 85% it needs to seed, whatever its neighbours did. Only plants of the smallest body could seed:
+  the survivors of every run had a mean full size of 22 (the lowest the gene allows is 20), 50 to 111 plants were
+  left after 3,000 ticks, and the daily swing of 1,100 to 3,700 plants seen earlier was the same effect in a
+  population with room. Fix: the soil counts the neighbours' biomass only. A lone plant of any size now grows
+  to full size and seeds; crowding by neighbours still limits it, and the logistic limit still keeps the
+  population off the cap.
+- **About 40% of random plants cannot pay their way.** Full-size upkeep over growth (`PlantTraits.upkeep_share`)
+  above 0.4 meant every plant died as a seedling (none of 135 in a sparse world lived 500 ticks); below 0.3,
+  about 90% lived. Seedlings run at half health, which halves their growth. `World.populate` now redraws a
+  founder plant whose `upkeep_share` is above `TraitRules.plant.founder_upkeep_share` (0.3, up to 50 draws). The
+  first generation is chosen for viability, as the animals' reproduction genes and brain are (`BRAIN.9`); every
+  later generation is left to selection, and sizes still run from 20 to 200 in the founders.
+
+*Result* (same worlds): 300 founders give 840 to 1,770 plants at tick 2,880 with mean full size 33 to 45, and
+the day to night swing is about 7% (968 to 1,106 in one run). 40 founders pass 100 plants within 2,000 ticks (30 founders reached 180 to 790 in 3,000 before the founder filter).
+With 100 seeded animals and 800 plants the plants no longer collapse (they were down to 25 to 96 plants after
+3,000 ticks before, and are 1,800 to 2,300 now), but the animals still die within about 1,000 ticks, so the
+food side of `WORLD.15` is not solved by this.
+
+Tried and left out: letting upkeep follow a seedling's current size (a seedling then pays about 40% of a full
+plant's upkeep). It lifted first-night survival (295 of 300 against 119, in the older soil rule) but lets thousands of stunted
+seedlings sit on the soil floor without dying, because the soil counts biomass and not plants, and one run
+reached the 5,000 cap. The starter reserve (15%) and the night upkeep are unchanged. Seedling mortality is still
+high (about 9% of a cohort lives 240 ticks, from crowding by the parent's neighbourhood), which is the soil
+limit working; it only stopped being a daily pulse.
 
 ## Senses are swappable
 
@@ -319,10 +353,9 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   (`WORLD.16`): the world gives each animal its `dt` and the animal turns them into ticks (at
   least one), so a world with a one-second tick decides every 1 to 4 hours, not every few
   seconds, and brain upkeep per hour does not change with the tick.
-- **The hourly default exposes the plant ecology.** Founder plants in an hourly world mostly die before they
-  seed (growth is below upkeep at seedling health, a lone plant's own biomass fills the soil limit of
-  0.015 per unit of ground before it reaches 85% of its size, and seedlings burn upkeep all night): that is
-  `WORLD.11`. Seeded founder animals (`BRAIN.9`) now live about 200 ticks (12 days) in a 1000 by 1000 world
+- **The hourly default exposes the plant ecology.** Founder plants in an hourly world mostly died before they
+  seeded (growth below upkeep at seedling health, and a lone plant's own biomass filling the soil limit
+  before 85% of its size): fixed by `WORLD.11` (see "Seedling survival and founders"). Seeded founder animals (`BRAIN.9`) now live about 200 ticks (12 days) in a 1000 by 1000 world
   with 120 plants before they starve; breeding them is `WORLD.15`. In the one-second world these effects were
   hidden because nothing aged or ate in a meaningful time.
 - **Sleep** energy numbers are guesses to calibrate (`SENSE.13`).
