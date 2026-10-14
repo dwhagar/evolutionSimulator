@@ -149,7 +149,7 @@ creature, so the viewer reads them with `numpy.frombuffer` without a loop. Rows:
 
 | Kind | Fields |
 | --- | --- |
-| Animal | id, x, y, heading, body radius, energy ratio, health ratio, age ratio (age over lifespan), flags (asleep, pregnant, ready to mate, wandering, sex), diet (meat share of what it can digest), a "family colour" key (distance of its genome from the population's centre) |
+| Animal | id, x, y, heading, body radius, energy ratio, health ratio, age ratio (age over lifespan), flags (asleep, pregnant, ready to mate, wandering, sex), diet (meat share of what it can digest), two "family colour" numbers (`family_a`, `family_b`: the genome projected on two fixed directions, so relatives get close numbers; see `lineage.py`) |
 | Plant | id, x, y, canopy radius, biomass ratio, flags (ready to seed) |
 | Corpse | id, x, y, meat left ratio |
 
@@ -215,8 +215,14 @@ dependencies (a test checks that no core module names Qt or numpy).
   matrix and a flag byte per row, with the column names in the block, so a viewer reads them with
   `numpy.frombuffer`. About 11 KB for 300 animals; 74 KB when the 3,000 plants ride along, which
   they do only every half second and when the session settles (paused, steps done), so a paused
-  world is exact. `FRAME_FORMAT` versions the layout. The family colour key of the first sketch is
-  not in the frame yet (it needs a cheap genome distance; it is UX.12's to ask for).
+  world is exact. `FRAME_FORMAT` versions the layout (2 since `UX.30`, which added the animals'
+  `family_a` and `family_b` columns). The family colour key is two numbers per animal,
+  `lineage.family_key`: the genome's digits projected on two fixed random directions, about 20
+  microseconds once per animal (cached) and a pure function of the genome, so it is not saved.
+  Relatives get close numbers (a child sits between its parents, a mutant next to the original) and
+  unrelated random genomes are about 1 apart on each; a real population is much tighter, so the
+  viewer should stretch the range found in the frame (for example between its 5th and 95th
+  percentile) over its colour wheel or ramp.
 - **FakeSimulation** has the same face as `World` for the session and the screens, with a scripted
   population curve and events; the session tests run every case against both.
 

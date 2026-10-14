@@ -51,6 +51,11 @@ class AnimalView(NamedTuple):
     """Its brain could not decide and the random wander took over."""
     sex: int
     """0 impregnates, 1 bears the young."""
+    family_a: float = 0.0
+    family_b: float = 0.0
+    """Two numbers that stay close for relatives (``lineage.family_key``), about 1 apart for
+    unrelated random genomes and much less in a real population: stretch the range found in the
+    frame over the colour scale."""
 
 
 class PlantView(NamedTuple):
@@ -160,6 +165,7 @@ def animal_view(animal: Animal, dt: float) -> AnimalView:
         traits.can_mate,
         decision is not None and decision.wandering,
         traits.sex,
+        *traits.family_key,
     )
 
 
