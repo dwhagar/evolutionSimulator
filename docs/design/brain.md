@@ -356,7 +356,7 @@ once at birth to set the body, then tracks energy, health and flags). The brain 
   weights and its inputs, so it is simple to test.
 - **The sense and drive code feeds the brain**. The world loop (`WORLD.2`) computes the 17 inputs
   from what each creature can sense, calls `brain.decide`, and passes the outputs to the existing
-  actions (`movement_speed_ratio`, `feed`, `consume_mating_cost`, `trigger_signal_emission`). The
+  actions (`movement_speed_ratio`, `feed`, `AnimalTraits.give_birth`, `trigger_signal_emission`). The
   fixed rule stays as the fallback and as the reference the seeded brain imitates.
 - **The traits-and-DNA contract still holds.** DNA does not know what a weight means, traits do not
   read weights, and the brain only reads decoded numbers.
@@ -386,8 +386,8 @@ Anything the owner answers differently is a change to one constant or one table 
 | Dead zone | `brain.py`, `traits.py` | `BRAIN.21`. `Brain.from_values(shape, values, dead_zone=0.0)`: a weight (never a bias) whose absolute value is at or below the dead zone is off. It does nothing in `decide` and `active_connections()` does not count it, so a connection pays energy exactly when it acts; before, `decide` used every weight while the cost counted only those above 0.25, so small weights acted for free. `to_values` still returns the numbers as given, and equality includes the dead zone. `AnimalTraits` builds its brain with `BRAIN_ACTIVE_THRESHOLD` (0.25) as the dead zone, which switches off the weights at about +-0.133 (one level in eight; the next level, 0.4, stays on). `BRAIN.23` replaces this with its own dead zone of about 0.5. |
 | `AnimalTraits.brain`, `.brain_upkeep`, `.think(percepts)` | `traits.py` | The hookup. The brain is built from the genome at birth; `think` adds the animal's own state to the percepts, runs the brain and returns the decision; pass an `rng` to enable the wander fallback. |
 
-**Genome.** `ANIMAL_LAYOUT` is now 461 digits at layout version 2: the 65 body digits, unchanged in position,
-then the 396 brain digits. The body genes are read by the trait table as before; the brain is read only by
+**Genome.** `ANIMAL_LAYOUT` is now 466 digits at layout version 3: the 70 body digits (the prototype's 65, with
+the three reproduction genes of `REPRO.5` in place of `fertility`), then the 396 brain digits. The body genes are read by the trait table as before; the brain is read only by
 `Brain`, so `TraitSet.unread_genes()` does not list it.
 
 **Brain layout.** The 198 numbers are grouped per hidden neuron so a neuron's wiring travels together: for
@@ -395,7 +395,7 @@ each of the 8 hidden neurons its bias, its 17 incoming weights and its 6 outgoin
 the 6 output biases. Crossover by unit takes whole neurons, with their outgoing weights, from either parent,
 which is the "per-neuron block" recommendation under [Storing the brain in the DNA](#storing-the-brain-in-the-dna).
 
-**Mutation.** `ANIMAL_LAYOUT` sets about 0.65 expected changes per child for the body (the prototype's 0.01 per
+**Mutation.** `ANIMAL_LAYOUT` sets about 0.70 expected changes per child for the body (the prototype's 0.01 per
 digit, unchanged) and 1.0 for the brain (about 0.0025 per brain digit), so the brain's 396 digits do not take
 over the mutation count (0.01 per digit would have given about 4 changes in the brain alone). Both numbers
 are data on the layout and can be overridden per call. The first-digit-dominates problem

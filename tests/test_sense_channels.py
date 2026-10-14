@@ -91,7 +91,11 @@ def test_which_senses_report_what_follows_the_design_note():
 
 def test_temperament_scaled_channels_name_real_temperament_fields():
     scaled = {c.name: c.scaled_by for c in INPUT_CHANNELS if c.scaled_by}
-    assert scaled == {"prey_closeness": "aggression", "threat_closeness": "fear"}
+    assert scaled == {
+        "prey_closeness": "aggression",
+        "threat_closeness": "fear",
+        "mate_closeness": "repro_drive",
+    }
     fields = {f.name for f in dataclasses.fields(Temperament)}
     assert set(scaled.values()) <= fields
 

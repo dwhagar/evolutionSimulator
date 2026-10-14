@@ -45,10 +45,12 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 2. In id order each awake animal ages and burns energy (`update_metabolism_and_aging`, with the brain's
    speed output as the movement ratio), turns, moves and, if the brain says "eat" and a plant is
    within reach, grazes it.
-3. Animals whose brain says "seek mating", that are off cooldown and have at least half their energy
-   store, pair off with the nearest such animal within `mating_reach` (3 units). Each pair has one
-   child (`DNA.reproduce` with `crossover_by_unit`) placed near the parents' midpoint.
-4. Plants grow in id order; a ready plant drops `seed_count` seeds within its dispersal radius.
+3. Animals whose brain says "seek mating" and that are off cooldown pair off with the nearest such
+   animal within `mating_reach` (3 units). Each pair has one child (`DNA.reproduce`, default
+   crossover) placed near the parents' midpoint, and `AnimalTraits.give_birth` charges the parents
+   and sets the child's energy; if either parent cannot pay, nobody is charged and there is no child.
+4. Plants grow in id order; a ready plant drops up to `seed_count` seeds within its dispersal radius
+   and shares the biomass it spent among them.
 5. The dead are removed and the tick counter goes up by one.
 
 Movement: the `turn` output turns the animal by up to `base_turn_rate` radians (a positive turn goes
@@ -129,12 +131,13 @@ the nearest possible mate. Calls are not heard yet, so those inputs stay 0.
 
 ## Placeholders and limits
 
-- **Energy is not conserved at birth.** A child starts at 75% energy and a seed at 15% biomass
-  whatever the parents paid (`REPRO.5`). Animals pay the existing mating cost.
+- **Births are paid for (`REPRO.5`).** A child starts with the mean `care_fraction` of its parents
+  times its own energy store, which the parents pay for between them (plus the repair surcharge, which
+  is lost), and a seed starts with an equal share of the biomass its parent spent. Newborns are
+  juveniles: they cannot breed until they are as old as their birth interval. The founders that
+  `populate` creates are juveniles too.
 - **Acting on the brain is partial.** Only turn, speed, eat and seek-mating are used. Attacking
   prey, meat, calls and retiring the fixed rule are `BRAIN.10`. Animals do not eat each other yet.
-- **Mating guard.** The 50% energy rule is a world setting for now; it moves with `TRAIT.5` and
-  `TRAIT.3`.
 - **Sex and species.** Any two willing animals of the same layout may mate; mate choice by genetic
   closeness is `REPRO.4`.
 - **Sleep** energy numbers and the 600-second day are guesses to calibrate (`SENSE.13`, `TRAIT.3`).

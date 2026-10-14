@@ -28,7 +28,7 @@ BRAIN_GENE = BlockSpec(
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=2,
+    version=3,
     specs=(
         # body
         GeneSpec("speed"),
@@ -47,16 +47,19 @@ ANIMAL_LAYOUT = GenomeLayout(
         GeneSpec("carnivore_eff"),
         GeneSpec("aggression"),
         GeneSpec("fear"),
-        GeneSpec("fertility"),
+        # reproduction (REPRO.5): energy per offspring, the gap between births, the urge to mate
+        GeneSpec("caregiving", length=3),
+        GeneSpec("repro_interval", length=3),
+        GeneSpec("repro_drive", length=3),
         GeneSpec("encoder_fidelity"),
         # one digit read as a category
         GeneSpec("sex_strategy", length=1),
         # the brain: read by the Brain object, not by the trait table
         BRAIN_GENE,
     ),
-    # The body keeps the prototype's 0.01 per digit (0.65 changes per child). The brain is about
-    # one change per child however long it is, about 0.0025 per brain digit.
-    segment_mutations={"body": 0.01 * 65, "brain": 1.0},
+    # The body keeps the prototype's 0.01 per digit (0.70 changes per child now that it has 70
+    # digits). The brain is about one change per child however long it is, about 0.0025 per brain digit.
+    segment_mutations={"body": 0.01 * 70, "brain": 1.0},
 )
 
 PLANT_LAYOUT = GenomeLayout(

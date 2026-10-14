@@ -46,8 +46,8 @@ See [brain.md](brain.md#as-built) for the layout, the cost and what is not built
 ### 1. Layout: where the genes are (`dna.py`, `layouts.py`)
 
 A `GenomeLayout` is an ordered list of `GeneSpec(id, length)`. Order fixes positions, so reordering or
-resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (461 digits:
-65 body digits, that is 16 four-digit genes and one single-digit gene, then a 396-digit brain block) and
+resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (466 digits:
+70 body digits, that is 15 four-digit genes, three three-digit genes and one single-digit gene, then a 396-digit brain block) and
 `PLANT_LAYOUT` (24 digits) are plain data.
 
 A `DNA` pairs a layout with an immutable digit string. It offers four reads and nothing else (a
@@ -172,4 +172,7 @@ These wait on the owner's answers or on other tasks and are tracked in [TODO.md]
   `DiploidDNA` holds two `DNA` strands and blends each gene by a `DominanceModel` (default codominant,
   the average) when `value`, `digit` or `values` is read, so the trait table does not change. Which species
   use it is decided when the world creates the first generation.
-- The unused `fertility` gene is still in the animal layout, and `TraitSet.unread_genes()` reports it.
+- The reproduction genes are built (`REPRO.5`, `TRAIT.6`): `fertility` is gone, and `caregiving`, `repro_interval` and
+  `repro_drive` replace it, so every body gene is read by a trait and `TraitSet.unread_genes()` is empty (see
+  [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity)). Still to build: the protective effect of
+  caregiving (needs the `SENSE.1` "young nearby" sense) and the plant seed genes (`REPRO.3`).

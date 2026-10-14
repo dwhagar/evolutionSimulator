@@ -131,8 +131,8 @@ def test_tables_only_read_genes_that_exist():
     assert len(ANIMAL_TRAITS) > 0 and len(PLANT_TRAITS) > 0
 
 
-def test_every_animal_gene_but_fertility_is_read():
-    assert ANIMAL_TRAITS.unread_genes() == ("fertility",)
+def test_every_animal_gene_is_read():
+    assert ANIMAL_TRAITS.unread_genes() == ()
     assert PLANT_TRAITS.unread_genes() == ()
 
 
@@ -184,3 +184,25 @@ def test_range_edges_match_the_prototype_formulas():
     plant_high = PLANT_TRAITS.express(DNA(PLANT_LAYOUT, "3" * PLANT_LAYOUT.length))
     assert (plant_low["max_biomass"], plant_high["max_biomass"]) == (20.0, 200.0)
     assert (plant_low["seed_count"], plant_high["seed_count"]) == (1, 8)
+
+
+def test_reproduction_traits_cover_their_ranges():
+    low = ANIMAL_TRAITS.express(DNA(ANIMAL_LAYOUT, "0" * ANIMAL_LAYOUT.length))
+    high = ANIMAL_TRAITS.express(DNA(ANIMAL_LAYOUT, "3" * ANIMAL_LAYOUT.length))
+    assert (low["care_fraction"], high["care_fraction"]) == (0.10, pytest.approx(0.80))
+    assert (low["interval_fraction"], high["interval_fraction"]) == (
+        pytest.approx(0.01),
+        pytest.approx(0.25),
+    )
+    assert (low["repro_drive"], high["repro_drive"]) == (0.0, 1.0)
+    # The interval is geometric: the middle of the gene is the geometric mean of the ends.
+    assert ANIMAL_TRAITS["interval_fraction"].from_unit(0.5) == pytest.approx((0.01 * 0.25) ** 0.5)
+
+
+def test_each_reproduction_gene_feeds_its_own_trait():
+    for gene_id, trait in (
+        ("caregiving", "care_fraction"),
+        ("repro_interval", "interval_fraction"),
+        ("repro_drive", "repro_drive"),
+    ):
+        assert [t.name for t in ANIMAL_TRAITS.traits_reading(gene_id)] == [trait]

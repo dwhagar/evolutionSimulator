@@ -106,8 +106,9 @@ def test_a_wide_eye_costs_more_than_a_narrow_one_at_the_same_gene():
 
 def test_a_blind_animal_pays_nothing_for_range_senses():
     blind = animal()
-    expected = blind.basal_metabolism - blind.brain_upkeep - blind.gut_maintenance
-    assert expected == pytest.approx(0.18 * blind.mass**0.75 + 0.12 * 0.0)
+    reproduction = blind.repair_upkeep + blind.readiness_upkeep + blind.drive_upkeep
+    expected = blind.basal_metabolism - blind.brain_upkeep - blind.gut_maintenance - reproduction
+    assert expected == pytest.approx(0.18 * blind.mass**0.75)
 
 
 def test_the_sense_bill_is_a_sensible_share_of_basal_metabolism():

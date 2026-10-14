@@ -7,6 +7,7 @@ import pytest
 from evolution_simulator import traits as traits_module
 from evolution_simulator.brain import DEFAULT_SHAPE, Brain
 from evolution_simulator.brain_adapter import (
+    INPUT_NAMES,
     BrainDecision,
     Percepts,
     Temperament,
@@ -23,7 +24,7 @@ from evolution_simulator.traits import (
     PlantTraits,
 )
 
-BODY = ("0123" * 17)[:65]
+BODY = ("0123" * 18)[:70]
 BRAIN = "".join(str((i * 7 + i // 5) % 4) for i in range(396))  # fixed, varied, not saturated
 PINNED = DNA(ANIMAL_LAYOUT, BODY + BRAIN)
 FAINT = "13" * 198  # every weight is level 7 of 16: -0.133, below the active threshold
@@ -144,10 +145,17 @@ def test_the_cost_constants_are_module_level_so_they_can_move_to_config():
 
 
 # --- thinking ---------------------------------------------------------------
+def adult(dna: DNA, **kwargs) -> AnimalTraits:
+    """An animal past its juvenile period, so it is ready to mate (a newborn waits one birth
+    interval, `REPRO.5`)."""
+    traits = AnimalTraits(dna, **kwargs)
+    traits.mating_cooldown = 0
+    traits._update_needs_and_drives()
+    return traits
 
 
 def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
-    traits = AnimalTraits(PINNED)
+    traits = adult(PINNED)
     expected = decode_outputs(
         traits.brain.decide(
             build_inputs(
@@ -156,26 +164,32 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
                 health_ratio=traits.current_health / traits.max_damage_capacity,
                 vitality=traits.vitality,
                 ready_to_mate=True,
-                temperament=Temperament(traits.current_aggression, traits._effective_fear()),
+                temperament=Temperament(
+                    traits.current_aggression,
+                    traits._effective_fear(),
+                    traits.phenotype["repro_drive"],
+                ),
             )
         )
     )
     assert traits.think(SEEN) == expected
 
 
+# Re-pinned for the animal layout with the three reproduction genes (REPRO.5): the body digits of
+# this genome now spell different genes.
 def test_pinned_decision_for_a_fixed_genome():
-    decision = AnimalTraits(PINNED).think(SEEN)
-    assert decision.turn == pytest.approx(-0.786177308)
-    assert decision.speed == pytest.approx(0.994792968)
-    assert decision.eat_or_attack == pytest.approx(0.318724120)
-    assert decision.seek_mating == pytest.approx(0.984340674)
-    assert decision.alarm_call == pytest.approx(0.980478501)
-    assert decision.mating_call == pytest.approx(0.257052899)
+    decision = adult(PINNED).think(SEEN)
+    assert decision.turn == pytest.approx(-0.783960832)
+    assert decision.speed == pytest.approx(0.994782749)
+    assert decision.eat_or_attack == pytest.approx(0.321942838)
+    assert decision.seek_mating == pytest.approx(0.984173382)
+    assert decision.alarm_call == pytest.approx(0.980643574)
+    assert decision.mating_call == pytest.approx(0.258157744)
     assert decision.eats_or_attacks is False and decision.seeks_mating is True
 
 
 def test_think_is_repeatable_and_changes_nothing():
-    traits = AnimalTraits(PINNED)
+    traits = adult(PINNED)
     before = (traits.current_energy, traits.age_ticks, traits.flag_wants_mate, traits.vitality)
     assert traits.think(SEEN) == traits.think(SEEN)
     assert (
@@ -187,20 +201,20 @@ def test_think_is_repeatable_and_changes_nothing():
 
 
 def test_think_sees_hunger_health_and_readiness_to_mate():
-    fed = AnimalTraits(PINNED).think(Percepts())
-    hungry = AnimalTraits(PINNED)
+    fed = adult(PINNED).think(Percepts())
+    hungry = adult(PINNED)
     hungry.current_energy *= 0.2
     assert hungry.think(Percepts()) != fed
-    hurt = AnimalTraits(PINNED)
+    hurt = adult(PINNED)
     hurt.apply_damage(hurt.max_damage_capacity * 0.5)
     assert hurt.think(Percepts()) != fed
-    resting = AnimalTraits(PINNED)
+    resting = adult(PINNED)
     resting.mating_cooldown = 5
     assert resting.think(Percepts()) != fed
 
 
 def test_think_sees_the_world():
-    traits = AnimalTraits(PINNED)
+    traits = adult(PINNED)
     assert traits.think(SEEN) != traits.think(Percepts())
     assert traits.think(Percepts(touching=True)) != traits.think(Percepts())
 
@@ -300,7 +314,7 @@ class CountingBrain:
 
 
 def counted(interval: int) -> tuple[AnimalTraits, CountingBrain]:
-    traits = AnimalTraits(PINNED, decision_interval=interval)
+    traits = adult(PINNED, decision_interval=interval)
     counter = CountingBrain(traits.brain)
     traits.brain = counter
     return traits, counter
@@ -343,7 +357,7 @@ def test_decisions_follow_the_same_schedule_every_run():
 
 
 def test_wandering_only_draws_randomness_when_a_decision_is_made():
-    traits = AnimalTraits(PINNED, decision_interval=5)
+    traits = adult(PINNED, decision_interval=5)
     r = random.Random(4)
     traits.think(Percepts(), r)  # blind: wanders, draws
     state = r.getstate()
@@ -353,8 +367,8 @@ def test_wandering_only_draws_randomness_when_a_decision_is_made():
 
 
 def test_a_slower_thinker_pays_proportionally_less_upkeep():
-    every = AnimalTraits(PINNED)
-    fourth = AnimalTraits(PINNED, decision_interval=4)
+    every = adult(PINNED)
+    fourth = adult(PINNED, decision_interval=4)
     assert fourth.brain_upkeep == pytest.approx(every.brain_upkeep / 4)
     assert every.basal_metabolism - fourth.basal_metabolism == pytest.approx(
         every.brain_upkeep * 0.75
@@ -363,5 +377,55 @@ def test_a_slower_thinker_pays_proportionally_less_upkeep():
 
 def test_the_interval_must_be_at_least_one_tick():
     with pytest.raises(ValueError):
-        AnimalTraits(PINNED, decision_interval=0)
+        adult(PINNED, decision_interval=0)
     assert traits_module.DECISION_INTERVAL >= 1
+
+
+# --- the reproduction drive (REPRO.5) -----------------------------------------
+
+
+def mate_input(percepts: Percepts, drive: float) -> float:
+    inputs = build_inputs(
+        percepts,
+        energy_ratio=0.5,
+        health_ratio=1.0,
+        vitality=1.0,
+        ready_to_mate=True,
+        temperament=Temperament(repro_drive=drive),
+    )
+    return inputs[INPUT_NAMES.index("mate_closeness")]
+
+
+def test_the_drive_bends_how_close_a_possible_mate_looks():
+    seen = Percepts(mate_direction=0.2, mate_closeness=0.5)
+    assert mate_input(seen, 0.5) == pytest.approx(0.5)  # neutral
+    assert mate_input(seen, 1.0) == pytest.approx(0.8)  # x1.6
+    assert mate_input(seen, 0.0) == pytest.approx(0.2)  # x0.4
+    assert mate_input(Percepts(), 1.0) == 0.0  # nothing sensed stays unsensed
+
+
+def test_the_temperament_drive_must_be_a_gene_level():
+    with pytest.raises(ValueError):
+        Temperament(repro_drive=1.5)
+
+
+def test_a_possible_mate_does_not_pull_on_an_animal_in_cooldown():
+    seen = Percepts(mate_direction=0.4, mate_closeness=0.7, plant_closeness=0.3)
+    resting = adult(PINNED)
+    resting.mating_cooldown = 7
+    blind = adult(PINNED)
+    blind.mating_cooldown = 7
+    assert resting.think(seen) == blind.think(Percepts(plant_closeness=0.3))
+    ready = adult(PINNED)
+    assert ready.think(seen) != adult(PINNED).think(Percepts(plant_closeness=0.3))
+
+
+def test_think_gives_the_brain_the_animals_own_drive():
+    low = adult(with_body_gene("repro_drive", "000"))
+    high = adult(with_body_gene("repro_drive", "333"))
+    seen = Percepts(mate_direction=0.2, mate_closeness=0.5)
+    assert low.think(seen) != high.think(seen)
+
+
+def with_body_gene(gene_id: str, digits: str) -> DNA:
+    return PINNED.replaced(gene_id, [int(d) for d in digits])

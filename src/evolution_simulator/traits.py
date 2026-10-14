@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import random
 from collections.abc import Mapping
+from dataclasses import replace
 
 from evolution_simulator.brain import DEFAULT_SHAPE, Brain
 from evolution_simulator.brain_adapter import (
@@ -41,6 +42,40 @@ DECISION_INTERVAL: int = 1
 """Ticks between brain decisions (``BRAIN.11``); between them the animal keeps its last decision.
 Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to move
 into the shared config object (TRAIT.3), and later perhaps to become a gene (reaction time)."""
+
+# Wear and repair. Lifespan is the damage an animal can take divided by its wear per tick.
+WEAR_PER_TICK: float = 0.075
+"""Damage accumulated per tick with no repair."""
+REPAIR_WEAR_DAMPING: float = 3.5
+"""Wear per tick is divided by ``1 + REPAIR_WEAR_DAMPING * somatic_maint``."""
+
+# Longevity trades against reproduction (TRAIT.6, docs/design/reproduction-genes.md). These are
+# starting values to be tuned and meant to move into the shared config object (TRAIT.3).
+REPAIR_COST: float = 0.20
+"""Upkeep per tick at full repair; it grows with the square of ``somatic_maint`` (convex)."""
+REPAIR_COST_EXPONENT: float = 2.0
+REPAIR_BIRTH_SURCHARGE: float = 1.0
+"""A parent's cost of a birth is multiplied by ``1 + REPAIR_BIRTH_SURCHARGE * somatic_maint``."""
+REPAIR_INTERVAL_STRETCH: float = 0.5
+"""The shortest gap between births is multiplied by ``1 + REPAIR_INTERVAL_STRETCH * somatic_maint``."""
+
+# Reproduction genes (REPRO.5).
+READINESS_UPKEEP: float = 0.03
+"""Upkeep per tick for staying ready to breed, at ``READINESS_REFERENCE_INTERVAL``."""
+READINESS_REFERENCE_INTERVAL: float = 0.05
+READINESS_EXPONENT: float = 0.5
+"""Readiness upkeep is ``READINESS_UPKEEP * (REFERENCE / interval_fraction) ** EXPONENT``."""
+DRIVE_UPKEEP: float = 0.05
+DRIVE_UPKEEP_EXPONENT: float = 2.0
+"""Upkeep per tick for the urge to mate: ``DRIVE_UPKEEP * repro_drive ** EXPONENT``."""
+DRIVE_THRESHOLD_BASE: float = 0.85
+DRIVE_THRESHOLD_SLOPE: float = 0.5
+DRIVE_THRESHOLD_VITALITY: float = 0.2
+DRIVE_THRESHOLD_RANGE: tuple[float, float] = (0.10, 0.95)
+"""Energy share needed to start looking for a mate:
+``clamp(BASE - SLOPE * drive - VITALITY * (1 - vitality), *RANGE)``."""
+DRIVE_BOLDNESS: float = 0.3
+"""While a mate is in view, fear is multiplied by ``1 - DRIVE_BOLDNESS * repro_drive``."""
 
 # =============================================================================
 # Base Traits: Shared Organism Physiology, Vitality & Mortality
@@ -168,9 +203,16 @@ class AnimalTraits(BaseTraits):
             BRAIN_NEURON_COST * self.brain.neuron_count
             + BRAIN_CONNECTION_COST * self.brain.active_connections()
         ) / self.decision_interval
+        self.repair_upkeep: float = REPAIR_COST * (t["somatic_maint"] ** REPAIR_COST_EXPONENT)
+        self.readiness_upkeep: float = READINESS_UPKEEP * (
+            (READINESS_REFERENCE_INTERVAL / t["interval_fraction"]) ** READINESS_EXPONENT
+        )
+        self.drive_upkeep: float = DRIVE_UPKEEP * (t["repro_drive"] ** DRIVE_UPKEEP_EXPONENT)
         self.basal_metabolism = (
             (0.18 * (self.mass**0.75))
-            + (0.12 * t["somatic_maint"])
+            + self.repair_upkeep
+            + self.readiness_upkeep
+            + self.drive_upkeep
             + sensory_overhead
             + self.gut_maintenance
             + self.brain_upkeep
@@ -196,7 +238,9 @@ class AnimalTraits(BaseTraits):
         # ---------------------------------------------------------------------
         self.current_energy = self.max_energy * 0.75
         self.current_health = self.max_damage_capacity
-        self.mating_cooldown: int = 0
+        # The same gene that sets the gap between births sets the juvenile period: an animal
+        # cannot breed until it is as old as the gap.
+        self.mating_cooldown: int = self.interval_ticks
 
         # Environmental stimulus inputs
         self.env_threat_detected: bool = False
@@ -226,6 +270,24 @@ class AnimalTraits(BaseTraits):
         self._refresh_vitality_dependents()
         self._update_needs_and_drives()  # so the drive flags are right at birth, not after tick one
 
+    @property
+    def wear_per_tick(self) -> float:
+        """Damage added each tick; repair (``somatic_maint``) slows it."""
+        return WEAR_PER_TICK / (1.0 + (REPAIR_WEAR_DAMPING * self.phenotype["somatic_maint"]))
+
+    @property
+    def lifespan_ticks(self) -> float:
+        """Ticks until accumulated wear reaches the damage this body can take."""
+        return self.max_damage_capacity / self.wear_per_tick
+
+    @property
+    def interval_ticks(self) -> int:
+        """Shortest gap between births, and the age of first breeding. It is a share of this animal's
+        own lifespan (the ``repro_interval`` gene), stretched by repair (``somatic_maint``): the
+        energy that goes into repair is not available for breeding."""
+        stretch = 1.0 + (REPAIR_INTERVAL_STRETCH * self.phenotype["somatic_maint"])
+        return max(1, round(self.phenotype["interval_fraction"] * self.lifespan_ticks * stretch))
+
     def _refresh_vitality_dependents(self) -> None:
         v = self.vitality
         health_ratio = max(0.0, self.current_health / self.max_damage_capacity)
@@ -245,8 +307,7 @@ class AnimalTraits(BaseTraits):
         self.age_ticks += 1
 
         # Somatic repair dampens wear rate
-        wear_per_tick = 0.075 / (1.0 + (3.5 * self.phenotype["somatic_maint"]))
-        self.accumulated_damage += wear_per_tick
+        self.accumulated_damage += self.wear_per_tick
 
         self.vitality = max(0.0, 1.0 - (self.accumulated_damage / self.max_damage_capacity))
         self._refresh_vitality_dependents()
@@ -288,9 +349,13 @@ class AnimalTraits(BaseTraits):
         self._ticks_since_decision = 0
         self.wanderer.reset()
 
-    def _effective_fear(self) -> float:
-        """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down."""
-        return self.base_fear_weight * (1.2 - (0.5 * self.vitality))
+    def _effective_fear(self, mate_in_view: bool = False) -> float:
+        """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down.
+        A driven animal is bolder while a possible mate is in view (``DRIVE_BOLDNESS``)."""
+        fear = self.base_fear_weight * (1.2 - (0.5 * self.vitality))
+        if mate_in_view:
+            fear *= 1.0 - (DRIVE_BOLDNESS * self.phenotype["repro_drive"])
+        return fear
 
     def think(self, percepts: Percepts, rng: random.Random | None = None) -> BrainDecision:
         """Ask the brain what to do given what the world reports.
@@ -310,6 +375,9 @@ class AnimalTraits(BaseTraits):
         if self._decision is not None and self._ticks_since_decision < self.decision_interval:
             self._ticks_since_decision += 1
             return self._decision
+        if self.mating_cooldown > 0 and (percepts.mate_closeness or percepts.mate_direction):
+            # Not ready to breed: a possible mate does not pull on it (REPRO.5).
+            percepts = replace(percepts, mate_closeness=0.0, mate_direction=0.0)
         inputs = build_inputs(
             percepts,
             energy_ratio=self.current_energy / self.max_energy,
@@ -317,7 +385,9 @@ class AnimalTraits(BaseTraits):
             vitality=self.vitality,
             ready_to_mate=self.mating_cooldown == 0,
             temperament=Temperament(
-                aggression=self.current_aggression, fear=min(1.0, self._effective_fear())
+                aggression=self.current_aggression,
+                fear=min(1.0, self._effective_fear(mate_in_view=percepts.mate_closeness > 0.0)),
+                repro_drive=self.phenotype["repro_drive"],
             ),
         )
         decision = decode_outputs(self.brain.decide(inputs))
@@ -376,8 +446,18 @@ class AnimalTraits(BaseTraits):
             self.flag_target_is_plant = False
             self.flag_target_is_prey = False
 
-        # Mating urgency (senescence desperation lowers threshold)
-        mating_threshold = 0.35 + (0.35 * self.vitality)
+        # Mating urgency: the drive gene lowers the energy needed to start looking, and so does
+        # failing health (senescence desperation).
+        low, high = DRIVE_THRESHOLD_RANGE
+        mating_threshold = min(
+            high,
+            max(
+                low,
+                DRIVE_THRESHOLD_BASE
+                - (DRIVE_THRESHOLD_SLOPE * self.phenotype["repro_drive"])
+                - (DRIVE_THRESHOLD_VITALITY * (1.0 - self.vitality)),
+            ),
+        )
         self.flag_wants_mate = (
             energy_ratio >= mating_threshold and self.mating_cooldown == 0 and not self.flag_in_fear
         )
@@ -445,11 +525,34 @@ class AnimalTraits(BaseTraits):
         self._update_needs_and_drives()
         return energy_gain
 
-    def consume_mating_cost(self) -> None:
-        cost_multiplier = 0.25 if self.sex_type in (0, 1) else 0.45
-        self.current_energy = max(0.0, self.current_energy - self.max_energy * cost_multiplier)
-        self.mating_cooldown = 100 if self.sex_type in (2, 3) else 40
-        self._update_needs_and_drives()
+    def birth_cost(self, newborn_max_energy: float) -> float:
+        """What this parent pays for one birth: half of the newborn's starting energy at this
+        parent's own ``care_fraction``, times a surcharge for repair (the disposable-soma trade-off:
+        energy put into repair is not there for the young). The newborn gets the unsurcharged
+        amount."""
+        surcharge = 1.0 + (REPAIR_BIRTH_SURCHARGE * self.phenotype["somatic_maint"])
+        return 0.5 * self.phenotype["care_fraction"] * newborn_max_energy * surcharge
+
+    @staticmethod
+    def give_birth(parent_a: AnimalTraits, parent_b: AnimalTraits, newborn: AnimalTraits) -> bool:
+        """The two-parent birth step. Both parents must be alive, off cooldown and able to pay
+        (strictly more energy than their cost); if either cannot, nobody is charged and this returns
+        False. Otherwise each parent pays ``birth_cost`` and starts its own cooldown
+        (``interval_ticks``), and ``newborn`` starts with the mean of the parents' ``care_fraction``
+        times its own energy store."""
+        for parent in (parent_a, parent_b):
+            if not parent.is_alive or parent.mating_cooldown > 0:
+                return False
+            if parent.current_energy <= parent.birth_cost(newborn.max_energy):
+                return False
+        care = 0.5 * (parent_a.phenotype["care_fraction"] + parent_b.phenotype["care_fraction"])
+        for parent in (parent_a, parent_b):
+            parent.current_energy -= parent.birth_cost(newborn.max_energy)
+            parent.mating_cooldown = parent.interval_ticks
+            parent._update_needs_and_drives()
+        newborn.current_energy = care * newborn.max_energy
+        newborn._update_needs_and_drives()
+        return True
 
     def trigger_signal_emission(self) -> int | None:
         if self.flag_ready_to_signal and self.signal_to_emit is not None:
@@ -602,6 +705,12 @@ class PlantTraits(BaseTraits):
             self._die()
 
         return (actual_consumed, self.toxicity)
+
+    def set_starting_biomass(self, biomass: float) -> None:
+        """Give a new plant the biomass its parent put into the seed, up to its own full size."""
+        self.current_biomass = min(self.max_biomass, max(0.0, biomass))
+        self.current_energy = self.current_biomass
+        self._update_needs_and_drives()
 
     def consume_reproduction_cost(self) -> float:
         """Expends biomass to package into outgoing seeds.
