@@ -1,0 +1,282 @@
+import random
+from typing import List, Optional, Tuple, Union
+
+
+# =============================================================================
+# Base DNA: Shared Quaternary Mechanics & Operations
+# =============================================================================
+
+class BaseDNA:
+    """Abstract base class managing a fixed-length quaternary (base-4) chromosome.
+
+    Provides core genetic operations: uniform crossover, point mutation,
+    slice decoding, and operator overloads for reproduction.
+    """
+
+    BASES: Tuple[int, ...] = (0, 1, 2, 3)
+    STANDARD_LENGTH: int = 0  # To be overridden by subclasses
+
+    def __init__(
+        self,
+        length: Optional[int] = None,
+        sequence: Optional[Union[List[int], str, Tuple[int, ...]]] = None,
+    ) -> None:
+        self.length: int = length if length is not None else self.STANDARD_LENGTH
+        if self.length <= 0:
+            raise ValueError("Genome length must be a positive integer.")
+
+        if sequence is None:
+            self.sequence: List[int] = [
+                random.choice(self.BASES) for _ in range(self.length)
+            ]
+        else:
+            if isinstance(sequence, str):
+                parsed = [int(char) for char in sequence.strip()]
+            else:
+                parsed = [int(val) for val in sequence]
+
+            if len(parsed) != self.length:
+                raise ValueError(
+                    f"Sequence length mismatch: expected {self.length}, got {len(parsed)}"
+                )
+
+            for digit in parsed:
+                if digit not in self.BASES:
+                    raise ValueError(
+                        f"Invalid quaternary digit: {digit}. Must be 0, 1, 2, or 3."
+                    )
+
+            self.sequence = parsed
+
+    # -------------------------------------------------------------------------
+    # Genetic Operations
+    # -------------------------------------------------------------------------
+
+    def crossover(self, partner: "BaseDNA") -> "BaseDNA":
+        """Performs uniform per-digit crossover with a partner DNA strand."""
+        if type(self) is not type(partner):
+            raise TypeError(
+                f"Cannot cross distinct DNA species: {type(self).__name__} vs {type(partner).__name__}"
+            )
+        if self.length != partner.length:
+            raise ValueError(
+                f"Strand length mismatch: {self.length} vs {partner.length}"
+            )
+
+        child_sequence = [
+            self.sequence[i] if random.random() < 0.5 else partner.sequence[i]
+            for i in range(self.length)
+        ]
+        return self.__class__(length=self.length, sequence=child_sequence)
+
+    def mutate(self, mutation_rate: float = 0.01) -> None:
+        """Applies point mutations in-place using modular arithmetic."""
+        for i in range(self.length):
+            if random.random() < mutation_rate:
+                shift = random.choice((1, 2, 3))
+                self.sequence[i] = (self.sequence[i] + shift) % 4
+
+    def clone_with_mutation(self, mutation_rate: float = 0.01) -> "BaseDNA":
+        """Produces an asexual clone subject only to point mutations (vegetative growth)."""
+        child = self.__class__(length=self.length, sequence=list(self.sequence))
+        child.mutate(mutation_rate=mutation_rate)
+        return child
+
+    def reproduce(self, partner: "BaseDNA", mutation_rate: float = 0.01) -> "BaseDNA":
+        """Sexual reproduction: combines uniform crossover with point mutation."""
+        child = self.crossover(partner)
+        child.mutate(mutation_rate=mutation_rate)
+        return child
+
+    def __add__(self, partner: "BaseDNA") -> "BaseDNA":
+        """Operator overload: DNA_A + DNA_B = mutated offspring DNA."""
+        return self.reproduce(partner)
+
+    # -------------------------------------------------------------------------
+    # Decoding Methods
+    # -------------------------------------------------------------------------
+
+    def get_slice(self, start: int, end: int) -> List[int]:
+        """Extracts a slice of digits from [start, end)."""
+        if start < 0 or end > self.length or start >= end:
+            raise IndexError(
+                f"Invalid slice bounds: [{start}:{end}] for genome length {self.length}"
+            )
+        return self.sequence[start:end]
+
+    def decode_int(self, start: int, end: int) -> int:
+        """Decodes a slice of digits as a big-endian base-4 integer."""
+        value = 0
+        for digit in self.get_slice(start, end):
+            value = (value * 4) + digit
+        return value
+
+    def decode_normalized(self, start: int, end: int) -> float:
+        """Decodes a slice into a continuous float normalized between 0.0 and 1.0."""
+        k = end - start
+        max_possible = (4**k) - 1
+        return self.decode_int(start, end) / max_possible
+
+    def get_digit(self, index: int) -> int:
+        """Returns the raw quaternary digit at a specific index."""
+        if index < 0 or index >= self.length:
+            raise IndexError(
+                f"Index {index} out of bounds for genome length {self.length}"
+            )
+        return self.sequence[index]
+
+    def __str__(self) -> str:
+        return "".join(str(d) for d in self.sequence)
+
+    def __repr__(self) -> str:
+        return f"{self.__class__.__name__}(length={self.length}, sequence='{str(self)}')"
+
+
+# =============================================================================
+# Animal DNA (65 Quaternary Digits)
+# =============================================================================
+
+class AnimalDNA(BaseDNA):
+    """Encodes physical, 5-modality sensory, metabolic, and behavioral traits
+
+    for mobile entities across a 65-digit quaternary chromosome.
+    """
+
+    STANDARD_LENGTH: int = 65
+
+    # Gene index mappings (start, end)
+    GENE_SPEED: Tuple[int, int] = (0, 4)
+    GENE_AGILITY: Tuple[int, int] = (4, 8)
+    GENE_SIZE: Tuple[int, int] = (8, 12)
+    GENE_SOMATIC_MAINT: Tuple[int, int] = (12, 16)
+
+    GENE_SIGHT_RANGE: Tuple[int, int] = (16, 20)
+    GENE_SIGHT_FOV: Tuple[int, int] = (20, 24)
+    GENE_HEARING: Tuple[int, int] = (24, 28)
+    GENE_SMELL: Tuple[int, int] = (28, 32)
+    GENE_TOUCH: Tuple[int, int] = (32, 36)
+    GENE_TASTE: Tuple[int, int] = (36, 40)
+
+    GENE_HERB_EFF: Tuple[int, int] = (40, 44)
+    GENE_CARN_EFF: Tuple[int, int] = (44, 48)
+    GENE_AGGRESSION: Tuple[int, int] = (48, 52)
+    GENE_FEAR: Tuple[int, int] = (52, 56)
+    GENE_FERTILITY: Tuple[int, int] = (56, 60)
+    GENE_ENCODER_FID: Tuple[int, int] = (60, 64)
+
+    LOCUS_SEX: int = 64
+
+    # Direct accessors returning normalized floats [0.0, 1.0]
+    @property
+    def speed(self) -> float:
+        return self.decode_normalized(*self.GENE_SPEED)
+
+    @property
+    def agility(self) -> float:
+        return self.decode_normalized(*self.GENE_AGILITY)
+
+    @property
+    def size(self) -> float:
+        return self.decode_normalized(*self.GENE_SIZE)
+
+    @property
+    def somatic_maint(self) -> float:
+        return self.decode_normalized(*self.GENE_SOMATIC_MAINT)
+
+    @property
+    def sight_range(self) -> float:
+        return self.decode_normalized(*self.GENE_SIGHT_RANGE)
+
+    @property
+    def sight_fov(self) -> float:
+        return self.decode_normalized(*self.GENE_SIGHT_FOV)
+
+    @property
+    def hearing(self) -> float:
+        return self.decode_normalized(*self.GENE_HEARING)
+
+    @property
+    def smell(self) -> float:
+        return self.decode_normalized(*self.GENE_SMELL)
+
+    @property
+    def touch(self) -> float:
+        return self.decode_normalized(*self.GENE_TOUCH)
+
+    @property
+    def taste(self) -> float:
+        return self.decode_normalized(*self.GENE_TASTE)
+
+    @property
+    def herbivore_eff(self) -> float:
+        return self.decode_normalized(*self.GENE_HERB_EFF)
+
+    @property
+    def carnivore_eff(self) -> float:
+        return self.decode_normalized(*self.GENE_CARN_EFF)
+
+    @property
+    def aggression(self) -> float:
+        return self.decode_normalized(*self.GENE_AGGRESSION)
+
+    @property
+    def fear(self) -> float:
+        return self.decode_normalized(*self.GENE_FEAR)
+
+    @property
+    def fertility(self) -> float:
+        return self.decode_normalized(*self.GENE_FERTILITY)
+
+    @property
+    def encoder_fidelity(self) -> float:
+        return self.decode_normalized(*self.GENE_ENCODER_FID)
+
+    @property
+    def sex_strategy(self) -> int:
+        return self.get_digit(self.LOCUS_SEX)
+
+
+# =============================================================================
+# Plant DNA (24 Quaternary Digits)
+# =============================================================================
+
+class PlantDNA(BaseDNA):
+    """Encodes structural, metabolic, defensive, and reproductive traits
+
+    for sessile vegetation across a 24-digit quaternary chromosome.
+    """
+
+    STANDARD_LENGTH: int = 24
+
+    # Gene index mappings (start, end)
+    GENE_MAX_BIOMASS: Tuple[int, int] = (0, 4)
+    GENE_GROWTH_RATE: Tuple[int, int] = (4, 8)
+    GENE_TOXICITY: Tuple[int, int] = (8, 12)
+    GENE_DISPERSAL_RADIUS: Tuple[int, int] = (12, 16)
+    GENE_SEED_CLUTCH: Tuple[int, int] = (16, 20)
+    GENE_ROOT_REACH: Tuple[int, int] = (20, 24)
+
+    # Direct accessors returning normalized floats [0.0, 1.0]
+    @property
+    def max_biomass(self) -> float:
+        return self.decode_normalized(*self.GENE_MAX_BIOMASS)
+
+    @property
+    def growth_rate(self) -> float:
+        return self.decode_normalized(*self.GENE_GROWTH_RATE)
+
+    @property
+    def toxicity(self) -> float:
+        return self.decode_normalized(*self.GENE_TOXICITY)
+
+    @property
+    def dispersal_radius(self) -> float:
+        return self.decode_normalized(*self.GENE_DISPERSAL_RADIUS)
+
+    @property
+    def seed_clutch(self) -> float:
+        return self.decode_normalized(*self.GENE_SEED_CLUTCH)
+
+    @property
+    def root_reach(self) -> float:
+        return self.decode_normalized(*self.GENE_ROOT_REACH)
