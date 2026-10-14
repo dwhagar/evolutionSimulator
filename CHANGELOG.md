@@ -7,7 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Changed
-- `DOCS.4`: Milestone 0.1 set by the owner: data models for traits and DNA, with a document on how they interact. The version line moves from 0.0 to 0.1 ([docs/versioning.md](docs/versioning.md)). [#PRN](https://github.com/dwhagar/evolutionSimulator/pull/PRN)
+- `DOCS.4`: Milestone 0.1 set by the owner: data models for traits and DNA, with a document on how they interact. The version line moves from 0.0 to 0.1 ([docs/versioning.md](docs/versioning.md)). [#21](https://github.com/dwhagar/evolutionSimulator/pull/21)
 - `DOCS.1`: TODO items have `AREA.N` task IDs, and issues and PRs are labelled with them (see [TODO.md](TODO.md)). [#19](https://github.com/dwhagar/evolutionSimulator/pull/19)
 
 ## 0.0 — Pre-release
