@@ -12,7 +12,7 @@ Two pressures the world will supply are stood in for, or ``recovery`` and ``pare
 nothing to pay for: now and then an animal is injured (so healing matters), and a newborn cannot eat
 for its first 18 hours (so the energy its parents gave it matters).
 
-Run ``python scripts/reproduction_check.py [ticks] [seed]``. A gene "piles up at an end" when the
+Run ``python scripts/reproduction_check.py [ticks] [seed] [injury_chance] [newborn_fast_ticks]``. A gene "piles up at an end" when the
 population's mean value in the last fifth of the run is within ``EDGE`` of 0 or 1.
 """
 
@@ -139,7 +139,12 @@ def piled_up(history: list[dict[str, float]]) -> list[str]:
 def main(argv: list[str]) -> int:
     ticks = int(argv[1]) if len(argv) > 1 else 20_000
     seed = int(argv[2]) if len(argv) > 2 else 1
-    eco = run(ticks, Ecology(seed=seed), report_every=1)
+    eco = Ecology(seed=seed)
+    if len(argv) > 3:
+        eco.injury_chance = float(argv[3])
+    if len(argv) > 4:
+        eco.newborn_fast_ticks = int(argv[4])
+    eco = run(ticks, eco, report_every=1)
     stuck = piled_up(eco.history)
     final = eco.history[-1]
     if final["population"] == 0:

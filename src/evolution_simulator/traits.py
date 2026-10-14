@@ -15,7 +15,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import Enum
 
-from evolution_simulator.brain import DEFAULT_SHAPE, Brain
+from evolution_simulator.brain import DEFAULT_BLUEPRINT, Brain
 from evolution_simulator.brain_adapter import (
     BrainDecision,
     Percepts,
@@ -26,6 +26,7 @@ from evolution_simulator.brain_adapter import (
 )
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
+from evolution_simulator.learning import Learner, LearningRules, State
 from evolution_simulator.sense_genes import direction_noise, sense_cost
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 
@@ -35,14 +36,18 @@ from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 BRAIN_NEURON_COST: float = 0.0005
 """Per hidden or output neuron."""
 BRAIN_CONNECTION_COST: float = 0.0001
-"""Per active connection, a weight whose absolute value is above ``BRAIN_ACTIVE_THRESHOLD``."""
-BRAIN_ACTIVE_THRESHOLD: float = 0.25
-"""The brain's dead zone (``BRAIN.21``): a weight at or below this is off, both for cost and in
-``Brain.decide``, so a connection pays only if it does something."""
+"""Per active connection, a weight whose absolute value is above ``BRAIN_DEAD_ZONE``."""
+BRAIN_DEAD_ZONE: float = 0.5
+"""The brain's dead zone (``BRAIN.21``, ``BRAIN.23``): a weight at or below this is off, both for cost
+and in ``Brain.decide``, so a connection pays only if it does something. At 0.5 a quarter of random
+weights are off (the levels at about +-0.13 and +-0.4)."""
 DECISION_INTERVAL: int = 1
-"""Ticks between brain decisions (``BRAIN.11``); between them the animal keeps its last decision.
-Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to move
-into the shared config object (TRAIT.3), and later perhaps to become a gene (reaction time)."""
+"""Ticks between brain decisions (``BRAIN.11``) for an animal built with an explicit interval; the
+default comes from the animal's ``reaction_time`` gene. Between decisions the animal keeps its last
+one. Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to
+move into the shared config object (TRAIT.3)."""
+PAIN_FULL_FRACTION: float = 0.2
+"""Losing this fraction of maximum health (or more) since the last decision reads as full pain."""
 
 # Time. Every per-tick rate in this file is "per reference tick" (REPRO.8): an hour of simulated
 # time. The world multiplies the rates by ``dt = seconds_per_tick / REFERENCE_TICK_SECONDS``, so a
@@ -159,6 +164,8 @@ class BaseTraits:
         self.current_energy: float = 0.0
         self.current_health: float = 0.0
         self.accumulated_damage: float = 0.0
+        self.damage_since_decision: float = 0.0  # health lost, for the brain's pain input
+        self.damage_taken: float = 0.0  # health lost over the whole life, for learning's reward
         self.vitality: float = 1.0  # Scales from 1.0 (prime) down to 0.0 (dead)
         self.age_ticks: int = 0
         self.is_alive: bool = True
@@ -168,7 +175,10 @@ class BaseTraits:
         if not self.is_alive:
             return 0.0
 
+        before = self.current_health
         self.current_health = max(0.0, self.current_health - amount)
+        self.damage_since_decision += before - self.current_health
+        self.damage_taken += before - self.current_health
         if self.current_health <= 0.0:
             self._die()
         else:
@@ -236,12 +246,14 @@ class AnimalTraits(BaseTraits):
     metabolic trade-offs, senescence degradation, and environmental drive flags.
     """
 
-    def __init__(self, dna: Genome, decision_interval: int = DECISION_INTERVAL) -> None:
+    def __init__(self, dna: Genome, decision_interval: int | None = None) -> None:
         if dna.layout != ANIMAL_LAYOUT:
             raise TypeError("AnimalTraits requires DNA with the animal layout.")
+        t = ANIMAL_TRAITS.express(dna)
+        if decision_interval is None:
+            decision_interval = int(t["decision_interval"])
         if decision_interval < 1:
             raise ValueError(f"Decision interval must be at least 1 tick, got {decision_interval}.")
-        t = ANIMAL_TRAITS.express(dna)
         super().__init__(dna, t)
 
         # ---------------------------------------------------------------------
@@ -279,12 +291,23 @@ class AnimalTraits(BaseTraits):
         self.smell_noise: float = direction_noise("smell", t["smell"])
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
         # The brain is read from the genome once at birth, like the body.
-        self.brain: Brain = Brain.from_values(
-            DEFAULT_SHAPE, dna.values("brain"), dead_zone=BRAIN_ACTIVE_THRESHOLD
+        # Its size comes from the gates in the genome, its sharpness from the gain gene.
+        self.innate_brain: Brain = DEFAULT_BLUEPRINT.build(
+            dna.values("brain"), dead_zone=BRAIN_DEAD_ZONE, gain=t["brain_gain"]
         )
+        # What it thinks with: the inherited brain plus what it has learned (BRAIN.24).
+        self.brain: Brain = self.innate_brain
+        self.curiosity: float = t["curiosity"]
+        self.learning_rate: float = t["learning_rate"]
+        self.learning_rules: LearningRules | None = LearningRules()
+        """The world's learning settings; ``None`` turns learning off."""
+        self.learner: Learner | None = None
+        self.matings: int = 0
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
         self._decision: BrainDecision | None = None
+        self._last_threat: float = 0.0
+        """The threat closeness the last time the brain looked, for the learning log."""
         self._ticks_since_decision: int = 0
         self.brain_upkeep: float = (
             BRAIN_NEURON_COST * self.brain.neuron_count
@@ -506,6 +529,13 @@ class AnimalTraits(BaseTraits):
         self._ticks_since_decision = 0
         self.wanderer.reset()
 
+    @property
+    def pain(self) -> float:
+        """Health lost since the last decision as a share of the pain ceiling (0 to 1)."""
+        return min(
+            1.0, self.damage_since_decision / (PAIN_FULL_FRACTION * self.max_damage_capacity)
+        )
+
     def _effective_fear(self, mate_in_view: bool = False) -> float:
         """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down.
         A driven animal is bolder while a possible mate is in view (``DRIVE_BOLDNESS``)."""
@@ -529,6 +559,11 @@ class AnimalTraits(BaseTraits):
         from that and the wander turn it remembers: acting on the decision (and replacing the
         fixed-rule flags with it) belongs to the world loop.
         """
+        learner = self._active_learner(rng)
+        self._last_threat = percepts.threat_closeness
+        state = self._learning_state(percepts.threat_closeness) if learner is not None else None
+        if learner is not None and state is not None:
+            learner.observe(state)
         if self._decision is not None and self._ticks_since_decision < self.decision_interval:
             self._ticks_since_decision += 1
             return self._decision
@@ -541,18 +576,89 @@ class AnimalTraits(BaseTraits):
             health_ratio=self.current_health / self.max_damage_capacity,
             vitality=self.vitality,
             ready_to_mate=self.can_mate,
+            pain=self.pain,
             temperament=Temperament(
                 aggression=self.current_aggression,
                 fear=min(1.0, self._effective_fear(mate_in_view=percepts.mate_closeness > 0.0)),
                 repro_drive=self.effective_drive,
             ),
         )
-        decision = decode_outputs(self.brain.decide(inputs))
+        self.damage_since_decision = 0.0
+        hidden, proposal = self.brain.decide_with_hidden(inputs)
+        action = self._explore(proposal, rng)
+        if learner is not None and state is not None:
+            learner.record(state, hidden, proposal, action)
+        decision = decode_outputs(action)
         if rng is not None:
             decision = self.wanderer.apply(decision, percepts, rng)
         self._decision = decision
         self._ticks_since_decision = 1
         return decision
+
+    def cached_decision(self, rng: random.Random | None = None) -> BrainDecision | None:
+        """The decision to repeat this tick, or ``None`` if the brain must look at the world.
+
+        Between brain runs (``decision_interval``) ``think`` returns the last decision and ignores
+        the percepts, so the world can skip sensing for those ticks. An animal that is logging its
+        day (``BRAIN.24``) logs the threat level it saw when the brain last ran. Counts the tick
+        exactly as ``think`` does.
+        """
+        if self._decision is None or self._ticks_since_decision >= self.decision_interval:
+            return None
+        learner = self._active_learner(rng)
+        if learner is not None:
+            learner.observe(self._learning_state(self._last_threat))
+        self._ticks_since_decision += 1
+        return self._decision
+
+    def _explore(self, proposal: tuple[float, ...], rng: random.Random | None) -> tuple[float, ...]:
+        """The brain's proposal plus curiosity noise (``BRAIN.24``): each output moves by up to
+        ``curiosity`` either way and stays in its range. Without ``rng`` there is no noise."""
+        if rng is None or self.curiosity <= 0.0:
+            return proposal
+        signed = self.brain.shape.signed_outputs
+        c = self.curiosity
+        return tuple(
+            max(-1.0 if signed[k] else 0.0, min(1.0, o + rng.uniform(-c, c)))
+            for k, o in enumerate(proposal)
+        )
+
+    def _active_learner(self, rng: random.Random | None) -> Learner | None:
+        """The learner, made on first use, if this animal logs its day: learning is on in the
+        world, it has a learning rate, and noise is possible (nothing can be learned without it)."""
+        rules = self.learning_rules
+        if rules is None or rng is None or self.learning_rate <= 0.0 or self.curiosity <= 0.0:
+            return None
+        if self.learner is None:
+            self.learner = Learner(self.brain.shape.hidden, self.brain.shape.outputs, rules)
+        return self.learner
+
+    def _learning_state(self, threat: float) -> State:
+        return State(
+            energy=self.current_energy / self.max_energy,
+            damage=self.damage_taken / self.max_damage_capacity,
+            matings=self.matings,
+            threat=threat,
+        )
+
+    def learn_night(self) -> bool:
+        """The nightly learning step (``BRAIN.24``), run when the animal falls asleep: learn from
+        the day's log, switch to the inherited brain plus what is now learned, empty the log.
+        Returns whether the brain changed. The genome is never touched."""
+        learner = self.learner
+        if learner is None or not self.is_alive:
+            return False
+        state = State(
+            energy=self.current_energy / self.max_energy,
+            damage=self.damage_taken / self.max_damage_capacity,
+            matings=self.matings,
+            threat=0.0,
+        )
+        if not learner.sleep(state, self.learning_rate):
+            return False
+        weights, biases = learner.offsets
+        self.brain = self.innate_brain.with_output_offsets(weights, biases)
+        return True
 
     def _update_needs_and_drives(self) -> None:
         energy_ratio = self.current_energy / self.max_energy
@@ -691,6 +797,7 @@ class AnimalTraits(BaseTraits):
         for animal in (impregnator, bearer):
             animal.current_energy -= MATING_EFFORT * animal.max_energy
             animal.mating_cooldown = animal.cooldown_ticks
+            animal.matings += 1
         mean_fertility = 0.5 * (impregnator.phenotype["fertility"] + bearer.phenotype["fertility"])
         chance = FERTILITY_CONCEPTION_BASE + (FERTILITY_CONCEPTION_SLOPE * mean_fertility)
         taken = rng.random() < chance

@@ -249,6 +249,27 @@ ANIMAL_TRAITS = TraitSet(
             scale=Scale.LOG,
             description="Simulated days between matings, before the repair stretch.",
         ),
+        # How the brain operates (BRAIN.23). Curiosity and the learning rate wait for BRAIN.24.
+        TraitDef(
+            "brain_gain",
+            ("brain_gain",),
+            0.5,
+            2.0,
+            scale=Scale.LOG,
+            description="Multiplies every neuron's input sum: high is sharp, low is gradual.",
+        ),
+        TraitDef(
+            "decision_interval",
+            ("reaction_time",),
+            1,
+            4,
+            kind=Kind.INTEGER,
+            description="Ticks between brain decisions; a slower thinker is cheaper (BRAIN.11).",
+        ),
+        TraitDef("curiosity", ("curiosity",), 0.0, 0.5, description="Size of random output nudge."),
+        TraitDef(
+            "learning_rate", ("learning_rate",), 0.0, 2.0, description="Strength of learning."
+        ),
     ),
 )
 

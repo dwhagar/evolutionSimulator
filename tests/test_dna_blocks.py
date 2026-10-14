@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from evolution_simulator.brain import DEFAULT_SHAPE
+from evolution_simulator.brain import DEFAULT_BLUEPRINT
 from evolution_simulator.dna import DNA, BlockSpec, GeneSpec, GenomeLayout
 from evolution_simulator.layouts import (
     ANIMAL_LAYOUT,
@@ -113,12 +113,12 @@ def test_block_units_follow_the_groups():
 
 
 def test_animal_layout_has_the_brain_after_the_body():
-    assert BRAIN_GENE.count == DEFAULT_SHAPE.weight_count == 198
-    assert BRAIN_GENE.length == 396
+    assert BRAIN_GENE.count == DEFAULT_BLUEPRINT.value_count == 454
+    assert BRAIN_GENE.length == 908
     assert ANIMAL_LAYOUT.gene("brain").block is BRAIN_GENE
-    assert BODY == (0, 76)
-    assert BRAIN == (76, 472)
-    assert ANIMAL_LAYOUT.gene("sex_strategy").end == BODY[1]
+    assert BODY == (0, 92)
+    assert BRAIN == (92, 1000)
+    assert ANIMAL_LAYOUT.gene("learning_rate").end == BODY[1]
 
 
 def test_plant_layout_has_one_body_segment_and_no_blocks():
@@ -132,9 +132,9 @@ def test_units_tile_the_genome_with_one_per_gene_and_one_per_brain_group():
         assert start == position
         position = end
     assert position == N
-    assert len(ANIMAL_LAYOUT.units) == 21 + 9  # 21 body genes, 8 neurons and the output biases
+    assert len(ANIMAL_LAYOUT.units) == 25 + 17  # 25 body genes, 16 slots and the output biases
     brain_units = [u for u in ANIMAL_LAYOUT.units if u[0] >= BRAIN[0]]
-    assert [(end - start) // 2 for start, end in brain_units] == list(DEFAULT_SHAPE.group_sizes)
+    assert [(end - start) // 2 for start, end in brain_units] == list(DEFAULT_BLUEPRINT.group_sizes)
 
 
 def test_segments_must_be_consecutive_and_named():
@@ -146,7 +146,7 @@ def test_segments_must_be_consecutive_and_named():
 
 
 def test_layout_mutation_defaults():
-    assert ANIMAL_LAYOUT.default_mutations["body"] == pytest.approx(0.76)
+    assert ANIMAL_LAYOUT.default_mutations["body"] == pytest.approx(0.92)
     assert ANIMAL_LAYOUT.default_mutations["brain"] == 1.0
     assert PLANT_LAYOUT.default_mutations["body"] == pytest.approx(0.15)  # 0.005 per digit
     assert BLOCKY.default_mutations["brain"] == 2.0
@@ -186,7 +186,7 @@ def test_values_reads_a_block_onto_its_range():
 def test_values_of_the_brain_cover_the_range():
     low = animal("0" * N).values("brain")
     high = animal("3" * N).values("brain")
-    assert len(low) == len(high) == 198
+    assert len(low) == len(high) == 454
     assert set(low) == {-2.0} and set(high) == {2.0}
     for seed in range(5):
         values = DNA.random(ANIMAL_LAYOUT, rng(seed)).values("brain")
@@ -200,14 +200,14 @@ def test_values_rejects_plain_genes():
 
 def test_a_block_is_also_readable_as_a_plain_gene_slice():
     dna = DNA.random(ANIMAL_LAYOUT, rng(2))
-    assert len(dna.slice_of("brain")) == 396
+    assert len(dna.slice_of("brain")) == 908
 
 
 def test_replaced_swaps_one_gene_only():
     dna = DNA.random(ANIMAL_LAYOUT, rng(1))
-    digits = BRAIN_GENE.encode([1.0] * 198)
+    digits = BRAIN_GENE.encode([1.0] * 454)
     child = dna.replaced("brain", digits)
-    assert child.values("brain") == pytest.approx((1.0 + 0.0,) * 198, abs=0.14)
+    assert child.values("brain") == pytest.approx((1.0 + 0.0,) * 454, abs=0.14)
     assert child.sequence[: BRAIN[0]] == dna.sequence[: BRAIN[0]]
     with pytest.raises(ValueError):
         dna.replaced("brain", (0, 1))
@@ -225,9 +225,9 @@ def test_default_animal_mutation_does_not_let_the_brain_swamp_the_body():
         counts = changed_per_segment(dna, dna.mutated(r))
         body += counts["body"]
         brain += counts["brain"]
-    assert body / trials == pytest.approx(0.76, abs=0.1)
+    assert body / trials == pytest.approx(0.92, abs=0.1)
     assert brain / trials == pytest.approx(1.0, abs=0.15)
-    # per-digit 0.01 everywhere would have given about 3.96 brain changes per child
+    # per-digit 0.01 everywhere would have given about 9 brain changes per child
 
 
 def test_plant_default_is_half_a_percent_per_digit():
@@ -260,7 +260,7 @@ def test_a_segment_left_out_keeps_its_layout_default():
         changed_per_segment(dna, dna.mutated(r, mutations_per_segment={"brain": 0.0}))["body"]
         for _ in range(trials)
     )
-    assert body / trials == pytest.approx(0.76, abs=0.1)
+    assert body / trials == pytest.approx(0.92, abs=0.1)
 
 
 def test_zero_in_one_segment_freezes_it():
@@ -290,7 +290,7 @@ def test_segment_mutation_is_deterministic_and_leaves_the_parent_alone():
 def test_a_count_above_the_segment_length_caps_at_every_digit_changing():
     dna = DNA.random(ANIMAL_LAYOUT, rng(1))
     child = dna.mutated(rng(2), mutations_per_segment={"body": 1e6, "brain": 0.0})
-    assert changed_per_segment(dna, child) == {"body": 76, "brain": 0}
+    assert changed_per_segment(dna, child) == {"body": 92, "brain": 0}
 
 
 def test_per_digit_rate_still_means_the_same_thing_everywhere():
