@@ -17,6 +17,7 @@ from evolution_simulator.brain import DEFAULT_SHAPE, Brain
 from evolution_simulator.brain_adapter import (
     BrainDecision,
     Percepts,
+    Temperament,
     Wanderer,
     build_inputs,
     decode_outputs,
@@ -260,11 +261,17 @@ class AnimalTraits(BaseTraits):
         if self.is_alive:
             self._update_needs_and_drives()
 
+    def _effective_fear(self) -> float:
+        """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down."""
+        return self.base_fear_weight * (1.2 - (0.5 * self.vitality))
+
     def think(self, percepts: Percepts, rng: random.Random | None = None) -> BrainDecision:
         """Ask the brain what to do given what the world reports.
 
         Adds this animal's own state (energy, health, vitality, readiness to mate) to the world's
-        ``percepts`` and returns the brain's decision. Pass ``rng`` to turn on the wander fallback
+        ``percepts`` and returns the brain's decision. Its behaviour genes bend what the brain sees:
+        aggression (as it currently acts, after hunger, crowding and size) scales how close prey
+        looks and fear scales how close a threat looks (``BRAIN.14``). Pass ``rng`` to turn on the wander fallback
         (``BRAIN.16``): when the animal senses nothing or its brain outputs are all quiet, the
         decision comes back with a random turn and ``wandering`` set. Without ``rng`` the brain's
         decision is returned as is. It only reads state, apart from the wander turn it remembers:
@@ -276,6 +283,9 @@ class AnimalTraits(BaseTraits):
             vitality=self.vitality,
             ready_to_mate=self.mating_cooldown == 0,
             percepts=percepts,
+            temperament=Temperament(
+                aggression=self.current_aggression, fear=min(1.0, self._effective_fear())
+            ),
         )
         decision = decode_outputs(self.brain.decide(inputs))
         if rng is not None:
@@ -304,7 +314,7 @@ class AnimalTraits(BaseTraits):
 
         # Fear vs Aggression Fight-or-Flight
         if self.env_threat_detected:
-            effective_fear = self.base_fear_weight * (1.2 - (0.5 * self.vitality))
+            effective_fear = self._effective_fear()
             if effective_fear > (self.current_aggression * size_confidence):
                 self.flag_in_fear = True
                 self.flag_wants_to_attack = False

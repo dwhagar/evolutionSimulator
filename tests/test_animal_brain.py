@@ -6,7 +6,13 @@ import pytest
 
 from evolution_simulator import traits as traits_module
 from evolution_simulator.brain import DEFAULT_SHAPE, Brain
-from evolution_simulator.brain_adapter import BrainDecision, Percepts, build_inputs, decode_outputs
+from evolution_simulator.brain_adapter import (
+    BrainDecision,
+    Percepts,
+    Temperament,
+    build_inputs,
+    decode_outputs,
+)
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import (
@@ -118,6 +124,7 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
                 traits.vitality,
                 True,
                 SEEN,
+                Temperament(traits.current_aggression, traits._effective_fear()),
             )
         )
     )
@@ -126,12 +133,12 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
 
 def test_pinned_decision_for_a_fixed_genome():
     decision = AnimalTraits(PINNED).think(SEEN)
-    assert decision.turn == pytest.approx(-0.744400851)
-    assert decision.speed == pytest.approx(0.994610372)
-    assert decision.eat_or_attack == pytest.approx(0.376072255)
-    assert decision.seek_mating == pytest.approx(0.981196777)
-    assert decision.alarm_call == pytest.approx(0.983103972)
-    assert decision.mating_call == pytest.approx(0.276822535)
+    assert decision.turn == pytest.approx(-0.786177308)
+    assert decision.speed == pytest.approx(0.994792968)
+    assert decision.eat_or_attack == pytest.approx(0.318724120)
+    assert decision.seek_mating == pytest.approx(0.984340674)
+    assert decision.alarm_call == pytest.approx(0.980478501)
+    assert decision.mating_call == pytest.approx(0.257052899)
     assert decision.eats_or_attacks is False and decision.seeks_mating is True
 
 
@@ -196,3 +203,47 @@ def test_random_animals_always_decide_inside_the_output_ranges():
         assert -1.0 <= d.turn <= 1.0
         assert all(0.0 <= v <= 1.0 for v in (d.speed, d.eat_or_attack, d.seek_mating))
         assert all(0.0 <= v <= 1.0 for v in (d.alarm_call, d.mating_call))
+
+
+# --- behaviour genes (BRAIN.14) ----------------------------------------------
+
+THREAT = Percepts(threat_closeness=0.5, threat_direction=0.3)
+PREY = Percepts(prey_closeness=0.5, prey_direction=-0.3)
+
+
+def with_genes(**genes: str) -> AnimalTraits:
+    """The pinned animal with the named body genes replaced."""
+    dna = PINNED
+    for name, digits in genes.items():
+        dna = dna.replaced(name, [int(d) for d in digits])
+    return AnimalTraits(dna)
+
+
+def test_the_fear_gene_changes_the_reaction_to_a_threat_only():
+    timid, bold = with_genes(fear="3333"), with_genes(fear="0000")
+    assert timid.think(THREAT) != bold.think(THREAT)
+    assert timid.think(Percepts()) == bold.think(Percepts())
+    assert timid.think(PREY) == bold.think(PREY)
+
+
+def test_the_aggression_gene_changes_the_reaction_to_prey_only():
+    fierce, meek = with_genes(aggression="3333"), with_genes(aggression="0000")
+    assert fierce.think(PREY) != meek.think(PREY)
+    assert fierce.think(Percepts()) == meek.think(Percepts())
+    assert fierce.think(THREAT) == meek.think(THREAT)
+
+
+def test_the_temperament_given_to_the_brain_follows_the_animals_current_drives():
+    traits = with_genes(aggression="2000", fear="1000")
+    calm = traits.think(PREY)
+    traits.current_energy = traits.max_energy * 0.1  # starving: aggression boosts
+    assert traits.current_aggression > 0.0
+    assert traits.think(PREY) != calm
+
+
+def test_fear_as_the_fixed_rule_uses_it_comes_from_one_place():
+    traits = with_genes(fear="3000")
+    traits.set_environmental_stimuli(threat_detected=True)
+    assert traits.flag_in_fear == (traits._effective_fear() > traits.current_aggression)
+    traits.vitality = 0.2
+    assert traits._effective_fear() == pytest.approx(traits.base_fear_weight * (1.2 - 0.1))
