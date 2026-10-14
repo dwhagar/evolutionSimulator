@@ -13,7 +13,8 @@ creature's own sense range. A sense that cannot see a thing reports 0 for it.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+import random
+from dataclasses import dataclass, replace
 
 ACTION_THRESHOLD: float = 0.5
 """An action output above this value counts as "do it" (eat or attack, seek mate, call)."""
@@ -70,6 +71,11 @@ class Percepts:
     call_direction: float = 0.0
     crowding: float = 0.0
 
+    @property
+    def senses_nothing(self) -> bool:
+        """True when the world reports nothing at all: no creature, plant, contact, call or crowd."""
+        return self == Percepts()
+
 
 @dataclass(frozen=True)
 class BrainDecision:
@@ -81,6 +87,8 @@ class BrainDecision:
     seek_mating: float
     alarm_call: float
     mating_call: float
+    wandering: bool = False
+    """True when the wander fallback replaced the brain's steering (see ``Wanderer``)."""
 
     @property
     def eats_or_attacks(self) -> bool:
@@ -97,6 +105,82 @@ class BrainDecision:
     @property
     def calls_for_mate(self) -> bool:
         return self.mating_call > ACTION_THRESHOLD
+
+    @property
+    def has_action(self) -> bool:
+        """Any of the four action outputs is above the action threshold."""
+        return self.eats_or_attacks or self.seeks_mating or self.calls_alarm or self.calls_for_mate
+
+
+@dataclass(frozen=True)
+class WanderPolicy:
+    """When a creature counts as unable to decide, and how it wanders instead.
+
+    The brain has no memory, so a creature that senses nothing, or whose outputs all sit near zero,
+    would stand still or circle forever and never give its senses anything new. The fallback replaces
+    its steering with a random turn so it moves through the world.
+    """
+
+    when_blind: bool = True
+    """Wander when the world reports nothing at all (``Percepts.senses_nothing``)."""
+    when_idle: bool = True
+    """Wander when the brain's own outputs say nothing: little turn, little speed, no action."""
+    idle_turn: float = 0.1
+    """Below this absolute turn output the creature is not steering."""
+    idle_speed: float = 0.1
+    """Below this speed output the creature is not moving."""
+    speed: float = 0.4
+    """Speed output while wandering (the brain's own speed is kept if it is higher)."""
+    redraw_chance: float = 0.25
+    """Chance per wandering tick of picking a new random turn; otherwise the last one is kept, so the
+    path bends smoothly instead of jittering on the spot."""
+
+    def __post_init__(self) -> None:
+        for name in ("idle_turn", "idle_speed", "speed", "redraw_chance"):
+            value = getattr(self, name)
+            if not 0.0 <= value <= 1.0:
+                raise ValueError(f"Wander {name} must be between 0 and 1, got {value}.")
+
+
+class Wanderer:
+    """The random-wander fallback for one creature (``BRAIN.16``).
+
+    Holds the current wander turn, so keep one per creature. ``apply`` returns the brain's decision
+    untouched when the creature can decide, and otherwise a copy with a random turn, at least the
+    wander speed, and ``wandering`` set. The action outputs are never changed. All randomness comes
+    from the ``random.Random`` passed in, so runs are repeatable, and it is only used while wandering.
+    """
+
+    def __init__(self, policy: WanderPolicy | None = None) -> None:
+        self.policy = policy if policy is not None else WanderPolicy()
+        self._turn: float | None = None
+
+    def undecided(self, decision: BrainDecision, percepts: Percepts) -> bool:
+        """Whether this decision should be replaced by wandering."""
+        policy = self.policy
+        if policy.when_blind and percepts.senses_nothing:
+            return True
+        return (
+            policy.when_idle
+            and abs(decision.turn) < policy.idle_turn
+            and decision.speed < policy.idle_speed
+            and not decision.has_action
+        )
+
+    def apply(
+        self, decision: BrainDecision, percepts: Percepts, rng: random.Random
+    ) -> BrainDecision:
+        if not self.undecided(decision, percepts):
+            self._turn = None  # next time it gets stuck it picks a fresh direction
+            return decision
+        if self._turn is None or rng.random() < self.policy.redraw_chance:
+            self._turn = rng.uniform(-1.0, 1.0)
+        return replace(
+            decision,
+            turn=self._turn,
+            speed=max(decision.speed, self.policy.speed),
+            wandering=True,
+        )
 
 
 def _scaled(value: float, low: float, high: float, name: str) -> float:
