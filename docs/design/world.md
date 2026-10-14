@@ -225,7 +225,7 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   the senses 30%, the brain and input building 35% (`sense_channels.build_inputs` and its
   clamps are the biggest single piece), plant growth 8%. The fast presets still cannot be met at
   this size.
-  `SENSE.12` made it slower again: about 69 ms per tick at 300 animals and 3000 plants (7 ms at 60
+  `SENSE.12` made it slower again: about 75 ms per tick at 300 animals and 3000 plants (6 ms at 60
   and 300), because three senses are now searched and reported instead of one, over a wider
   reach. Of that, the plant search (`plants_within`) is about a fifth and the sensing step about two
   fifths of the senses. Pruning the plants to two and moving the step's neighbour frame to plain
