@@ -408,6 +408,41 @@ python -m evolution_simulator list --out runs/
   text), the buttons against the window's actions, the readouts against frames, the custom speed, the
   no-draw logic, and the keys through `QTest.keyClick`.
 
+### As built: the charts (`UX.16`)
+
+`viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with five
+pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
+
+- **History reaches the screen through the backend.** `Batch.history` carries the recorder's
+  `HistorySamples` in the batch that follows each new sample (once per simulated day, not every
+  frame), `ViewerController` keeps it as `controller.history` and emits `history_received`, and a
+  panel built late starts from the latest. `LocalBackend` makes the `Recorder` itself (`record=False`
+  for none) and calls `observe()` on each poll, so the `FakeSimulation`, which has no step listener,
+  is sampled once per poll (a long update gives one coarser sample). **UX.7's client has to carry
+  the history in its batches** the same way (a `HistorySamples` or its `to_dict`, once per sample),
+  and **UX.10** will load a saved history into the same signal.
+- **Tabs.** Population (animals, plants, corpses); Births and deaths (animals or plants, with the
+  deaths split by cause, only the causes that happened); Condition (average energy, health, age and
+  diet, and the shares asleep, pregnant and ready to mate); Traits and genes (any recorded statistic
+  of the animals or the plants: its mean, a band of one standard deviation kept inside the range
+  seen, and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
+  a gene as shares of the population, with a slider over the days that have one, which follows the
+  newest unless the user scrubbed back).
+- **Axis.** Simulated days, and years once the newest sample is two years in; flows are per day on
+  every tier. Mouse wheel zooms and drag pans, right-click is pyqtgraph's menu (it also exports an
+  image), and "Reset view" fits the data again.
+- **Differences from the first sketch.** The band is the mean plus or minus one deviation, not the
+  10th to 90th percentile, because the recorder keeps the mean, deviation, lowest and highest and not
+  percentiles. The number of lineages is not charted (the recorder does not count them; a separate
+  item if wanted). Stat names are made readable by `pretty_stat`; the display-name catalogue
+  (UX.29) can replace it.
+- **Drawing.** Redraws are throttled (200 ms) and only the tab in view is drawn, and only while the
+  panel is visible, so a fast-forward costs the charts almost nothing. Colours are the Okabe and Ito
+  colour-blind-safe set, one fixed colour per death cause, and the plots take the window's own
+  background and text colours.
+- **Tests.** `tests/test_charts.py`: the helpers, the history path (backend, controller), and every
+  tab against a real ten-day world history and made-up ones, offscreen.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

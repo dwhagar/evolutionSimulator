@@ -12,6 +12,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
+from evolution_simulator.history import HistorySamples, Recorder
 from evolution_simulator.session import Command, Frame, Session, SessionEvent, Status
 from evolution_simulator.world.views import AnimalDetail
 
@@ -23,10 +24,15 @@ class Batch:
     frame: Frame | None = None
     detail: AnimalDetail | None = None
     events: tuple[SessionEvent, ...] = ()
+    history: HistorySamples | None = None
+    """The statistics so far, whenever a new sample has been taken since the last poll (once per
+    simulated day), so the charts redraw on a new point and not on every frame."""
 
     @property
     def empty(self) -> bool:
-        return self.frame is None and self.detail is None and not self.events
+        return (
+            self.frame is None and self.detail is None and not self.events and self.history is None
+        )
 
 
 class Backend(Protocol):
@@ -45,12 +51,18 @@ class Backend(Protocol):
 
 
 class LocalBackend:
-    """A ``Session`` in this process: ``poll`` runs the ticks that real time owes."""
+    """A ``Session`` in this process: ``poll`` runs the ticks that real time owes.
 
-    def __init__(self, session: Session) -> None:
+    It keeps a statistics ``Recorder`` on the session's simulation (``record=False`` for none) and
+    publishes its ``HistorySamples`` in the batch that follows each new sample.
+    """
+
+    def __init__(self, session: Session, *, record: bool = True) -> None:
         self.session = session
         self._events: list[SessionEvent] = []
         self._unsubscribe = session.subscribe(self._events.append)
+        self.recorder: Recorder | None = Recorder(session.simulation) if record else None
+        self._published: int | None = None
 
     def send(self, command: Command) -> None:
         self.session.handle(command)
@@ -58,7 +70,19 @@ class LocalBackend:
     def poll(self) -> Batch:
         update = self.session.update()
         events, self._events = tuple(self._events), []
-        return Batch(update.frame, update.detail, events)
+        return Batch(update.frame, update.detail, events, self._new_history())
+
+    def _new_history(self) -> HistorySamples | None:
+        if self.recorder is None:
+            return None
+        self.recorder.observe()  # a simulation with no step listener is sampled here
+        history = self.recorder.history()
+        latest = history.latest
+        day = None if latest is None else latest.day
+        if day == self._published:
+            return None
+        self._published = day
+        return history
 
     @property
     def status(self) -> Status:
@@ -66,3 +90,5 @@ class LocalBackend:
 
     def close(self) -> None:
         self._unsubscribe()
+        if self.recorder is not None:
+            self.recorder.close()
