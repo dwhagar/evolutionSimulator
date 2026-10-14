@@ -24,6 +24,7 @@ from evolution_simulator.brain_adapter import (
 )
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
+from evolution_simulator.sense_genes import direction_noise, sense_cost
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 
 # Energy cost of thinking per tick, added to basal metabolism. Placeholders for the first brain
@@ -140,13 +141,18 @@ class AnimalTraits(BaseTraits):
         self.tactile_range: float = self.body_radius * t["tactile_factor"]
 
         # Neural & Digestive Upkeep ("The Brain and Gut Tax")
-        sensory_overhead = 0.08 * (
-            (t["sight_range"] ** 2)
-            + (t["hearing"] ** 2)
-            + (t["smell"] ** 2)
-            + (t["touch"] ** 2)
-            + (t["taste"] ** 2)
+        # Organs cost in proportion to the area they cover (SENSE.11).
+        sensory_overhead = sense_cost(
+            self.effective_sight_range,
+            self.fov_degrees,
+            self.hearing_range,
+            self.smell_range,
+            t["touch"],
+            t["taste"],
         )
+        self.vision_noise: float = direction_noise("vision", t["sight_range"])
+        self.hearing_noise: float = direction_noise("hearing", t["hearing"])
+        self.smell_noise: float = direction_noise("smell", t["smell"])
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
         # The brain is read from the genome once at birth, like the body.
         self.brain: Brain = Brain.from_values(DEFAULT_SHAPE, dna.values("brain"))
