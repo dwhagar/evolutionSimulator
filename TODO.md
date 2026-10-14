@@ -27,6 +27,7 @@ first), blocked (on another item or an answer), done.
 
 One issue holds the open questions: [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) (six short questions, each with a default the build threads use
 until you answer). Issue [#27](https://github.com/dwhagar/evolutionSimulator/issues/27) (first-generation brains) is part of it and stays open.
+The senses research added six more, [#40](https://github.com/dwhagar/evolutionSimulator/issues/40) to [#45](https://github.com/dwhagar/evolutionSimulator/issues/45) (SENSE.2 to SENSE.7), also with defaults. More owner questions (BRAIN.17 to BRAIN.20, WORLD.6) are being filed by Research 1.
 
 ## Milestone 0.1: data models for DNA and traits (kept open)
 
@@ -36,7 +37,6 @@ how the two interact. The owner chose to keep 0.1 open until the refinement belo
 
 | ID | Item | Status | Needs |
 | --- | --- | --- | --- |
-| DNA.7 | Crossover: gene-boundary cut points by default (about one cut per genome), with a separate crossover setting for how closely it follows whole genes (default: close but slightly off). Reapply from `refs/pull/20/head` on the new layout API | ready | |
 | DNA.8 | Mutation: expected changes per genome, per-position weights that mutate low digits more often (option B), a separate mutation setting for how random it is (default random, with occasional big jumps, especially in plants), and a mutation operator that reads `TraitDef.mutation_step` | ready | |
 | DNA.13 | Diploid genomes: two copies of every gene, with a simple dominance model (default codominant, averaged); haploid kept as an option | ready | |
 | REPRO.3 | Plants reproduce asexually (clone plus mutation), mutate slower and live longer | ready | DNA.8 |
@@ -44,7 +44,7 @@ how the two interact. The owner chose to keep 0.1 open until the refinement belo
 | REPRO.5 | Replace `fertility` with three genes: caregiving (energy per offspring), a limit on how often reproduction can happen, and a drive to reproduce; all three affect behaviour. Design note first | research | Research 2 |
 | TRAIT.6 | Longevity (`somatic_maint`) trades against reproduction (main), plus an upkeep cost that grows faster than the benefit | ready | |
 | TRAIT.5 | Fix the prototype's initial-state quirks and add a mating-cost guard (reapply from `refs/pull/20/head`) | ready | |
-| TRAIT.3 | Move all tuning constants in `traits.py` into one config object, including the brain costs `BRAIN_NEURON_COST`, `BRAIN_CONNECTION_COST` and `BRAIN_ACTIVE_THRESHOLD` (a random brain costs about 4% of basal metabolism) | blocked | REPRO.5, TRAIT.6, WORLD.2 |
+| TRAIT.3 | Move all tuning constants in `traits.py` into one config object (including the sense costs, see Senses), including the brain costs `BRAIN_NEURON_COST`, `BRAIN_CONNECTION_COST` and `BRAIN_ACTIVE_THRESHOLD` (a random brain costs about 4% of basal metabolism) | blocked | REPRO.5, TRAIT.6, WORLD.2 |
 | DNA.9 | Decide sex at birth versus inherited (sex types to confirm, [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 2) | blocked | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) |
 
 Items DNA.7, DNA.8, TRAIT.3 and TRAIT.5 come from section 9.5 of
@@ -57,16 +57,14 @@ DNA API; the code stays at `refs/pull/20/head`.
 | ID | Item | Status | Needs |
 | --- | --- | --- | --- |
 | BRAIN.13 | Brain shape evolves: genes control the network and how it operates; the structure is fixed at birth. Design note first, since the genome length stays fixed (a maximum brain plus genes that switch neurons and connections on or off; [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 6) | research | Research 1 |
-| BRAIN.14 | Behaviour comes from genetic factors as well as the network: the behaviour genes (aggression, fear, and the reproduction genes from REPRO.5) feed the brain | ready | |
 | BRAIN.15 | Learning during life: creatures sleep at night to regain energy and their weights update (this is also their memory). Design note first: the learning rule, what counts as reward, and whether changes are inherited ([#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 5) | research | Research 1 |
-| BRAIN.16 | Random wander fallback: a creature that cannot decide moves in a random direction or turns, so its senses start giving it information | ready | |
 | BRAIN.17 | Owner question (filed by Research 1): maximum brain size and dormant neurons | waiting on owner | Research 1 files the issue |
 | BRAIN.18 | Owner question: which brain operating settings are genes (gain, reaction speed, learning rate, curiosity, sleep need) | waiting on owner | Research 1 files the issue |
 | BRAIN.19 | Owner question: what counts as reward in learning | waiting on owner | Research 1 files the issue |
 | BRAIN.20 | Owner question: how large a nightly change may be | waiting on owner | Research 1 files the issue |
 | BRAIN.21 | Use one threshold for both the brain's energy cost and `Brain.decide` (cost counts only weights above `BRAIN_ACTIVE_THRESHOLD` 0.25 while `decide` uses every weight, so small weights act for free) | ready | |
-| BRAIN.9 | Seed the first generation by fitting weights to the current fixed rule (95%+ agreement on random inputs, tested); `BlockSpec.encode` and `DNA.replaced` are ready for it | blocked | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 4 |
-| BRAIN.10 | Act on the brain's decisions: set the attack, mate and signal flags and the movement and feeding from `think()`, and retire the fixed rule as a second source of truth | blocked | WORLD.2, SENSE.1 |
+| BRAIN.9 | Seed the first generation by fitting weights to the current fixed rule (95%+ agreement on random inputs, tested); `BlockSpec.encode` and `DNA.replaced` are ready for it. The fixed rule reads the target size ratio, which the brain has no input for yet | blocked | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 4, SENSE.9 |
+| BRAIN.10 | Act on the brain's decisions: set the attack, mate and signal flags and the movement and feeding from `think()`, and retire the fixed rule as a second source of truth | blocked | WORLD.2, SENSE.10 |
 | BRAIN.11 | Decision interval: run the brain every n ticks instead of every tick | ready | |
 | BRAIN.12 | Weight encoding with an exact zero (2-digit weights have no zero, nearest are ±0.133), so a brain can switch a connection off completely | ready | BRAIN.13 |
 
@@ -82,12 +80,38 @@ DNA API; the code stays at `refs/pull/20/head`.
 
 ## Senses
 
+Research is done ([#46](https://github.com/dwhagar/evolutionSimulator/pull/46), [docs/design/senses.md](docs/design/senses.md)): four outer senses (vision, hearing, smell,
+touch; taste stays the `inspect_food` action), body state with a new pain input, and daylight. Brain inputs go from 17 to 20
+(adding pain, daylight and relative size of the nearest animal). Inputs are grouped by what is sensed, not by organ.
+
+Owner questions, each with a default the build threads use until answered:
+
+| ID | Question | Issue | Default |
+| --- | --- | --- | --- |
+| SENSE.2 | Can a sense be lost completely? | [#40](https://github.com/dwhagar/evolutionSimulator/issues/40) | Vision, hearing and smell can reach 0; touch is always on |
+| SENSE.3 | Does darkness reduce vision? (also WORLD.5) | [#41](https://github.com/dwhagar/evolutionSimulator/issues/41) | Yes, range times (0.25 + 0.75 × daylight) |
+| SENSE.4 | Imperfect senses and noise? | [#42](https://github.com/dwhagar/evolutionSimulator/issues/42) | Yes; vision near exact, hearing and smell noisy |
+| SENSE.5 | Does the brain see relative size and mate similarity? | [#43](https://github.com/dwhagar/evolutionSimulator/issues/43) | Relative size now, similarity when REPRO.4 is built |
+| SENSE.6 | Can new sense kinds evolve mid-run? | [#44](https://github.com/dwhagar/evolutionSimulator/issues/44) | No, a fixed list |
+| SENSE.7 | Which senses work while asleep? (also WORLD.5) | [#45](https://github.com/dwhagar/evolutionSimulator/issues/45) | Touch full, hearing and smell half, vision off |
+
+Build items, in order (the first four need no world):
+
 | ID | Item | Status | Needs |
 | --- | --- | --- | --- |
-| SENSE.1 | Research: which senses creatures should have and how each feeds information into the brain (design note in `docs/design`, owner questions as issues) | research | Research 3 |
+| SENSE.8 | Sense-channel registry: one table of brain inputs (name, range, class, which senses report it) that generates `INPUT_NAMES`, `Percepts` and `build_inputs` | ready | |
+| SENSE.9 | Inputs 18 to 20 (pain, daylight, relative size): brain shape 17 to 20, `ANIMAL_LAYOUT` version bump, tests | blocked | BRAIN.13 (shape decision) |
+| SENSE.10 | The sensing step as a pure function (position, heading, sense genes, neighbour list to `Percepts`): encoding rules, light and sleep factors, seeded noise, vectors internally | ready | SENSE.8 |
+| SENSE.11 | Sense genes: range floor at 0 (per SENSE.2), noise as a function of the gene, cost on covered area instead of range, constants into the TRAIT.3 config | ready | |
+| SENSE.12 | World neighbour search and classifier (part of WORLD.2): grid cells sized to the real maximum range, class rules (diet, size, species similarity) | blocked | WORLD.2 |
+| SENSE.13 | Calibrate sense cost, noise and the light and sleep factors against a running world | blocked | WORLD.2, WORLD.5 |
+| SENSE.14 | Optional inputs as matching features land: world edge, mate similarity (REPRO.4), own young (REPRO.5), tiredness, clock phase | later | |
 
-The brain currently takes 17 inputs ([docs/design/brain.md](docs/design/brain.md)); SENSE.1 may change them, and
-the brain adapter keeps that interface separate.
+Findings that feed TRAIT.3 and SENSE.11, measured on the current code: smell covers about 31,000 square units against
+about 1,300 to 3,400 for vision at the same gene and cost, so every population would evolve a nose unless each sense can
+only report some classes; `sight_fov` costs almost nothing; the sense bill averages 22% of basal metabolism (target 10 to 15%,
+the brain's share is about 4%); neighbour search in plain Python takes about 13 ms per tick at 1,000 animals and 295 ms at
+5,000, so it needs cells sized to the maximum range and sensing at the brain's decision interval (BRAIN.11).
 
 ## Open design questions that do not block anything
 
@@ -105,6 +129,10 @@ the brain adapter keeps that interface separate.
 | DOCS.3 | Research: basic life-form traits | [#12](https://github.com/dwhagar/evolutionSimulator/pull/12) |
 | DOCS.4 | Set the first milestone: 0.1, data models for DNA and traits | [#21](https://github.com/dwhagar/evolutionSimulator/pull/21) |
 | DOCS.5 | Document how DNA and traits interact ([docs/design/dna-traits-interaction.md](docs/design/dna-traits-interaction.md)) | [#32](https://github.com/dwhagar/evolutionSimulator/pull/32) |
+| SENSE.1 | Research: senses and how they feed the brain ([docs/design/senses.md](docs/design/senses.md)); owner questions filed as SENSE.2 to SENSE.7 | [#46](https://github.com/dwhagar/evolutionSimulator/pull/46) |
+| DNA.7 | Crossover: `reproduce` defaults to `DNA.crossover_linked` (a few cut points that follow whole genes and brain neurons; `gene_fidelity` 0.9 and `mean_cuts` 1.0 are settings). The mutation counterpart is DNA.8 | [#48](https://github.com/dwhagar/evolutionSimulator/pull/48) |
+| BRAIN.14 | Behaviour genes bend what the brain perceives: aggression scales the prey-closeness input and fear the threat-closeness input (0.4 to 1.6) through a `Temperament` in the brain adapter; the REPRO.5 genes become more fields on it | [#47](https://github.com/dwhagar/evolutionSimulator/pull/47) |
+| BRAIN.16 | Random wander fallback: a creature that senses nothing or whose outputs are all quiet turns randomly with a minimum speed (`Wanderer`, `WanderPolicy`; seeded) | [#39](https://github.com/dwhagar/evolutionSimulator/pull/39) |
 | DOCS.6 | Decisions log ([docs/decisions.md](docs/decisions.md)) | this change |
 | BRAIN.1 | Brain research: a small neural network for animals ([docs/design/brain.md](docs/design/brain.md)) | [#29](https://github.com/dwhagar/evolutionSimulator/pull/29) |
 | BRAIN.2 | The `Brain` object (pure 17-8-6 network, 198 weights), `brain_adapter.py`, `AnimalTraits.think()`, brain upkeep in basal metabolism | [#34](https://github.com/dwhagar/evolutionSimulator/pull/34) |
