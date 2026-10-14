@@ -1,0 +1,46 @@
+name: Package Windows
+
+# Started by hand only (Actions tab, "Run workflow"); CI stays weekly and this never runs on its own.
+# Builds the viewer with PyInstaller, checks that the program starts its own simulation process, and
+# uploads the zip as a workflow artifact (UX.19).
+on:
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: the build number counts commits
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[gui,package]"
+      - name: Build
+        run: python scripts/package.py
+      - name: Check the build starts its simulation process
+        # --selftest opens no window: it starts the simulation process the way the viewer does,
+        # waits for a frame, and exits 0 if it all worked. A windowed program has no console, so
+        # the exit code is the whole answer.
+        shell: pwsh
+        run: |
+          $p = Start-Process dist\evolutionSimulator\evolutionSimulator.exe -ArgumentList "--selftest" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "selftest exit code $($p.ExitCode)" }
+      - name: Check the window opens and closes
+        # Qt's offscreen platform: no screen needed. --quit-after closes the window by itself.
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $p = Start-Process dist\evolutionSimulator\evolutionSimulator.exe -ArgumentList "--quit-after","1500","--settings","$env:RUNNER_TEMP\viewer.ini" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "viewer exit code $($p.ExitCode)" }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: evolutionSimulator-windows
+          path: dist/evolutionSimulator-*-win64.zip
+          if-no-files-found: error
