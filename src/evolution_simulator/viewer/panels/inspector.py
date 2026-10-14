@@ -1,11 +1,12 @@
-"""The creature inspector slot (UX.14 and UX.15 replace this)."""
+"""The creature inspector slot (UX.14): the dock is in ``viewer/inspector``, whose tabs are the
+``tab_*`` modules there (UX.15 adds the brain's)."""
 
-from evolution_simulator.viewer.panels._placeholder import Placeholder
+from evolution_simulator.viewer.inspector.panel import InspectorPanel
 from evolution_simulator.viewer.registry import PanelSpec, ViewerContext
 
 
-def build(context: ViewerContext) -> Placeholder:
-    return Placeholder(context, "Creature inspector", "UX.14 and UX.15")
+def build(context: ViewerContext) -> InspectorPanel:
+    return InspectorPanel(context)
 
 
 PANEL = PanelSpec(id="inspector", title="Inspector", area="right", factory=build, order=10)
