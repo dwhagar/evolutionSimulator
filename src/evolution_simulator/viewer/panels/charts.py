@@ -1,11 +1,617 @@
-"""The charts slot (UX.16 replaces this)."""
+"""Charts and history (UX.16): pyqtgraph line charts of the recorded statistics.
 
-from evolution_simulator.viewer.panels._placeholder import Placeholder
+Five tabs read the ``HistorySamples`` the controller publishes (``controller.history``, one new
+sample per simulated day): population, births and deaths (by cause), condition (energy, health and
+the shares asleep, pregnant and ready), a trait or gene over time (mean, spread and range), and a
+gene distribution that can be scrubbed through time. Everything is read from
+``evolution_simulator.history``; nothing here touches the world.
+
+The time axis is in simulated days, and in years once the run is more than two years old. Charts
+zoom and pan with the mouse (right-click for pyqtgraph's own menu, which also exports an image), and
+"Reset view" fits the data again.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+
+import numpy as np
+import pyqtgraph as pg
+from PySide6.QtCore import Qt, QTimer
+from PySide6.QtGui import QColor
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSlider,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from evolution_simulator.history import HistorySamples
+from evolution_simulator.viewer.controller import ViewerController
 from evolution_simulator.viewer.registry import PanelSpec, ViewerContext
 
+DAY_SECONDS = 86400.0
+YEAR_DAYS = 365.0
+YEARS_FROM = 2 * YEAR_DAYS
+"""The axis switches from days to years once the run is this many days old."""
+REDRAW_MS = 200
+"""The most often the charts are redrawn when samples arrive in a rush (a fast-forward)."""
 
-def build(context: ViewerContext) -> Placeholder:
-    return Placeholder(context, "Charts", "UX.16")
+# The Okabe and Ito colour-blind-safe palette, without black so it reads on a dark window too.
+BLUE, VERMILION, GREEN, ORANGE, PINK, SKY, YELLOW = (
+    "#0072B2",
+    "#D55E00",
+    "#009E73",
+    "#E69F00",
+    "#CC79A7",
+    "#56B4E9",
+    "#F0E442",
+)
+
+GREY = "#999999"
+
+KIND_NAMES = {"animal": "Animals", "plant": "Plants"}
+KIND_COLOURS = {"animal": BLUE, "plant": GREEN}
+CAUSE_COLOURS = {
+    "starvation": ORANGE,
+    "old_age": SKY,
+    "predation": VERMILION,
+    "poison": PINK,
+    "eaten": GREEN,
+    "damage": YELLOW,
+}
+"""One colour per ``DeathCause`` value, so a cause keeps its colour on every chart."""
+
+
+# --- plain helpers (no drawing) -------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class TimeAxis:
+    """How recorded periods are shown: as simulated days, or as years for a long run."""
+
+    unit: str
+    """``"days"`` or ``"years"``."""
+    per_period: float
+    """Axis units in one recorded period (a period is a day unless the recorder was told otherwise)."""
+
+    @property
+    def label(self) -> str:
+        return f"Simulated time ({self.unit})"
+
+    def x(self, periods: Sequence[float]) -> np.ndarray:
+        return np.asarray(periods, dtype=float) * self.per_period
+
+    def text(self, period: float) -> str:
+        value = period * self.per_period
+        if self.unit == "years":
+            return f"year {value:.2f}"
+        return f"day {value:.0f}"
+
+
+def time_axis(history: HistorySamples | None) -> TimeAxis:
+    """Days, or years once the newest sample is more than two years in."""
+    seconds = DAY_SECONDS if history is None else history.period_seconds
+    days_per_period = seconds / DAY_SECONDS
+    latest = None if history is None else history.latest
+    run_days = 0.0 if latest is None else latest.day * days_per_period
+    if run_days >= YEARS_FROM:
+        return TimeAxis("years", days_per_period / YEAR_DAYS)
+    return TimeAxis("days", days_per_period)
+
+
+def pretty_stat(name: str) -> str:
+    """A readable name for a recorded statistic (``animal.trait.max_speed`` -> ``max speed (trait)``).
+    A display-name catalogue (UX.29) can replace this later."""
+    _, _, rest = name.partition(".")
+    if rest == "age_at_death":
+        return "age at death"
+    group, _, field = rest.partition(".")
+    if group in ("trait", "gene") and field:
+        return f"{field.replace('_', ' ')} ({group})"
+    return rest.replace(".", " ").replace("_", " ")
+
+
+def stats_of_kind(history: HistorySamples, kind: str) -> list[str]:
+    """The statistic names of one kind ("animal" or "plant"): age at death, traits, then genes."""
+    order = {"age_at_death": 0, "trait": 1, "gene": 2}
+    names = [n for n in history.stat_names() if n.startswith(f"{kind}.")]
+
+    def key(name: str) -> tuple[int, str]:
+        rest = name.partition(".")[2]
+        return order.get(rest.partition(".")[0], 3), rest
+
+    return sorted(names, key=key)
+
+
+def histogram_names(history: HistorySamples, kind: str) -> list[str]:
+    """The genes of one kind that have a recorded distribution."""
+    found: set[str] = set()
+    for sample in history.samples():
+        found.update(n for n in sample.histograms if n.startswith(f"{kind}."))
+    return sorted(found)
+
+
+def histogram_days(history: HistorySamples, name: str) -> list[int]:
+    """The periods that have a distribution of this gene, oldest first (what the slider walks)."""
+    return [s.day for s in history.samples() if name in s.histograms]
+
+
+def histogram_shares(counts: Sequence[int]) -> np.ndarray:
+    """Bin counts as shares of the whole (all zero for an empty histogram)."""
+    values = np.asarray(counts, dtype=float)
+    total = values.sum()
+    return values / total if total > 0 else values
+
+
+def spread_band(means: np.ndarray, stds: np.ndarray, los: np.ndarray, his: np.ndarray):
+    """The lower and upper edge of mean plus or minus one deviation, kept inside the range seen."""
+    return np.maximum(means - stds, los), np.minimum(means + stds, his)
+
+
+def death_causes(history: HistorySamples, kind: str) -> list[str]:
+    """Causes of death of this kind that have happened at least once, in a fixed order."""
+    causes = []
+    for cause in CAUSE_COLOURS:
+        _, values = history.series(f"deaths.{kind}.{cause}")
+        if any(values):
+            causes.append(cause)
+    return causes
+
+
+# --- drawing ---------------------------------------------------------------------------------------
+
+
+def _colour(value: str) -> QColor:
+    return QColor(value)
+
+
+class ChartPlot(pg.PlotWidget):
+    """A plot in the window's own colours, with a legend, a grid and the usual mouse zoom."""
+
+    def __init__(self, y_label: str = "") -> None:
+        super().__init__()
+        palette = self.palette()
+        background, foreground = palette.window().color(), palette.windowText().color()
+        self.setBackground(background)
+        item = self.getPlotItem()
+        for side in ("left", "bottom"):
+            axis = item.getAxis(side)
+            axis.setPen(foreground)
+            axis.setTextPen(foreground)
+            axis.enableAutoSIPrefix(False)  # a share of 0.15 should not read as 150 (x0.001)
+        item.showGrid(x=True, y=True, alpha=0.25)
+        self.legend = item.addLegend(offset=(10, 10), labelTextColor=foreground)
+        if y_label:
+            item.setLabel("left", y_label)
+
+    def reset(self) -> None:
+        """Clear the curves and the legend, ready to draw again."""
+        self.getPlotItem().clear()
+        self.legend.clear()
+
+    def line(
+        self,
+        x: np.ndarray,
+        y: np.ndarray,
+        colour: str,
+        name: str | None = None,
+        width: int = 2,
+        style: Qt.PenStyle = Qt.PenStyle.SolidLine,
+    ) -> pg.PlotDataItem:
+        pen = pg.mkPen(_colour(colour), width=width, style=style)
+        lone = len(x) == 1  # a single point would draw nothing
+        return self.getPlotItem().plot(
+            x,
+            y,
+            pen=pen,
+            name=name,
+            symbol="o" if lone else None,
+            symbolSize=6,
+            symbolBrush=_colour(colour),
+        )
+
+    def fit(self) -> None:
+        self.getPlotItem().autoRange()
+
+
+class ChartTab(QWidget):
+    """One tab of the panel: its own controls (a row above the plot) and a ``ChartPlot``."""
+
+    title = ""
+
+    def __init__(self, y_label: str = "") -> None:
+        super().__init__()
+        self.plot = ChartPlot(y_label)
+        self.controls = QHBoxLayout()
+        self.controls.setContentsMargins(0, 0, 0, 0)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
+        layout.addLayout(self.controls)
+        layout.addWidget(self.plot, 1)
+        self.history: HistorySamples | None = None
+        self.axis = TimeAxis("days", 1.0)
+
+    def add_check(self, text: str, checked: bool = True, colour: str | None = None) -> QCheckBox:
+        box = QCheckBox(text)
+        box.setChecked(checked)
+        if colour is not None:
+            box.setStyleSheet(f"QCheckBox {{ color: {colour}; font-weight: bold; }}")
+        box.toggled.connect(lambda _checked: self.redraw())
+        self.controls.addWidget(box)
+        return box
+
+    def add_combo(self, on_change: Callable[[], None] | None = None) -> QComboBox:
+        combo = QComboBox()
+        combo.currentIndexChanged.connect(lambda _index: (on_change or self.redraw)())
+        self.controls.addWidget(combo)
+        return combo
+
+    def update_history(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self.history, self.axis = history, axis
+        self.plot.getPlotItem().setLabel("bottom", axis.label)
+        self.redraw()
+
+    def redraw(self) -> None:
+        if self.history is not None:
+            self.draw(self.history, self.axis)
+
+    def fit(self) -> None:
+        """Fit the chart to all of its data again."""
+        self.plot.fit()
+
+    def draw(self, history: HistorySamples, axis: TimeAxis) -> None:  # pragma: no cover
+        raise NotImplementedError
+
+
+class SeriesTab(ChartTab):
+    """Lines for a fixed list of recorded values, each with a check box."""
+
+    def __init__(
+        self,
+        title: str,
+        y_label: str,
+        series: Sequence[tuple[str, str, str]],
+        checked: Sequence[str] | None = None,
+    ) -> None:
+        super().__init__(y_label)
+        self.title = title
+        self.series = series
+        self.checks = {
+            name: self.add_check(label, checked is None or name in checked, colour)
+            for name, label, colour in series
+        }
+        self.controls.addStretch(1)
+
+    def draw(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self.plot.reset()
+        for name, label, colour in self.series:
+            if not self.checks[name].isChecked():
+                continue
+            days, values = history.series(name)
+            if days:
+                self.plot.line(axis.x(days), np.asarray(values), colour, label)
+
+
+class PopulationTab(SeriesTab):
+    def __init__(self) -> None:
+        super().__init__(
+            "Population",
+            "Count",
+            [
+                ("animals", "Animals", BLUE),
+                ("plants", "Plants", GREEN),
+                ("corpses", "Corpses", ORANGE),
+            ],
+        )
+
+
+class ConditionTab(SeriesTab):
+    def __init__(self) -> None:
+        super().__init__(
+            "Condition",
+            "Average of the animals (0 to 1)",
+            [
+                ("animal.energy", "Energy", ORANGE),
+                ("animal.health", "Health", GREEN),
+                ("animal.age", "Age", BLUE),
+                ("animal.diet", "Diet (meat share)", VERMILION),
+                ("animal.asleep", "Asleep", SKY),
+                ("animal.pregnant", "Pregnant", PINK),
+                ("animal.ready", "Ready to mate", YELLOW),
+            ],
+            checked=["animal.energy", "animal.health", "animal.age", "animal.diet"],
+        )
+
+
+class FlowsTab(ChartTab):
+    """Births and deaths per period, and the deaths split by cause."""
+
+    title = "Births and deaths"
+
+    def __init__(self) -> None:
+        super().__init__("Per day")
+        self.kind = self.add_combo()
+        for kind, text in KIND_NAMES.items():
+            self.kind.addItem(text, kind)
+        self.births = self.add_check("Births", True, GREEN)
+        self.deaths = self.add_check("Deaths", True, GREY)
+        self.by_cause = self.add_check("Deaths by cause", True)
+        self.controls.addStretch(1)
+
+    def draw(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self.plot.reset()
+        kind = self.kind.currentData()
+        self.plot.getPlotItem().setLabel("left", f"{KIND_NAMES[kind]} per day")
+        if self.births.isChecked():
+            self._series(history, axis, f"births.{kind}", GREEN, "Births")
+        if self.deaths.isChecked():
+            self._series(history, axis, f"deaths.{kind}", GREY, "Deaths", width=3)
+        if self.by_cause.isChecked():
+            for cause in death_causes(history, kind):
+                label = cause.replace("_", " ").capitalize()
+                self._series(
+                    history, axis, f"deaths.{kind}.{cause}", CAUSE_COLOURS[cause], label, width=1
+                )
+
+    def _series(
+        self, history: HistorySamples, axis: TimeAxis, name: str, colour: str, label: str, **kw
+    ) -> None:
+        days, values = history.series(name)
+        if days:
+            self.plot.line(axis.x(days), np.asarray(values), colour, label, **kw)
+
+
+class TraitTab(ChartTab):
+    """One trait or gene over time: its mean, a band of one deviation, and the range seen."""
+
+    title = "Traits and genes"
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.kind = self.add_combo(self._kind_changed)
+        for kind, text in KIND_NAMES.items():
+            self.kind.addItem(text, kind)
+        self.stat = self.add_combo()
+        self.show_range = self.add_check("Range (lowest to highest)", True)
+        self.controls.addStretch(1)
+        self._listed: tuple[str, ...] = ()
+
+    def update_history(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self._fill(history)
+        super().update_history(history, axis)
+
+    def _kind_changed(self) -> None:
+        if self.history is not None:
+            self._fill(self.history)
+        self.redraw()
+
+    def _fill(self, history: HistorySamples) -> None:
+        """List the statistics of the chosen kind, keeping the selection when it is still there."""
+        names = tuple(stats_of_kind(history, self.kind.currentData()))
+        if names == self._listed:
+            return
+        keep = self.stat.currentData()
+        self.stat.blockSignals(True)
+        self.stat.clear()
+        for name in names:
+            self.stat.addItem(pretty_stat(name), name)
+        index = self.stat.findData(keep)
+        self.stat.setCurrentIndex(index if index >= 0 else (0 if names else -1))
+        self.stat.blockSignals(False)
+        self._listed = names
+
+    def draw(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self.plot.reset()
+        name = self.stat.currentData()
+        if name is None:
+            return
+        self.plot.getPlotItem().setLabel("left", pretty_stat(name))
+        days, stats = history.stat_series(name)
+        if not days:
+            return
+        x = axis.x(days)
+        mean = np.array([s.mean for s in stats])
+        std = np.array([s.std for s in stats])
+        lo = np.array([s.lo for s in stats])
+        hi = np.array([s.hi for s in stats])
+        colour = KIND_COLOURS[self.kind.currentData()]
+        if self.show_range.isChecked():
+            self.plot.line(x, hi, colour, "Highest", width=1, style=Qt.PenStyle.DashLine)
+            self.plot.line(x, lo, colour, "Lowest", width=1, style=Qt.PenStyle.DashLine)
+        if len(x) > 1:
+            low, high = spread_band(mean, std, lo, hi)
+            top, bottom = pg.PlotCurveItem(x, high), pg.PlotCurveItem(x, low)
+            fill = _colour(colour)
+            fill.setAlpha(60)
+            self.plot.getPlotItem().addItem(pg.FillBetweenItem(top, bottom, brush=fill))
+        self.plot.line(x, mean, colour, "Mean")
+
+
+class DistributionTab(ChartTab):
+    """The spread of one gene across the population, with a slider to scrub through time."""
+
+    title = "Gene distribution"
+
+    def __init__(self) -> None:
+        super().__init__("Share of the population")
+        self.kind = self.add_combo(self._kind_changed)
+        for kind, text in KIND_NAMES.items():
+            self.kind.addItem(text, kind)
+        self.gene = self.add_combo(self._gene_changed)
+        self.controls.addStretch(1)
+        self.slider = QSlider(Qt.Orientation.Horizontal)
+        self.slider.setRange(0, 0)
+        self.slider.setSingleStep(1)
+        self.slider.valueChanged.connect(lambda _value: self.redraw())
+        self.when = QLabel()
+        scrub = QHBoxLayout()
+        scrub.addWidget(QLabel("Time:"))
+        scrub.addWidget(self.slider, 1)
+        scrub.addWidget(self.when)
+        self.layout().addLayout(scrub)  # type: ignore[union-attr]
+        self.plot.getPlotItem().setLabel("bottom", "Gene value (0 to 1)")
+        self._listed: tuple[str, ...] = ()
+        self._days: list[int] = []
+
+    def update_history(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self.history, self.axis = history, axis
+        self._fill(history)
+        self._sync_slider(follow=True)
+        self.redraw()
+
+    def _kind_changed(self) -> None:
+        if self.history is not None:
+            self._fill(self.history)
+            self._sync_slider(follow=True)
+        self.redraw()
+
+    def _gene_changed(self) -> None:
+        self._sync_slider(follow=True)
+        self.redraw()
+
+    def _fill(self, history: HistorySamples) -> None:
+        names = tuple(histogram_names(history, self.kind.currentData()))
+        if names == self._listed:
+            return
+        keep = self.gene.currentData()
+        self.gene.blockSignals(True)
+        self.gene.clear()
+        for name in names:
+            self.gene.addItem(pretty_stat(name), name)
+        index = self.gene.findData(keep)
+        self.gene.setCurrentIndex(index if index >= 0 else (0 if names else -1))
+        self.gene.blockSignals(False)
+        self._listed = names
+
+    def _sync_slider(self, follow: bool) -> None:
+        """Make the slider walk the days that have this gene's distribution. It stays on the newest
+        one when it was there, so a running world is followed unless the user scrubbed back."""
+        name = self.gene.currentData()
+        days = histogram_days(self.history, name) if self.history and name else []
+        at_end = self.slider.value() >= self.slider.maximum()
+        self._days = days
+        self.slider.blockSignals(True)
+        self.slider.setEnabled(len(days) > 1)
+        self.slider.setRange(0, max(0, len(days) - 1))
+        if follow and at_end:
+            self.slider.setValue(self.slider.maximum())
+        self.slider.blockSignals(False)
+
+    def draw(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self.plot.reset()
+        name = self.gene.currentData()
+        if name is None or not self._days:
+            self.when.setText("no distribution recorded yet")
+            return
+        index = min(self.slider.value(), len(self._days) - 1)
+        day = self._days[index]
+        counts = history.histogram_at(name, day)
+        self.when.setText(f"{axis.text(day)} ({index + 1} of {len(self._days)})")
+        if counts is None:
+            return
+        bins = len(counts)
+        shares = histogram_shares(counts)
+        centres = (np.arange(bins) + 0.5) / bins
+        colour = KIND_COLOURS[self.kind.currentData()]
+        bars = pg.BarGraphItem(
+            x=centres, height=shares, width=0.9 / bins, brush=_colour(colour), pen=None
+        )
+        item = self.plot.getPlotItem()
+        item.addItem(bars)
+        item.setXRange(0, 1, padding=0.02)
+        item.setYRange(0, max(float(shares.max()), 0.05) * 1.1, padding=0)
+
+    def fit(self) -> None:
+        self.redraw()  # redrawing sets the ranges again
+
+
+class ChartsPanel(QWidget):
+    """The five chart tabs over one ``ViewerController``."""
+
+    def __init__(self, controller: ViewerController) -> None:
+        super().__init__()
+        self.controller = controller
+        self.tabs = QTabWidget()
+        self.chart_tabs: list[ChartTab] = [
+            tab() for tab in (PopulationTab, FlowsTab, ConditionTab, TraitTab, DistributionTab)
+        ]
+        for tab in self.chart_tabs:
+            self.tabs.addTab(tab, tab.title)
+        self.status = QLabel()
+        reset = QPushButton("Reset view")
+        reset.setToolTip("Fit the chart to all of its data again")
+        reset.clicked.connect(self.reset_view)
+        footer = QHBoxLayout()
+        footer.addWidget(self.status, 1)
+        footer.addWidget(reset)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.tabs, 1)
+        layout.addLayout(footer)
+
+        self._history: HistorySamples | None = None
+        self._dirty = False
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.setInterval(REDRAW_MS)
+        self._timer.timeout.connect(self._flush)
+        self.tabs.currentChanged.connect(lambda _index: self.refresh())
+
+        controller.history_received.connect(self.set_history)
+        self._history = controller.history  # a panel built late starts from the latest
+        self.refresh()
+
+    @property
+    def current(self) -> ChartTab:
+        return self.chart_tabs[self.tabs.currentIndex()]
+
+    def set_history(self, history: HistorySamples) -> None:
+        """Take the newest history; the charts are redrawn soon, but not more than a few times a
+        second however fast the world is running."""
+        self._history = history
+        self.mark_dirty()
+
+    def mark_dirty(self) -> None:
+        self._dirty = True
+        if not self._timer.isActive():
+            self._timer.start()
+
+    def _flush(self) -> None:
+        if self._dirty and self.isVisible():
+            self.refresh()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        if self._dirty:
+            self.refresh()
+
+    def refresh(self) -> None:
+        """Redraw the tab in view from the newest history, now."""
+        self._dirty = False
+        history = self._history
+        if history is None or history.latest is None:
+            self.status.setText("No history yet: the first sample comes after one simulated day.")
+            return
+        axis = time_axis(history)
+        self.current.update_history(history, axis)
+        count = len(history)
+        self.status.setText(
+            f"{count} sample{'s' if count != 1 else ''}, up to {axis.text(history.latest.day)}"
+        )
+
+    def reset_view(self) -> None:
+        self.current.fit()
+
+
+def build(context: ViewerContext) -> ChartsPanel:
+    return ChartsPanel(context.controller)
 
 
 PANEL = PanelSpec(id="charts", title="Charts", area="right", factory=build, order=20)
