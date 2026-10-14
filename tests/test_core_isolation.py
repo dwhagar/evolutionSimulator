@@ -48,6 +48,21 @@ def test_importing_the_session_loads_neither_qt_nor_numpy():
     assert result.returncode == 0, result.stdout + result.stderr
 
 
+def test_the_viewer_backend_and_command_line_load_without_qt():
+    code = (
+        "import sys\n"
+        "import evolution_simulator.viewer.backend\n"
+        "import evolution_simulator.viewer.app\n"
+        f"bad = [m for m in sys.modules if m.split('.')[0] in {FORBIDDEN!r}]\n"
+        "print(bad)\n"
+        "sys.exit(1 if bad else 0)\n"
+    )
+    result = subprocess.run(
+        [sys.executable, "-I", "-c", code], check=False, capture_output=True, text=True
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+
+
 def test_the_package_still_declares_no_dependencies():
     text = (SOURCE.parents[1] / "pyproject.toml").read_text(encoding="utf-8")
     assert "dependencies = []" in text
