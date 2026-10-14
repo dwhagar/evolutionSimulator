@@ -7,14 +7,14 @@ import pytest
 
 from evolution_simulator.brain import DEFAULT_BLUEPRINT, DEFAULT_SHAPE, Brain, BrainBlueprint
 from evolution_simulator.brain_adapter import INPUT_NAMES, Percepts
+from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, BRAIN_GENE
 from evolution_simulator.sensing import Neighbour, SenseOrgans, SensingConditions, sense
-from evolution_simulator.traits import (
-    BRAIN_DEAD_ZONE,
-    PAIN_FULL_FRACTION,
-    AnimalTraits,
-)
+from evolution_simulator.traits import AnimalTraits
+
+BRAIN_DEAD_ZONE = DEFAULT_RULES.brain.dead_zone
+PAIN_FULL_FRACTION = DEFAULT_RULES.brain.pain_full_fraction
 from evolution_simulator.world.vector import Vec
 
 SMALL = BrainBlueprint(

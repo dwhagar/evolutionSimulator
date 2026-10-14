@@ -39,6 +39,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from evolution_simulator.brain_adapter import Percepts
+from evolution_simulator.config import SensingRules
 from evolution_simulator.sense_channels import (
     SENSE_KINDS,
     TARGETS,
@@ -69,55 +70,6 @@ def _plan_for(target: str) -> tuple[str, str, tuple[str, ...]]:
 _TARGET_PLAN: dict[str, tuple[str, str, tuple[str, ...]]] = {t: _plan_for(t) for t in TARGETS}
 """Per class: the names of its direction and closeness inputs and the senses that may report it,
 most precise first. Fixed by the channel table, so worked out once."""
-
-
-@dataclass(frozen=True)
-class SensingRules:
-    """The constants of the sensing step: starting values from the design note, for calibration
-    against a running world (``SENSE.13``) and to move into the constants config (``TRAIT.3``)."""
-
-    light_floor: float = 0.25
-    """Vision range at full darkness as a fraction of its daylight range:
-    ``light_floor + (1 - light_floor) * daylight``."""
-    sleep_vision: float = 0.0
-    sleep_hearing: float = 0.5
-    sleep_smell: float = 0.5
-    sleep_touch: float = 1.0
-    """The fraction of each organ's range that still works while asleep."""
-    weak_smell: float = 0.5
-    """Fraction of the smell range at which prey and threats can be smelled (a presence, not a
-    precise report). A placeholder: the design note gives no number."""
-    crowding_reference: int = 8
-    """This many animals in reach gives a crowding input of 1."""
-    closeness_noise: float = 0.03
-    """Standard deviation of the error on every closeness report (input units)."""
-
-    def __post_init__(self) -> None:
-        for name in (
-            "light_floor",
-            "sleep_vision",
-            "sleep_hearing",
-            "sleep_smell",
-            "sleep_touch",
-            "weak_smell",
-        ):
-            if not 0.0 <= getattr(self, name) <= 1.0:
-                raise ValueError(f"{name} must be between 0 and 1, got {getattr(self, name)}.")
-        if self.crowding_reference < 1:
-            raise ValueError("crowding_reference must be at least 1.")
-        if not (math.isfinite(self.closeness_noise) and self.closeness_noise >= 0.0):
-            raise ValueError("closeness_noise cannot be negative.")
-
-    def light_factor(self, daylight: float) -> float:
-        return self.light_floor + (1.0 - self.light_floor) * daylight
-
-    def sleep_factor(self, sense: str) -> float:
-        return {
-            "vision": self.sleep_vision,
-            "hearing": self.sleep_hearing,
-            "smell": self.sleep_smell,
-            "touch": self.sleep_touch,
-        }[sense]
 
 
 @dataclass(frozen=True)

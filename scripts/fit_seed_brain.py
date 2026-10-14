@@ -30,7 +30,9 @@ sys.path.insert(0, str(ROOT / "src"))
 from evolution_simulator import seed_brain as sb
 from evolution_simulator.brain import DEFAULT_SHAPE
 from evolution_simulator.brain_adapter import ACTION_THRESHOLD, INPUT_NAMES
-from evolution_simulator.traits import BRAIN_DEAD_ZONE
+from evolution_simulator.config import DEFAULT_RULES
+
+BRAIN_DEAD_ZONE = DEFAULT_RULES.brain.dead_zone
 
 H = sb.SEED_HIDDEN
 N_IN = DEFAULT_SHAPE.inputs

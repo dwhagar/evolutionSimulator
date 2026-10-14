@@ -1,5 +1,6 @@
 """Helpers for the world tests: genomes with chosen genes and brains with fixed behaviour."""
 
+from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, BRAIN_GENE, PLANT_LAYOUT
 from evolution_simulator.world import TimeScale, Vec, World, WorldConfig
@@ -46,11 +47,16 @@ HOURLY = TimeScale(seconds_per_tick=3600.0)
 """One tick is one reference tick (an hour), so per-tick rates apply as they are written."""
 
 
+TEST_RULES = DEFAULT_RULES
+"""The trait rules of worlds made by ``hourly_world``; a fixture can swap them (``conftest``)."""
+
+
 def hourly_world(seed: int = 0, **config) -> World:
     """A world whose tick is an hour and that has no night, so reproduction tests see rates as
     written and nobody sleeps."""
     config.setdefault("time_scale", HOURLY)
     config.setdefault("day_cycle", None)
+    config.setdefault("traits", TEST_RULES)
     return World(WorldConfig(seed=seed, **config))
 
 

@@ -323,6 +323,9 @@ change.
 
 ## Constants for the TRAIT.3 config
 
+(Built: these names are now fields of `config.py`; [trait-config.md](trait-config.md) maps each old name to
+its field. The table below is the design as proposed.)
+
 | Name | Value | Used in |
 | --- | --- | --- |
 | `REFERENCE_TICK_SECONDS` | 3600 | converting per-tick rates |

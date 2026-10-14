@@ -32,19 +32,14 @@ import hashlib
 import math
 import random
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
 
+from evolution_simulator.config import DEFAULT_RULES, SensingRules, TraitRules
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import founder_animal_dna, founder_plant_dna
 from evolution_simulator.learning import LearningRules, NightlyLearning
 from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
-from evolution_simulator.traits import (
-    REFERENCE_TICK_SECONDS,
-    AnimalTraits,
-    MatingResult,
-    PlantTraits,
-)
+from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.mating import choose_mate
@@ -54,17 +49,6 @@ from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.vector import Vec
-
-if TYPE_CHECKING:
-    from evolution_simulator.sensing import SensingRules
-
-
-def _default_sensing_rules() -> SensingRules:
-    # Imported here because ``sensing`` itself imports from this package.
-    from evolution_simulator.sensing import SensingRules
-
-    return SensingRules()
-
 
 INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
 """Grid cell for neighbour searches: the longest sense range any animal can have (100 units)."""
@@ -127,15 +111,21 @@ class WorldConfig:
     Off by default: a random founder's brain calls on most ticks, a call costs several times an
     animal's basal metabolism, and every call wakes sleepers, so founders die out or never
     sleep. Turn it on once seeded brains (BRAIN.9) and the call rules (BRAIN.10) exist."""
-    sensing: SensingRules = field(default_factory=_default_sensing_rules)
-    """The constants of the sensing step: light and sleep factors, weak smell, noise."""
     learning: LearningRules | None = field(default_factory=LearningRules)
     """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
     ``None`` turns it off."""
     plants: PlantRules = field(default_factory=PlantRules)
+    traits: TraitRules = DEFAULT_RULES
+    """The tuning constants of the organisms' formulas (``TRAIT.3``): body, behaviour, brain costs,
+    reproduction, recovery, plants and sense costs."""
     max_animals: int = 1000
     max_plants: int = 5000
     """Safety caps so a run cannot grow without limit; births stop at the cap."""
+
+    @property
+    def sensing(self) -> SensingRules:
+        """The constants of the sensing step: light and sleep factors, weak smell, noise."""
+        return self.traits.sensing
 
     def __post_init__(self) -> None:
         for name in ("graze_amount", "mating_reach", "birth_scatter"):
@@ -202,7 +192,7 @@ class World:
     @property
     def dt(self) -> float:
         """How many reference ticks (hours) one tick is: the factor on per-reference-tick rates."""
-        return self.time_scale.seconds_per_tick / REFERENCE_TICK_SECONDS
+        return self.time_scale.seconds_per_tick / self.config.traits.time.reference_tick_seconds
 
     @property
     def simulated_seconds(self) -> float:
@@ -307,7 +297,9 @@ class World:
             raise ValueError(f"The world already holds {self.config.max_animals} animals.")
         place = self._place(position)
         facing = self.rng.uniform(-math.pi, math.pi) if heading is None else wrap_angle(heading)
-        return self._insert_animal(AnimalTraits(dna), place, facing, parents)
+        return self._insert_animal(
+            AnimalTraits(dna, rules=self.config.traits), place, facing, parents
+        )
 
     def _insert_animal(
         self, traits: AnimalTraits, place: Vec, facing: float, parents: tuple[int, ...]
@@ -324,7 +316,9 @@ class World:
     ) -> Plant:
         if len(self._plants) >= self.config.max_plants:
             raise ValueError(f"The world already holds {self.config.max_plants} plants.")
-        return self._insert_plant(PlantTraits(dna), self._place(position), parents)
+        return self._insert_plant(
+            PlantTraits(dna, self.config.traits), self._place(position), parents
+        )
 
     def _insert_plant(self, traits: PlantTraits, place: Vec, parents: tuple[int, ...]) -> Plant:
         plant = Plant(self._new_id(), traits, place, parents)
@@ -622,7 +616,10 @@ class World:
             count = min(pregnancy.litter, room)
             if count <= 0:
                 continue
-            litter = [AnimalTraits(genome) for genome in pregnancy.children[:count]]
+            litter = [
+                AnimalTraits(genome, rules=self.config.traits)
+                for genome in pregnancy.children[:count]
+            ]
             if not AnimalTraits.give_birth(mother.traits, litter):
                 continue
             parents = (mother.id,) if mother.partner is None else (mother.partner, mother.id)
@@ -641,7 +638,10 @@ class World:
         count = min(plant.traits.seed_capacity(), self.config.max_plants - len(self._plants))
         if count <= 0:
             return 0
-        seeds = [PlantTraits(plant.traits.dna.reproduce(None, self.rng)) for _ in range(count)]
+        seeds = [
+            PlantTraits(plant.traits.dna.reproduce(None, self.rng), self.config.traits)
+            for _ in range(count)
+        ]
         plant.traits.launch_seeds(seeds)
         for traits in seeds:
             spot = self._scatter(plant.position, plant.traits.dispersal_radius)

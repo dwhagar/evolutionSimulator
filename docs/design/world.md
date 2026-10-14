@@ -269,6 +269,6 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
 Sent to the TODO thread rather than built here:
 
 - Whether metabolism, ageing and speed should be per second (so `seconds_per_tick` changes the
-  physics) or per tick (as now). Needs the `TRAIT.3` config.
+  physics) or per tick (as now). Needs the `TRAIT.3` config (built: `WorldConfig.traits`, [trait-config.md](trait-config.md)).
 - Random first-generation animals starve before they breed, as the brain note predicted
   (`BRAIN.9`, `BRAIN.16`).
