@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.17`: The setup screen: File > New run with presets, animal and plant counts, a seed, a name and a searchable form of every tuning value generated from the config, which saves the new run as soon as it starts. Also fixed events being lost after the first poll in the viewer's local backend. [#183](https://github.com/dwhagar/evolutionSimulator/pull/183)
 - `UX.31`: The simulation process now records history and can run a saved run: it streams the statistics to the window in batches, saves checkpoints on its own and on request, and resumes a run from a checkpoint. [#181](https://github.com/dwhagar/evolutionSimulator/pull/181)
 - `TRAIT.11`: Attack, corpse and world rules (grazing, mating reach, birth scatter, calls) move into the one `TraitRules` tree, so a run's whole tuning is one object (behaviour unchanged; saved worlds are upgraded to format 5). [#179](https://github.com/dwhagar/evolutionSimulator/pull/179)
 - `UX.18`: Saved runs in the viewer: save the current run, list saved runs with their size and a population line, resume, delete, export history as CSV, open a read-only history window with the charts and checkpoints, and a warning when runs take more than 5 GB. [#173](https://github.com/dwhagar/evolutionSimulator/pull/173)
