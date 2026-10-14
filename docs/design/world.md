@@ -28,6 +28,8 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 | `bounds.py` | `Bounds`, a box from the origin to `size`, default 1000 by 1000; `clamp` makes the edges walls | WORLD.4 |
 | `timescale.py` | `TimeScale`, the speed presets, `Pacer` (real time to whole ticks), `format_duration` | WORLD.3 |
 | `spatial.py` | `SpatialIndex`, a grid for "what is near this point" | WORLD.2 |
+| `daycycle.py` | `DayCycle`: daylight, night and day number as a function of simulated time | WORLD.5 |
+| `sleep.py` | `SleepRules` and the `SleepListener` hook | WORLD.5 |
 | `organisms.py` | `Animal` and `Plant`: traits plus a place (and heading for animals) | WORLD.2 |
 | `senses.py` | the `Senses` interface and `BasicSenses`, a stand-in until `SENSE.1` | WORLD.2 |
 | `world.py` | `World`, `WorldConfig`, `StepReport` and the step loop | WORLD.2 |
@@ -38,7 +40,9 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
    given the world's random generator so the wander fallback is on: an animal that senses nothing,
    or whose outputs are all quiet, turns at random and moves instead of standing still). All
    decisions are made before anyone acts, so the order of animals does not change what they see.
-2. In id order each animal ages and burns energy (`update_metabolism_and_aging`, with the brain's
+   Before this, the day-night cycle sets the light (plants get it as sunlight) and animals fall
+   asleep or wake; a sleeper skips sensing and thinking.
+2. In id order each awake animal ages and burns energy (`update_metabolism_and_aging`, with the brain's
    speed output as the movement ratio), turns, moves and, if the brain says "eat" and a plant is
    within reach, grazes it.
 3. Animals whose brain says "seek mating" and that are off cooldown pair off with the nearest such
@@ -87,6 +91,35 @@ question 3, still open). The rest of the world only calls `clamp` and `contains`
 open space would be added in `Bounds` alone, though distances in the senses would then also need to
 wrap.
 
+## Day, night and sleep (WORLD.5)
+
+`WorldConfig.day_cycle` (a `DayCycle`, or `None` for permanent daylight and no sleep) turns simulated
+time into light. A day is 600 simulated seconds by default: animals live from about 22 minutes to
+3.3 hours, so a real 24-hour day would leave most of them less than one night in which to learn
+(`BRAIN.15`). Daylight runs smoothly from 0 at midnight to 1 at noon, `0.5 - 0.5 cos(2 pi phase)`,
+and it is night while daylight is below 0.3, which is 37% of the day (about 221 ticks of 600). The
+world starts at noon. `World.daylight`, `World.is_night` and `World.day` read it.
+
+- **Plants** get the daylight as their sunlight factor each tick, so they grow by day and only
+  burn reserves at night (the traits code floors sunlight at 0.05).
+- **Animals** see less in the dark: `BasicSenses` multiplies sight range by
+  `SensingRules.light_factor` (0.25 + 0.75 x daylight, the default for issue
+  [#41](https://github.com/dwhagar/evolutionSimulator/issues/41)).
+- **Sleep.** At night every animal with at least 15% of its energy store falls asleep (a hungrier
+  one stays awake to feed, the default for "can a creature skip sleep"). A sleeper does not sense,
+  think, move, eat or mate. It still ages. It burns 40% of its basal metabolism and regains 0.2% of
+  its energy store per tick, a net gain of roughly a fifth of the store over a night. It wakes when
+  the night ends. These are starting values in `SleepRules`.
+- **Falling asleep** clears the animal's cached brain decision and its wander turn
+  (`AnimalTraits.reset_behaviour`), so it wakes with a fresh start.
+- **The hook for learning (`BRAIN.24`).** `World.add_sleep_listener(listener)` registers an object
+  with `fell_asleep(world, animal)` and `woke(world, animal)`, called in id order during the step.
+  The nightly update can run in either.
+- **Vulnerability** (issue [#57](https://github.com/dwhagar/evolutionSimulator/issues/57), default
+  partly): sleepers stay in the world, so other animals sense them normally; what they can sense
+  themselves follows the sleep factors in the sensing rules once `SENSE.12` wires `sense()` into the
+  world. A loud call waking a sleeper needs calls to be heard first, so it is not built.
+
 ## Senses are swappable
 
 The loop calls `world.senses.perceive(world, animal)` and expects the brain's `Percepts`
@@ -107,10 +140,18 @@ the nearest possible mate. Calls are not heard yet, so those inputs stay 0.
   prey, meat, calls and retiring the fixed rule are `BRAIN.10`. Animals do not eat each other yet.
 - **Sex and species.** Any two willing animals of the same layout may mate; mate choice by genetic
   closeness is `REPRO.4`.
+- **Sleep** energy numbers and the 600-second day are guesses to calibrate (`SENSE.13`, `TRAIT.3`).
 - **Population caps** (1000 animals, 5000 plants) exist so a run cannot grow without limit.
-- **Speed.** Neighbour searches use a grid. Measured on one run: 300 animals and 3000 plants step in
-  about 60 ms per tick in plain Python (about 5 ms per tick at 60 animals), so the faster time
-  presets cannot be met at that size. Profiling the senses and the brain is a later job.
+- **Speed** (`WORLD.9`). Measured with `cProfile` on 300 animals and 3000 plants: the first version took
+  about 62 ms per tick, mostly in the senses (generic vector arithmetic and the neighbour query
+  building temporary vectors) and the brain pass. Now about 23 ms per tick (about 3 ms at 60
+  animals and 300 plants), the same behaviour up to floating-point rounding (`math.sumprod` sums more exactly). What changed: `Vec` skips its checks for results it builds
+  itself and uses `math.dist`; the grid stores plain coordinates and returns distances with the ids
+  (`animals_within`, `plants_within`) so the senses do not measure twice; the bearing test uses
+  coordinates directly; the brain's dot products use `math.sumprod`. What is left is spread thinly:
+  the senses 30%, the brain and input building 35% (`sense_channels.build_inputs` and its
+  clamps are the biggest single piece), plant growth 8%. The fast presets still cannot be met at
+  this size.
 
 ## Follow-ups
 
@@ -120,6 +161,5 @@ Sent to the TODO thread rather than built here:
   physics) or per tick (as now). Needs the `TRAIT.3` config.
 - Plant balance: with the prototype's constants a few hundred random plants reach the 5000 cap within
   about 200 ticks, so the plant growth and seeding numbers need tuning against a food limit.
-- Speed: about 60 ms per tick at 300 animals and 3000 plants; profile the senses and brain pass.
 - Random first-generation animals starve before they breed, as the brain note predicted
   (`BRAIN.9`, `BRAIN.16`).

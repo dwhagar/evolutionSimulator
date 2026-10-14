@@ -49,19 +49,26 @@ class Vec:
     def y(self) -> float:
         return self.coords[1]
 
+    @classmethod
+    def _make(cls, coords: tuple[float, ...]) -> Vec:
+        """A vector from components already known to be finite floats (skips the checks)."""
+        vec = object.__new__(cls)
+        object.__setattr__(vec, "coords", coords)
+        return vec
+
     def _same_size(self, other: Vec) -> None:
-        if self.dimensions != other.dimensions:
+        if len(self.coords) != len(other.coords):
             raise ValueError(
                 f"Cannot combine a {self.dimensions}D and a {other.dimensions}D vector."
             )
 
     def __add__(self, other: Vec) -> Vec:
         self._same_size(other)
-        return Vec(tuple(a + b for a, b in zip(self.coords, other.coords)))
+        return Vec._make(tuple([a + b for a, b in zip(self.coords, other.coords)]))
 
     def __sub__(self, other: Vec) -> Vec:
         self._same_size(other)
-        return Vec(tuple(a - b for a, b in zip(self.coords, other.coords)))
+        return Vec._make(tuple([a - b for a, b in zip(self.coords, other.coords)]))
 
     def __mul__(self, scale: float) -> Vec:
         return Vec(tuple(c * scale for c in self.coords))
@@ -69,7 +76,7 @@ class Vec:
     __rmul__ = __mul__
 
     def __neg__(self) -> Vec:
-        return Vec(tuple(-c for c in self.coords))
+        return Vec._make(tuple([-c for c in self.coords]))
 
     def __iter__(self):
         return iter(self.coords)
@@ -82,11 +89,11 @@ class Vec:
         return sum(a * b for a, b in zip(self.coords, other.coords))
 
     def length(self) -> float:
-        return math.sqrt(sum(c * c for c in self.coords))
+        return math.hypot(*self.coords)
 
     def distance_to(self, other: Vec) -> float:
         self._same_size(other)
-        return math.sqrt(sum((a - b) ** 2 for a, b in zip(self.coords, other.coords)))
+        return math.dist(self.coords, other.coords)
 
     def normalised(self) -> Vec:
         """The unit vector in the same direction; the zero vector stays zero."""

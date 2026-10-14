@@ -25,6 +25,7 @@ from evolution_simulator.brain_adapter import (
 )
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
+from evolution_simulator.sense_genes import direction_noise, sense_cost
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 
 # Energy cost of thinking per tick, added to basal metabolism. Placeholders for the first brain
@@ -35,6 +36,8 @@ BRAIN_NEURON_COST: float = 0.0005
 BRAIN_CONNECTION_COST: float = 0.0001
 """Per active connection, a weight whose absolute value is above ``BRAIN_ACTIVE_THRESHOLD``."""
 BRAIN_ACTIVE_THRESHOLD: float = 0.25
+"""The brain's dead zone (``BRAIN.21``): a weight at or below this is off, both for cost and in
+``Brain.decide``, so a connection pays only if it does something."""
 DECISION_INTERVAL: int = 1
 """Ticks between brain decisions (``BRAIN.11``); between them the animal keeps its last decision.
 Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to move
@@ -175,23 +178,30 @@ class AnimalTraits(BaseTraits):
         self.tactile_range: float = self.body_radius * t["tactile_factor"]
 
         # Neural & Digestive Upkeep ("The Brain and Gut Tax")
-        sensory_overhead = 0.08 * (
-            (t["sight_range"] ** 2)
-            + (t["hearing"] ** 2)
-            + (t["smell"] ** 2)
-            + (t["touch"] ** 2)
-            + (t["taste"] ** 2)
+        # Organs cost in proportion to the area they cover (SENSE.11).
+        sensory_overhead = sense_cost(
+            self.effective_sight_range,
+            self.fov_degrees,
+            self.hearing_range,
+            self.smell_range,
+            t["touch"],
+            t["taste"],
         )
+        self.vision_noise: float = direction_noise("vision", t["sight_range"])
+        self.hearing_noise: float = direction_noise("hearing", t["hearing"])
+        self.smell_noise: float = direction_noise("smell", t["smell"])
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
         # The brain is read from the genome once at birth, like the body.
-        self.brain: Brain = Brain.from_values(DEFAULT_SHAPE, dna.values("brain"))
+        self.brain: Brain = Brain.from_values(
+            DEFAULT_SHAPE, dna.values("brain"), dead_zone=BRAIN_ACTIVE_THRESHOLD
+        )
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
         self._decision: BrainDecision | None = None
         self._ticks_since_decision: int = 0
         self.brain_upkeep: float = (
             BRAIN_NEURON_COST * self.brain.neuron_count
-            + BRAIN_CONNECTION_COST * self.brain.active_connections(BRAIN_ACTIVE_THRESHOLD)
+            + BRAIN_CONNECTION_COST * self.brain.active_connections()
         ) / self.decision_interval
         self.repair_upkeep: float = REPAIR_COST * (t["somatic_maint"] ** REPAIR_COST_EXPONENT)
         self.readiness_upkeep: float = READINESS_UPKEEP * (
@@ -331,6 +341,13 @@ class AnimalTraits(BaseTraits):
 
         if self.is_alive:
             self._update_needs_and_drives()
+
+    def reset_behaviour(self) -> None:
+        """Forget the cached brain decision and the wander turn, so the next ``think`` decides
+        afresh. The world calls it when an animal falls asleep (``WORLD.5``)."""
+        self._decision = None
+        self._ticks_since_decision = 0
+        self.wanderer.reset()
 
     def _effective_fear(self, mate_in_view: bool = False) -> float:
         """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down.

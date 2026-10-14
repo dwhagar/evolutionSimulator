@@ -34,6 +34,7 @@ import math
 import random
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from evolution_simulator.brain_adapter import Percepts
 from evolution_simulator.sense_channels import (
@@ -43,6 +44,9 @@ from evolution_simulator.sense_channels import (
     senses_reporting,
 )
 from evolution_simulator.world.vector import Vec
+
+if TYPE_CHECKING:
+    from evolution_simulator.traits import AnimalTraits
 
 ROLES: tuple[str, ...] = (*TARGETS, "other")
 """What a neighbour is to the creature: a ``TARGETS`` class, or an animal that is none of them."""
@@ -150,6 +154,21 @@ class SenseOrgans:
             "smell": self.smell_noise,
             "touch": 0.0,
         }[sense]
+
+
+def organs_from_traits(traits: AnimalTraits) -> SenseOrgans:
+    """The sense organs of an animal as it is now: ranges after vitality, the field of view, the
+    noise its sense genes give, and the touch reach beyond its body (``SENSE.11``)."""
+    return SenseOrgans(
+        vision_range=traits.current_sight_range,
+        vision_fov_degrees=traits.fov_degrees,
+        hearing_range=traits.current_hearing_range,
+        smell_range=traits.smell_range,
+        touch_reach=max(0.0, traits.tactile_range - traits.body_radius),
+        vision_noise=traits.vision_noise,
+        hearing_noise=traits.hearing_noise,
+        smell_noise=traits.smell_noise,
+    )
 
 
 @dataclass(frozen=True)

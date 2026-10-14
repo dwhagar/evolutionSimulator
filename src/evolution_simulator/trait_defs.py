@@ -18,6 +18,13 @@ from enum import Enum
 
 from evolution_simulator.dna import Genome, GenomeLayout, position_bias_for_step
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
+from evolution_simulator.sense_genes import (
+    FOV_DEGREES,
+    HEARING_RANGE,
+    SIGHT_REACH,
+    SMELL_RANGE,
+    TACTILE_FACTOR,
+)
 
 CARE_FRACTION_RANGE: tuple[float, float] = (0.10, 0.80)
 """A newborn's starting energy as a share of its own energy store (``caregiving``)."""
@@ -209,11 +216,13 @@ ANIMAL_TRAITS = TraitSet(
         _level("repro_drive", "Urge to find a mate: lowers the energy needed to start looking."),
         # Ranged traits.
         TraitDef("mass", ("size",), 1.0, 4.0, description="Body mass in simulation units."),
-        TraitDef("sight_reach", ("sight_range",), 10.0, 60.0, description="Before FOV narrowing."),
-        TraitDef("fov_degrees", ("sight_fov",), 40.0, 360.0),
-        TraitDef("hearing_range", ("hearing",), 15.0, 85.0),
-        TraitDef("smell_range", ("smell",), 20.0, 100.0),
-        TraitDef("tactile_factor", ("touch",), 1.1, 2.6, description="Times body radius."),
+        TraitDef(
+            "sight_reach", ("sight_range",), *SIGHT_REACH, description="Before FOV narrowing."
+        ),
+        TraitDef("fov_degrees", ("sight_fov",), *FOV_DEGREES),
+        TraitDef("hearing_range", ("hearing",), *HEARING_RANGE),
+        TraitDef("smell_range", ("smell",), *SMELL_RANGE),
+        TraitDef("tactile_factor", ("touch",), *TACTILE_FACTOR, description="Times body radius."),
         TraitDef("call_radius", ("encoder_fidelity",), 0.0, 60.0),
         TraitDef("call_energy_cost", ("encoder_fidelity",), 1.5, 7.5),
         TraitDef("sex_strategy", ("sex_strategy",), kind=Kind.CATEGORY),

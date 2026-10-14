@@ -1,12 +1,15 @@
 """The world: space, time, the step loop and the senses that connect organisms to it.
 
 Modules: ``vector`` (positions), ``bounds`` (WORLD.4), ``timescale`` (WORLD.3), ``spatial`` (finding
-neighbours), ``organisms``, ``senses`` (swappable) and ``world`` (WORLD.2).
+neighbours), ``daycycle`` and ``sleep`` (WORLD.5), ``organisms``, ``senses`` (swappable) and
+``world`` (WORLD.2).
 """
 
 from evolution_simulator.world.bounds import Bounds
+from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import BasicSenses, Senses
+from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.timescale import (
     SPEED_PRESETS,
     Pacer,
@@ -21,9 +24,12 @@ __all__ = [
     "Animal",
     "BasicSenses",
     "Bounds",
+    "DayCycle",
     "Pacer",
     "Plant",
     "Senses",
+    "SleepListener",
+    "SleepRules",
     "StepReport",
     "TimeScale",
     "Vec",

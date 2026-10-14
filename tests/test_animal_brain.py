@@ -44,7 +44,9 @@ def with_brain(digits: str) -> DNA:
 
 def test_the_brain_is_built_from_the_genome_at_birth():
     traits = AnimalTraits(PINNED)
-    assert traits.brain == Brain.from_values(DEFAULT_SHAPE, PINNED.values("brain"))
+    assert traits.brain == Brain.from_values(
+        DEFAULT_SHAPE, PINNED.values("brain"), dead_zone=BRAIN_ACTIVE_THRESHOLD
+    )
     assert traits.brain.shape is DEFAULT_SHAPE
     assert len(traits.brain.to_values()) == 198
 
@@ -77,6 +79,36 @@ def test_upkeep_charges_per_neuron_and_per_active_connection():
     assert strong.brain_upkeep == pytest.approx(
         BRAIN_NEURON_COST * 14 + BRAIN_CONNECTION_COST * 184
     )
+
+
+def test_the_cost_threshold_is_the_brains_dead_zone():
+    """BRAIN.21: a weight that costs nothing also does nothing, and one that acts also pays."""
+    for seed in range(5):
+        traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(seed)))
+        brain = traits.brain
+        assert brain.dead_zone == BRAIN_ACTIVE_THRESHOLD
+        values = list(brain.to_values())
+        size = DEFAULT_SHAPE.neuron_size
+        weight_positions = [
+            j * size + i
+            for j in range(DEFAULT_SHAPE.hidden)
+            for i in range(1, size)  # everything in a neuron block but its bias
+        ]
+        live = [i for i in weight_positions if abs(values[i]) > BRAIN_ACTIVE_THRESHOLD]
+        assert brain.active_connections() == len(live)
+        # switching off every weight that costs nothing changes nothing the creature does
+        cut = [0.0 if i in weight_positions and i not in live else v for i, v in enumerate(values)]
+        plain = Brain.from_values(DEFAULT_SHAPE, cut)
+        inputs = [random.Random(seed).uniform(-1, 1) for _ in range(DEFAULT_SHAPE.inputs)]
+        assert brain.decide(inputs) == plain.decide(inputs)
+        assert plain.active_connections(BRAIN_ACTIVE_THRESHOLD) == len(live)
+
+
+def test_a_faint_brain_acts_only_through_its_biases():
+    faint = AnimalTraits(with_brain(FAINT))
+    assert faint.brain.active_connections() == 0
+    inputs = [0.9] * DEFAULT_SHAPE.inputs
+    assert faint.brain.decide(inputs) == faint.brain.decide([0.0] * DEFAULT_SHAPE.inputs)
 
 
 def test_upkeep_is_part_of_basal_metabolism():

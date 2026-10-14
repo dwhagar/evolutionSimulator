@@ -160,6 +160,11 @@ class Wanderer:
         self.policy = policy if policy is not None else WanderPolicy()
         self._turn: float | None = None
 
+    def reset(self) -> None:
+        """Forget the current wander turn, so the next time the creature gets stuck it picks a
+        fresh direction (for example when it falls asleep)."""
+        self._turn = None
+
     def undecided(self, decision: BrainDecision, percepts: Percepts) -> bool:
         """Whether this decision should be replaced by wandering."""
         policy = self.policy

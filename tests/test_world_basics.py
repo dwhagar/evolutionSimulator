@@ -137,6 +137,14 @@ def test_index_finds_ids_within_a_radius_in_order():
     assert index.query(Vec.of(-30, -30), 5) == []
 
 
+def test_index_query_with_distance_reports_each_distance():
+    index = SpatialIndex(10.0)
+    index.insert(2, Vec.of(3, 4))
+    index.insert(1, Vec.of(0, 1))
+    index.insert(3, Vec.of(50, 50))
+    assert index.query_with_distance(Vec.of(0, 0), 6) == [(1, 1.0), (2, 5.0)]
+
+
 def test_index_remove_and_duplicates():
     index = SpatialIndex(10.0)
     index.insert(1, Vec.of(1, 1))
