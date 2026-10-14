@@ -14,6 +14,7 @@ The field lists (``ANIMAL_FIELDS`` and so on) name the columns in order, and
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -209,3 +210,20 @@ def animal_detail(world: World, animal: Animal) -> AnimalDetail:
         genome=str(traits.dna),
         death_cause=traits.death_cause,
     )
+
+
+def trait_columns(organisms: Iterable[Animal | Plant]) -> dict[str, list[float]]:
+    """The numbers behind the trait and gene statistics (``UX.8``): for every organism given, each
+    primary trait (``trait.<id>``) and each single-value gene (``gene.<id>``, 0 to 1; the brain's
+    block of weights is left out), as one list per name in the order the organisms were given."""
+    columns: dict[str, list[float]] = {}
+    for organism in organisms:
+        traits = organism.traits
+        for name, value in traits.phenotype.items():
+            columns.setdefault(f"trait.{name}", []).append(float(value))
+        genome = traits.dna
+        layout = genome.layout
+        for gene_id in layout.gene_ids:
+            if layout.gene(gene_id).block is None:
+                columns.setdefault(f"gene.{gene_id}", []).append(genome.value(gene_id))
+    return columns
