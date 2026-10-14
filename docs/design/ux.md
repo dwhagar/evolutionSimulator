@@ -580,11 +580,17 @@ settings form, a line that says what is wrong (Start is disabled until nothing i
   drops `RunStarted` (it is exempt from the event caps) and discards the old run's pending world events.
   `LocalBackend` starts a new `Recorder` on the new world and publishes the empty history at once, so
   the charts clear; `ViewerController` also forgets `history`.
-- **Saved runs (UX.18).** The File entry and the label come through `ViewerContext.add_menu_action`
-  and `set_run_label`. Starting a run asks `RunManager`: if a saved run is current, `detach()` writes its
-  last checkpoint before the world is replaced and nothing is asked; a world that was never saved
-  (tick above 0, no current run) is only replaced after a yes. The new run is not saved until Save run
-  now.
+- **Saved runs (UX.18, UX.31).** The File entry and the label come through
+  `ViewerContext.add_menu_action` and `set_run_label`. Starting a run asks `RunManager`: if a saved run
+  is current, `detach()` writes its last checkpoint before the world is replaced and nothing is asked;
+  a world that was never saved (tick above 0, no current run) is only replaced after a yes. Then the
+  new run is saved at once (`save_now(name)`, the owner's default is that history is always recorded;
+  the Run name box, empty for "seed N"), so it is in the list from tick 0 and autosaves. A backend that
+  cannot save (a made-up world) starts the run unsaved, and a failed save says so and carries on.
+  Through the process host it is the host that does the same: `Host` finishes the run it was saving
+  (last checkpoint), swaps the world, starts a new `Recorder` (the next `HistoryBatch` is a full, empty
+  history) and, if it was in a run, creates one named `NewRun.name` in the same store with its own
+  `RunNotice`; a refused `NewRun` leaves the world and keeps its autosave.
 - **Found on the way.** `LocalBackend` subscribed `self._events.append` and then rebound `self._events`
   in each poll, so every event after the first poll went into a list nobody read. It subscribes a method
   now (`_heard`) and a test polls twice.

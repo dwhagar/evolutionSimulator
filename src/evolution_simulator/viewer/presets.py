@@ -28,9 +28,10 @@ class RunSetup:
     die before they breed."""
     config: WorldConfig = field(default_factory=WorldConfig)
 
-    def command(self) -> NewRun:
-        """The command that starts this run; ``CommandError`` if the counts do not fit the caps."""
-        return NewRun(self.config, self.animals, self.plants, self.seeded)
+    def command(self, name: str | None = None) -> NewRun:
+        """The command that starts this run, to be saved as ``name`` (or after its seed);
+        ``CommandError`` if the counts do not fit the caps."""
+        return NewRun(self.config, self.animals, self.plants, self.seeded, name or None)
 
     def with_seed(self, seed: int) -> RunSetup:
         return replace(self, config=replace(self.config, seed=seed))

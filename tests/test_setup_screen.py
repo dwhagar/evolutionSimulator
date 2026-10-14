@@ -6,6 +6,7 @@ import pytest
 
 QtCore = pytest.importorskip("PySide6.QtCore", exc_type=ImportError)
 
+from evolution_simulator.runs import RunStore
 from evolution_simulator.session import (
     CommandError,
     FakeSimulation,
@@ -24,6 +25,7 @@ from evolution_simulator.viewer.panels import setup as setup_screen
 from evolution_simulator.viewer.panels.setup import LAST_KEY, PRESETS_KEY, SetupPanel
 from evolution_simulator.viewer.presets import BUILTIN_PRESETS, RunSetup
 from evolution_simulator.viewer.registry import ViewerContext
+from evolution_simulator.viewer.run_manager import RunManager
 from evolution_simulator.viewer.window import MainWindow
 from evolution_simulator.world import World, WorldConfig
 
@@ -45,12 +47,14 @@ def clock():
 
 
 @pytest.fixture
-def controller(qapp, clock):
+def controller(qapp, clock, tmp_path):
     session = Session(
         FakeSimulation(30, 100, seed=3), rules=SessionRules(work_budget=10.0), clock=clock
     )
     backend = LocalBackend(session)
-    yield ViewerController(backend)
+    controller = ViewerController(backend)
+    RunManager.install(controller, RunStore(tmp_path / "runs"))  # never the user's own folder
+    yield controller
     backend.close()
 
 
@@ -408,8 +412,8 @@ def test_starting_a_run_renames_the_window_and_the_counts(window, controller):
     panel.seed.setText("31")
     panel.start()
     controller.poll()
-    assert window.windowTitle() == "Evolution Simulator - world, seed 31"
-    assert window.status_labels["run"].text() == "world, seed 31"
+    assert "seed 31" in window.windowTitle()  # the saved run names itself
+    assert "seed 31" in window.status_labels["run"].text()
     assert "Animals 4" in window.status_labels["counts"].text()
     assert "Tick 0" in window.status_labels["clock"].text()
 
@@ -476,9 +480,7 @@ def test_a_new_run_starts_a_new_history_and_the_charts_follow(qapp, settings, cl
 def test_a_saved_run_gets_its_last_checkpoint_before_a_new_run_replaces_it(
     qapp, settings, clock, tmp_path
 ):
-    from evolution_simulator.runs import RunStore
     from evolution_simulator.session import build_world
-    from evolution_simulator.viewer.run_manager import RunManager
 
     session = Session(
         build_world(NewRun(WorldConfig(seed=1), 10, 30)),
@@ -508,18 +510,16 @@ def test_a_saved_run_gets_its_last_checkpoint_before_a_new_run_replaces_it(
         )  # no question: the run is saved and gets its last checkpoint
         assert asked == []
         controller.poll()
-        assert manager.current_run is None
-        [summary] = manager.list_runs()
-        assert summary.tick == 12  # the final checkpoint, written before the world was replaced
         assert controller.frame.tick == 0
+        old, new = sorted(manager.list_runs(), key=lambda r: -r.tick)
+        assert old.tick == 12  # the final checkpoint, written before the world was replaced
+        assert new.tick == 0 and manager.current_run.id == new.id
     finally:
         backend.close()
 
 
 def test_a_world_that_was_never_saved_is_only_replaced_after_a_yes(qapp, settings, clock, tmp_path):
-    from evolution_simulator.runs import RunStore
     from evolution_simulator.session import build_world
-    from evolution_simulator.viewer.run_manager import RunManager
 
     session = Session(
         build_world(NewRun(WorldConfig(seed=1), 10, 30)),
@@ -537,6 +537,56 @@ def test_a_world_that_was_never_saved_is_only_replaced_after_a_yes(qapp, setting
         controller.poll()
         assert panel.start() is False and session.simulation.tick == 4
         assert panel.start() is True and session.simulation.tick == 0
-        assert manager.list_runs() == []  # nothing was saved behind the user's back
+        # the old, never saved world was not saved behind the user's back; the new one has its run
+        assert [r.tick for r in manager.list_runs()] == [0]
+        assert manager.current_run is not None
     finally:
         backend.close()
+
+
+def test_starting_a_run_saves_it_at_once_under_the_name_given(qapp, context, controller):
+    manager = RunManager.for_controller(controller)
+    panel = make_panel(context)
+    panel.animals.setValue(5)
+    panel.plants.setValue(15)
+    panel.seed.setText("12")
+    assert panel.name.placeholderText() == "seed 12"
+    panel.name.setText("  first try ")
+    assert panel.start() is True
+    assert manager.current_run is not None and manager.current_run.name == "first try"
+    [summary] = manager.list_runs()
+    assert summary.tick == 0 and summary.seed == 12
+    assert controller.backend.recorder is manager.recorder  # its history goes with the run
+    controller.poll()
+    assert controller.history is not None and len(controller.history) == 0
+
+
+def test_an_empty_name_leaves_the_run_named_after_its_seed(qapp, context, controller):
+    manager = RunManager.for_controller(controller)
+    panel = make_panel(context)
+    panel.seed.setText("7")
+    panel.start()
+    assert manager.current_run.name == "seed 7"
+
+
+def test_a_run_that_cannot_be_saved_still_starts_and_says_so(qapp, context, controller):
+    manager = RunManager.for_controller(controller)
+
+    def full_disk(name=None):
+        raise OSError("disk full")
+
+    manager.save_now = full_disk
+    panel = make_panel(context)
+    assert panel.start() is True
+    assert isinstance(controller.backend.session.simulation, World)
+    assert any("could not be saved: disk full" in m for m in context.messages)
+
+
+def test_a_backend_that_cannot_save_starts_the_run_without_saving(
+    qapp, context, controller, monkeypatch
+):
+    manager = RunManager.for_controller(controller)
+    monkeypatch.setattr(RunManager, "can_save", property(lambda self: False))
+    panel = make_panel(context)
+    assert panel.start() is True
+    assert manager.list_runs() == []

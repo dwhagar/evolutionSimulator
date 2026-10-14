@@ -8,7 +8,9 @@ A dock on the left, closed at first; File > New run (Ctrl+N) opens it. From the 
   world and a button for a random one.
 - **Settings**: a form generated from the frozen ``WorldConfig`` and the rules under it
   (``viewer.config_form``), with a filter box. Nothing in it names a field.
-- **Start run**: sends ``NewRun`` through the backend. Nothing is started while any box holds
+- **Run name**: what the saved run is called (empty names it after its seed).
+- **Start run**: sends ``NewRun`` through the backend, then saves the run at once (``RunManager``;
+  the owner's default is that history is always recorded), so the run is in the list from tick 0. Nothing is started while any box holds
   something that does not fit; the line under the form says what is wrong. A run that was saved
   (UX.18) gets its last checkpoint and is detached first; one that was never saved is only thrown
   away after a yes.
@@ -42,6 +44,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from evolution_simulator.runs import RunError
 from evolution_simulator.session import RunStarted
 from evolution_simulator.viewer.config_form import ConfigError, ConfigForm
 from evolution_simulator.viewer.presets import BUILTIN_PRESETS, Preset, RunSetup
@@ -94,6 +97,11 @@ class SetupPanel(QWidget):
         )
         self.seed = QLineEdit()
         self.seed.setToolTip("The same seed, settings and counts give the same run.")
+        self.name = QLineEdit()
+        self.name.setPlaceholderText("seed 0")
+        self.name.setToolTip(
+            "What the saved run is called in the list of saved runs; empty names it after its seed."
+        )
         self.random_seed = QPushButton("Random")
         self.filter = QLineEdit()
         self.filter.setPlaceholderText("Filter the settings...")
@@ -142,6 +150,10 @@ class SetupPanel(QWidget):
         seed.addWidget(self.seed, 1)
         seed.addWidget(self.random_seed)
         layout.addLayout(seed)
+        name = QHBoxLayout()
+        name.addWidget(QLabel("Run name"))
+        name.addWidget(self.name, 1)
+        layout.addLayout(name)
         layout.addWidget(self.seeded)
         layout.addWidget(self.filter)
         scroll = QScrollArea()
@@ -167,6 +179,7 @@ class SetupPanel(QWidget):
             box.valueChanged.connect(self._edited)
         self.seeded.toggled.connect(self._edited)
         self.seed.textChanged.connect(self._edited)
+        self.seed.textChanged.connect(self._name_hint)
         self.form.changed.connect(self._edited)
 
     # -------------------------------------------------------------------------
@@ -195,6 +208,9 @@ class SetupPanel(QWidget):
         finally:
             self._applying = False
         self._edited()
+
+    def _name_hint(self, text: str) -> None:
+        self.name.setPlaceholderText(f"seed {text.strip() or 0}")
 
     def pick_random_seed(self) -> None:
         self.seed.setText(str(random.SystemRandom().randrange(SEED_LIMIT)))
@@ -336,7 +352,7 @@ class SetupPanel(QWidget):
         """Start a run from the boxes. Returns whether the backend took the command."""
         try:
             setup = self.setup()
-            command = setup.command()
+            command = setup.command(self.name.text().strip())
         except ValueError as error:
             self.context.show_message(f"Cannot start: {error}", 8000)
             return False
@@ -359,10 +375,16 @@ class SetupPanel(QWidget):
         if self.settings is not None:
             self.settings.setValue(LAST_KEY, setup.to_json())
             self.settings.sync()
-        self.context.show_message(
+        text = (
             f"Started a new run: {setup.animals:,} animals, {setup.plants:,} plants, "
             f"seed {setup.config.seed}. Press Space to play."
         )
+        if manager.can_save:  # history is always recorded: the run is saved from its first tick
+            try:
+                manager.save_now(command.name)
+            except (RunError, OSError) as error:
+                text = f"Started a new run, but it could not be saved: {error}"
+        self.context.show_message(text, 8000)
         return True
 
     def _ask_yes_no(self, text: str) -> bool:
@@ -375,7 +397,9 @@ class SetupPanel(QWidget):
 
     def _on_event(self, event: object) -> None:
         if isinstance(event, RunStarted):
-            self.context.set_run_label(event.label)
+            manager = RunManager.for_controller(self.context.controller)
+            # a saved run names itself (with when it was saved); an unsaved one is just "world"
+            self.context.set_run_label(manager.label if manager.current_run else event.label)
 
     def reveal(self) -> None:
         """Bring the dock this panel sits in to the front (File > New run)."""

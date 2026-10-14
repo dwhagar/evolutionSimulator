@@ -82,16 +82,21 @@ class NewRun:
     filled with ``animals`` founders and ``plants`` plants (the founders carry the seeded brains
     unless ``seeded`` is False), paused at tick 0. The run being replaced is not saved. The speed
     the viewer had set stays, unless ``config.traits.time.speed`` was changed from its default,
-    which then becomes the speed."""
+    which then becomes the speed. Through the process host a run that was being saved is closed with
+    a last checkpoint and the new world gets a run of its own, in the same run store."""
 
     config: WorldConfig
     animals: int = 0
     plants: int = 0
     seeded: bool = True
+    name: str | None = None
+    """What the run is called when it is saved (the run store names it after its seed otherwise)."""
 
     def __post_init__(self) -> None:
         if not isinstance(self.config, WorldConfig):
             raise CommandError(f"NewRun needs a WorldConfig, got {self.config!r}.")
+        if self.name is not None and not (isinstance(self.name, str) and self.name.strip()):
+            raise CommandError(f"A run name must be some text or None, got {self.name!r}.")
         for name, cap in (("animals", self.config.max_animals), ("plants", self.config.max_plants)):
             count = getattr(self, name)
             if not isinstance(count, int) or isinstance(count, bool) or count < 0:
@@ -103,8 +108,8 @@ class NewRun:
 
     @property
     def label(self) -> str:
-        """A few words for a title bar: ``world, seed 7``."""
-        return f"world, seed {self.config.seed}"
+        """A few words for a title bar: ``world, seed 7``, or the run's name instead of ``world``."""
+        return f"{self.name or 'world'}, seed {self.config.seed}"
 
 
 Command = Play | Pause | Step | SetSpeed | Select | Deselect | NewRun

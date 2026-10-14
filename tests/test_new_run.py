@@ -6,16 +6,23 @@ from dataclasses import replace
 
 import pytest
 
+from evolution_simulator.history import HistoryMirror, Recorder
+from evolution_simulator.runs import RunStore
 from evolution_simulator.session import (
+    Ack,
     CommandError,
+    CommandRejected,
     EventBatch,
     FakeSimulation,
     FakeSpec,
+    HistoryBatch,
     Host,
     HostRules,
     NewRun,
     Play,
+    Prepared,
     ProcessClient,
+    RunNotice,
     RunStarted,
     Select,
     Session,
@@ -24,6 +31,7 @@ from evolution_simulator.session import (
     StatusChanged,
     Step,
     build_world,
+    make_host,
 )
 from evolution_simulator.world import World, WorldConfig
 
@@ -76,6 +84,13 @@ def test_counts_above_the_caps_of_the_config_are_refused():
         NewRun(config, 11, 0)
     with pytest.raises(CommandError, match="at most 30 plants"):
         NewRun(config, 0, 31)
+
+
+def test_a_name_is_text_or_nothing_and_replaces_world_in_the_label():
+    assert small(seed=3, name="Slow burn").label == "Slow burn, seed 3"
+    for bad in ("", "   ", 5):
+        with pytest.raises(CommandError, match="run name"):
+            small(name=bad)
 
 
 def test_something_that_is_not_a_config_is_refused():
@@ -311,3 +326,87 @@ def test_a_new_run_is_built_in_the_other_process():
         assert frame.animal_count <= 7
     finally:
         client.close()
+
+
+# --- the host's run and recorder across a new run ----------------------------------------------
+
+
+def host_in_a_run(tmp_path):
+    clock = Clock()
+    store = RunStore(tmp_path / "runs")
+    world = World(WorldConfig(seed=4))
+    world.populate(animals=8, plants=20)
+    recorder = Recorder(world)
+    run = store.create(world, name="first", recorder=recorder)
+    rules = HostRules(session=SessionRules(max_ticks_per_update=30, max_elapsed=10.0))
+    host = make_host(Prepared(world, recorder, run), rules, clock)
+    host.first_message()
+    host.receive(Ack(host._sent))
+    return host, clock, store
+
+
+def step_and_ack(host, clock, ticks=0):
+    if ticks:
+        host.receive(Step(ticks))
+    clock.advance(0.3)
+    out = host.step()
+    host.receive(Ack(host._sent))
+    return out
+
+
+def test_a_new_run_through_the_host_closes_the_old_run_and_starts_one_in_the_same_store(tmp_path):
+    host, clock, store = host_in_a_run(tmp_path)
+    step_and_ack(host, clock, 30)
+    old = host.run
+    assert host.session.simulation.tick == 30
+    host.receive(NewRun(WorldConfig(seed=9), 5, 12, name="second"))
+    assert host.session.simulation.tick == 0 and host.session.simulation.config.seed == 9
+    assert host.run is not None and host.run.id != old.id and host.run.name == "second"
+    runs = {r.name: r for r in store.list_runs()}
+    assert set(runs) == {"first", "second"}
+    assert runs["first"].tick == 30  # its last checkpoint, written before the world was replaced
+    assert runs["second"].tick == 0
+    out = step_and_ack(host, clock)
+    full = next(m for m in out if isinstance(m, HistoryBatch)).full
+    assert full is not None and len(full) == 0  # the old run's days are not the new run's
+    assert [m.run_id for m in out if isinstance(m, RunNotice)] == [host.run.id]
+    assert host.recorder.history() == full
+
+
+def test_the_new_runs_samples_go_on_to_the_viewers_mirror(tmp_path):
+    host, clock, _ = host_in_a_run(tmp_path)
+    mirror = HistoryMirror()
+    host.receive(NewRun(WorldConfig(seed=9), 5, 12))
+    for _ in range(3):
+        for message in step_and_ack(host, clock, 24):
+            if isinstance(message, HistoryBatch):
+                if message.full is not None:
+                    mirror.reset(message.rules, message.full)
+                else:
+                    mirror.push(message.samples)
+    assert len(mirror.history()) >= 2
+    assert mirror.history() == host.recorder.history()
+
+
+def test_a_host_without_a_run_makes_none_for_a_new_world():
+    host = make_host(FakeSimulation(5, 5), HostRules(), Clock())
+    old_recorder = host.recorder
+    host.receive(NewRun(WorldConfig(seed=2), 3, 6))
+    assert host.run is None and isinstance(host.session.simulation, World)
+    assert host.recorder is not old_recorder  # a recorder on the new world
+
+
+def test_a_refused_new_run_leaves_the_world_and_keeps_saving_it(tmp_path):
+    host, clock, store = host_in_a_run(tmp_path)
+
+    def refuse(command):
+        raise CommandError("no room")
+
+    host.session._new_run = refuse
+    before, run = host.session.simulation, host.run
+    host.receive(NewRun(WorldConfig(seed=9), 5, 12))
+    assert host.session.simulation is before and host.run is run
+    assert host._autosaver is not None and host._autosaver.world is before
+    out = step_and_ack(host, clock)
+    assert [m.reason for m in out if isinstance(m, CommandRejected)] == ["no room"]
+    assert len(store.list_runs()) == 1
