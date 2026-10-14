@@ -414,6 +414,39 @@ python -m evolution_simulator list --out runs/
   text), the buttons against the window's actions, the readouts against frames, the custom speed, the
   no-draw logic, and the keys through `QTest.keyClick`.
 
+### As built: saved runs in the viewer (`UX.18`)
+
+`viewer/run_manager.py` (`RunManager`, one per controller) joins the run store to the window, and the screens
+are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
+
+- **Save run now** (File, Ctrl+S). The first save starts a run (named after its seed unless given a name) with
+  a `Recorder` and an autosave (`UX.10`'s rules), so the run keeps checkpointing as it goes; later saves add a
+  checkpoint to the same run. A world that ran before the first save has history only from that point.
+  `manager.detach()` lets the current run go (with a last checkpoint) for a new world; `UX.17` calls it.
+- **Saved runs** (File, Ctrl+O, or View): a dock, hidden at first, with one row per run: name, seed, program
+  version, simulated time, last saved, animals, plants, size and a small population line. Buttons: Save run
+  now, Resume, History (also a double-click), Export history (CSV), Delete, Refresh. The run on screen is in
+  bold. The size warning of `UX.25` (5 GB by default) shows above the list and again after a save.
+- **Resume** restores the newest checkpoint that reads (or the one picked in the history window), builds a new
+  `Session` on it, and swaps it in behind the controller with `ViewerController.replace_backend`, which clears
+  the cached frame, detail and plants and emits `backend_replaced`. The world shows paused. A different run on
+  screen gets a last checkpoint first; resuming the run on screen goes back to its saved state, and both that
+  and a world that was never saved ask before anything is lost.
+- **History** is a window of its own per run (several can be open), read only: the facts, the charts, and the
+  checkpoint list with Resume from the selected one. The charts are the charts panel itself over one finished
+  history (`panels/charts.history_view(samples)`, a `ChartsPanel` with no controller); if that is missing or
+  fails, a plain animals and plants chart stands in. A run with no history samples yet says so.
+- **Shell hooks** added for this: `ViewerContext.add_menu_action(menu, action)` (File actions sit above Quit),
+  `ViewerContext.set_run_label(text)` (status bar and title), `MainWindow.add_menu_action` and
+  `set_run_label`, `ViewerController.replace_backend` and `backend_replaced`, and `--runs-folder DIR` on the
+  command line. A screen that holds anything about the old run (a selected animal, a trail) should drop it on
+  `backend_replaced` (the charts panel does). `LocalBackend(session, record=recorder)` takes a recorder that is
+  already listening, which is how a resumed run keeps its history; `RunManager` saves with the backend's own
+  recorder, so there is one per world.
+- **Limits.** Saving and resuming work on a `LocalBackend` (the world is in the window's process), through
+  `RunManager.local_world()`. Through the process host they wait for `UX.31` (the host creating the recorder,
+  sending history and starting from `Run.resume`); that function is the one place to change. Listing, history,
+  export and delete need no world and work with any backend.
 ### As built: the charts (`UX.16`)
 
 `viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with five

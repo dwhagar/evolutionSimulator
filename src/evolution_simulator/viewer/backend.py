@@ -53,15 +53,22 @@ class Backend(Protocol):
 class LocalBackend:
     """A ``Session`` in this process: ``poll`` runs the ticks that real time owes.
 
-    It keeps a statistics ``Recorder`` on the session's simulation (``record=False`` for none) and
-    publishes its ``HistorySamples`` in the batch that follows each new sample.
+    It keeps a statistics ``Recorder`` on the session's simulation (``record=False`` for none, or
+    pass a ``Recorder`` already listening to it, as a resumed run does) and publishes its
+    ``HistorySamples`` in the batch that follows each new sample.
     """
 
-    def __init__(self, session: Session, *, record: bool = True) -> None:
+    def __init__(self, session: Session, *, record: bool | Recorder = True) -> None:
         self.session = session
         self._events: list[SessionEvent] = []
         self._unsubscribe = session.subscribe(self._events.append)
-        self.recorder: Recorder | None = Recorder(session.simulation) if record else None
+        self.recorder: Recorder | None = (
+            record
+            if isinstance(record, Recorder)
+            else Recorder(session.simulation)
+            if record
+            else None
+        )
         self._published: int | None = None
 
     def send(self, command: Command) -> None:

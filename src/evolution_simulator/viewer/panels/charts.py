@@ -535,7 +535,9 @@ class DistributionTab(ChartTab):
 class ChartsPanel(QWidget):
     """The five chart tabs over one ``ViewerController``."""
 
-    def __init__(self, controller: ViewerController) -> None:
+    def __init__(self, controller: ViewerController | None = None) -> None:
+        """Over a live ``controller``, or with none to show one finished history that is handed
+        in with ``set_history`` (the run history window, ``history_view``)."""
         super().__init__()
         self.controller = controller
         self.tabs = QTabWidget()
@@ -564,8 +566,10 @@ class ChartsPanel(QWidget):
         self._timer.timeout.connect(self._flush)
         self.tabs.currentChanged.connect(lambda _index: self.refresh())
 
-        controller.history_received.connect(self.set_history)
-        self._history = controller.history  # a panel built late starts from the latest
+        if controller is not None:
+            controller.history_received.connect(self.set_history)
+            controller.backend_replaced.connect(self._on_backend_replaced)
+            self._history = controller.history  # a panel built late starts from the latest
         self.refresh()
 
     @property
@@ -576,6 +580,12 @@ class ChartsPanel(QWidget):
         """Take the newest history; the charts are redrawn soon, but not more than a few times a
         second however fast the world is running."""
         self._history = history
+        self.mark_dirty()
+
+    def _on_backend_replaced(self, _backend) -> None:
+        """A different run is shown (a resumed one): drop the old run's history until the new one's
+        arrives with the next poll."""
+        self._history = None if self.controller is None else self.controller.history
         self.mark_dirty()
 
     def mark_dirty(self) -> None:
@@ -608,6 +618,14 @@ class ChartsPanel(QWidget):
 
     def reset_view(self) -> None:
         self.current.fit()
+
+
+def history_view(history: HistorySamples) -> ChartsPanel:
+    """The charts over one finished history, read only, for the run history window (UX.18)."""
+    panel = ChartsPanel()
+    panel.set_history(history)
+    panel.refresh()
+    return panel
 
 
 def build(context: ViewerContext) -> ChartsPanel:

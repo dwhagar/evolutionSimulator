@@ -30,6 +30,9 @@ Area = Literal["center", "left", "right", "top", "bottom"]
 can be dragged, floated, closed and brought back from the View menu."""
 
 
+MenuName = Literal["file", "run", "view", "help"]
+
+
 class ViewerContext:
     """What a panel is given: the controller, the window's actions and its message line."""
 
@@ -38,12 +41,16 @@ class ViewerContext:
         controller: ViewerController,
         actions: dict[str, QAction],
         show_message: Callable[[str, int], None],
+        add_menu_action: Callable[[MenuName, QAction], None] | None = None,
+        set_run_label: Callable[[str], None] | None = None,
     ) -> None:
         self.controller = controller
         self.actions = actions
         """The window's actions by name (``play_pause``, ``step`` ...), so a button can share
         the menu's action, its shortcut and its enabled state instead of making a second one."""
         self._show_message = show_message
+        self._add_menu_action = add_menu_action
+        self._set_run_label = set_run_label
 
     def send(self, command: Command) -> bool:
         return self.controller.send(command)
@@ -51,6 +58,17 @@ class ViewerContext:
     def show_message(self, text: str, timeout_ms: int = 5000) -> None:
         """Say something on the status bar for a while."""
         self._show_message(text, timeout_ms)
+
+    def add_menu_action(self, menu: MenuName, action: QAction) -> None:
+        """Put an action in one of the window's menus (File actions go above Quit). The window
+        owns the menus, so a screen that needs a menu entry adds it from its factory."""
+        if self._add_menu_action is not None:
+            self._add_menu_action(menu, action)
+
+    def set_run_label(self, text: str) -> None:
+        """Name the run in the status bar and the window title (empty clears it)."""
+        if self._set_run_label is not None:
+            self._set_run_label(text)
 
 
 @dataclass(frozen=True)
