@@ -6,6 +6,9 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 
 ## 0.1 — Data models for DNA and traits
 
+### Added
+- `BRAIN.1`: Design note on a small feedforward neural network brain for animals (`docs/design/brain.md`): 17 inputs, 8 hidden neurons, 6 outputs, weights stored in the DNA, with six owner decisions filed as issues ([#23](https://github.com/dwhagar/evolutionSimulator/issues/23) to [#28](https://github.com/dwhagar/evolutionSimulator/issues/28), `BRAIN.3` to `BRAIN.8`). [#29](https://github.com/dwhagar/evolutionSimulator/pull/29)
+
 ### Changed
 - `DOCS.4`: Milestone 0.1 set by the owner: data models for traits and DNA, with a document on how they interact. The version line moves from 0.0 to 0.1 ([docs/versioning.md](docs/versioning.md)). [#21](https://github.com/dwhagar/evolutionSimulator/pull/21)
 - `DOCS.1`: TODO items have `AREA.N` task IDs, and issues and PRs are labelled with them (see [TODO.md](TODO.md)). [#19](https://github.com/dwhagar/evolutionSimulator/pull/19)
