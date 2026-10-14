@@ -241,6 +241,7 @@ def sense(
     edge_distance: float | None = None,
     mass: float = 0.0,
     edge_direction: tuple[float, float] | None = None,
+    reach: dict[str, float] | None = None,
 ) -> Percepts:
     """What a creature at ``position`` facing ``heading`` (radians, 0 is +x, counterclockwise) with
     a body of ``radius`` perceives of ``neighbours``.
@@ -251,13 +252,15 @@ def sense(
     if it knows it; touch reports the edge as it does anything else in contact. ``edge_direction``
     is the direction to that edge in world coordinates (a vector of any length): with it, vision
     (inside the field of view) and touch also report where the edge is and how close.
+    ``reach`` is ``effective_reach(organs, conditions, rules)`` when the caller already has it.
     """
     if position.dimensions != 2:
         raise ValueError("The sensing step supports 2D positions only for now.")
     conditions = conditions if conditions is not None else SensingConditions()
     rules = rules if rules is not None else SensingRules()
 
-    reach = effective_reach(organs, conditions, rules)
+    if reach is None:
+        reach = effective_reach(organs, conditions, rules)
     half_fov = math.radians(organs.vision_fov_degrees) / 2.0
     reach_vision, reach_hearing = reach["vision"], reach["hearing"]
     reach_smell, reach_touch = reach["smell"], reach["touch"]

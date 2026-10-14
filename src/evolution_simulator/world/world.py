@@ -227,6 +227,8 @@ class World:
         self._step_listeners: list[Callable[[StepReport], None]] = []
         self._stepping: bool = False
         self._traced: int | None = None
+        self._light: tuple[int, object, float, float | None] | None = None
+        """The light of the current tick, kept because every animal's senses ask for it."""
         self.calls: dict[int, tuple[float, float]] = {}
         """Animals calling this tick, by id: (alarm call radius, mating call radius), 0 for none."""
         if self.config.learning is not None:
@@ -251,18 +253,33 @@ class World:
 
     @property
     def simulated_seconds(self) -> float:
-        return self.time_scale.simulated_seconds(self.tick)
+        return self.tick * self.config.traits.time.seconds_per_tick
 
     @property
     def elapsed(self) -> str:
         """Simulated time so far, for example ``3d 04:00:00``."""
         return format_duration(self.simulated_seconds)
 
+    def _light_now(self) -> tuple[float, float | None]:
+        """``(daylight, day_phase)`` now. Worked out once a tick: it depends only on the tick and
+        the (immutable) rules, and each awake animal's senses ask for it."""
+        traits = self.config.traits
+        cached = self._light
+        if cached is not None and cached[0] == self.tick and cached[1] is traits:
+            return cached[2], cached[3]
+        cycle = traits.day_cycle
+        if cycle is None:
+            daylight, phase = 1.0, None
+        else:
+            seconds = self.simulated_seconds
+            daylight, phase = cycle.daylight(seconds), cycle.phase(seconds)
+        self._light = (self.tick, traits, daylight, phase)
+        return daylight, phase
+
     @property
     def daylight(self) -> float:
         """Light now, from 0 (midnight) to 1 (noon); always 1 without a day cycle."""
-        cycle = self.config.day_cycle
-        return 1.0 if cycle is None else cycle.daylight(self.simulated_seconds)
+        return self._light_now()[0]
 
     @property
     def is_night(self) -> bool:
@@ -278,8 +295,7 @@ class World:
     @property
     def day_phase(self) -> float | None:
         """The position in the day from 0 (midnight) up to 1, or ``None`` without a day cycle."""
-        cycle = self.config.day_cycle
-        return None if cycle is None else cycle.phase(self.simulated_seconds)
+        return self._light_now()[1]
 
     def edge_vector(self, position: Vec) -> tuple[float, float]:
         """A unit vector from ``position`` toward the nearest wall (the lowest axis, then the low
@@ -291,6 +307,16 @@ class World:
                     best = (gap, axis, sign)
         _, axis, sign = best
         return (sign, 0.0) if axis == 0 else (0.0, sign)
+
+    def edge_state(self, position: Vec) -> tuple[float, tuple[float, float]]:
+        """``(edge_distance, edge_vector)`` for ``position`` in one pass over the walls."""
+        gap, axis, sign = math.inf, 0, 0.0
+        for index, (c, size) in enumerate(zip(position.coords, self.bounds.size)):
+            if c < gap:
+                gap, axis, sign = c, index, -1.0
+            if size - c < gap:
+                gap, axis, sign = size - c, index, 1.0
+        return gap, ((sign, 0.0) if axis == 0 else (0.0, sign))
 
     def edge_distance(self, position: Vec) -> float:
         """Distance from ``position`` to the nearest wall."""
@@ -556,9 +582,7 @@ class World:
         sunlight = self.daylight
         self._refresh_competition(plants)
         for plant in plants:
-            plant.traits.set_environmental_conditions(
-                sunlight=sunlight * plant.shade, soil_competition=plant.soil
-            )
+            plant.traits.set_environmental_conditions(sunlight * plant.shade, plant.soil)
 
         # 1. Sense and decide, all from the same start-of-tick world. Sleepers do not.
         for animal in animals:
@@ -603,8 +627,9 @@ class World:
         # 4. Plants grow and seed.
         plant_births = 0
         for plant in plants:
-            plant.traits.update_growth_and_metabolism(dt)
-            if plant.is_alive and plant.traits.flag_ready_to_seed:
+            traits = plant.traits
+            traits.update_growth_and_metabolism(dt)
+            if traits.is_alive and traits.flag_ready_to_seed:
                 plant_births += self._seed(plant)
 
         # 5. Remove the dead and advance the clock.
