@@ -118,6 +118,34 @@ world starts at noon. `World.daylight`, `World.is_night` and `World.day` read it
   themselves follows the sleep factors in the sensing rules once `SENSE.12` wires `sense()` into the
   world. A loud call waking a sleeper needs calls to be heard first, so it is not built.
 
+## Plant balance (WORLD.8)
+
+The finding: with the prototype constants 300 random plants reached the 5000 cap in about 200
+ticks, because a plant's growth (0.2 to 1.0 a tick) is several times its upkeep (about 0.1) and
+nothing took it away. Plants now limit each other (`PlantRules` in `WorldConfig`):
+
+- **Soil.** Within 25 units, a plant's own biomass and its neighbours' add up. The plant keeps
+  `1 - biomass per unit of ground / capacity` of its soil access (`capacity` is 0.015 biomass per
+  unit of ground), nothing at or above capacity. It is a logistic limit that does not depend on
+  how fast plants grow. The neighbourhood is the same for every plant on purpose: when root radius
+  set it, plants evolved the smallest roots and the limit stopped working (measured). Strengths
+  that only damped growth (a divisor of 1 + k x load) also failed: with growth ten times upkeep, even
+  k = 100 let the population reach the cap.
+- **Light.** A heavier neighbour whose canopy covers a plant shades it by `1 / (1 + load)`, where
+  the load is `1 - distance / canopy radius`, so tall plants shade seedlings.
+- **Refresh.** One plant in ten is recomputed each tick, which keeps the cost low (the speed
+  figures above include it).
+
+*Measured* (1000 by 1000 world, 300 random plants, seed 1, the default day cycle, no animals):
+the count dips to about 50 in the first night (most random seedlings do not survive it), then
+grows slowly and settles on a daily swing between about 1100 (night) and 3400 (day) by tick 6000,
+well under the 5000 cap. At capacity 0.01 the population nearly dies out and at 0.02 it peaks near
+4800, so 0.015 is the middle. Plants also evolve toward fast growth and small bodies in these runs.
+The daily swing comes from seedlings: they start at 15% of their body mass and the traits code
+leaves them burning upkeep all night on a floor of 0.05 sunlight, so most die before dawn. That is
+a `TRAIT.3` tuning matter (starter reserve or night upkeep), not a world rule. Animals eating plants
+will move all of this, so the capacity should be calibrated again once animals survive.
+
 ## Senses are swappable
 
 The loop calls `world.senses.perceive(world, animal)` and expects the brain's `Percepts`
@@ -138,7 +166,7 @@ the nearest possible mate. Calls are not heard yet, so those inputs stay 0.
 - **Sex and species.** Any two willing animals of the same layout may mate; mate choice by genetic
   closeness is `REPRO.4`.
 - **Sleep** energy numbers and the 600-second day are guesses to calibrate (`SENSE.13`, `TRAIT.3`).
-- **Population caps** (1000 animals, 5000 plants) exist so a run cannot grow without limit.
+- **Population caps** (1000 animals, 5000 plants) are a safety net so a run cannot grow without limit; plants now stay under theirs on their own.
 - **Speed** (`WORLD.9`). Measured with `cProfile` on 300 animals and 3000 plants: the first version took
   about 62 ms per tick, mostly in the senses (generic vector arithmetic and the neighbour query
   building temporary vectors) and the brain pass. Now about 23 ms per tick (about 3 ms at 60
@@ -156,7 +184,5 @@ Sent to the TODO thread rather than built here:
 
 - Whether metabolism, ageing and speed should be per second (so `seconds_per_tick` changes the
   physics) or per tick (as now). Needs the `TRAIT.3` config.
-- Plant balance: with the prototype's constants a few hundred random plants reach the 5000 cap within
-  about 200 ticks, so the plant growth and seeding numbers need tuning against a food limit.
 - Random first-generation animals starve before they breed, as the brain note predicted
   (`BRAIN.9`, `BRAIN.16`).

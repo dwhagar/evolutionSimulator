@@ -17,7 +17,7 @@ from evolution_simulator.world.timescale import (
     format_duration,
 )
 from evolution_simulator.world.vector import Vec
-from evolution_simulator.world.world import StepReport, World, WorldConfig
+from evolution_simulator.world.world import PlantRules, StepReport, World, WorldConfig
 
 __all__ = [
     "SPEED_PRESETS",
@@ -27,6 +27,7 @@ __all__ = [
     "DayCycle",
     "Pacer",
     "Plant",
+    "PlantRules",
     "Senses",
     "SleepListener",
     "SleepRules",
