@@ -178,7 +178,7 @@ def test_range_edges_match_the_prototype_formulas():
     low = ANIMAL_TRAITS.express(DNA(ANIMAL_LAYOUT, "0" * ANIMAL_LAYOUT.length))
     high = ANIMAL_TRAITS.express(DNA(ANIMAL_LAYOUT, "3" * ANIMAL_LAYOUT.length))
     assert (low["mass"], high["mass"]) == (1.0, 4.0)
-    assert (low["fov_degrees"], high["fov_degrees"]) == (40.0, 360.0)
+    assert (low["fov_half_degrees"], high["fov_half_degrees"]) == (15.0, pytest.approx(180.0))
     assert (low["call_energy_cost"], high["call_energy_cost"]) == (1.5, pytest.approx(7.5))
     plant_low = PLANT_TRAITS.express(DNA(PLANT_LAYOUT, "0" * PLANT_LAYOUT.length))
     plant_high = PLANT_TRAITS.express(DNA(PLANT_LAYOUT, "3" * PLANT_LAYOUT.length))

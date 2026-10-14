@@ -27,7 +27,14 @@ from evolution_simulator.brain_adapter import (
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.learning import Learner, LearningRules, State
-from evolution_simulator.sense_genes import direction_noise, sense_cost
+from evolution_simulator.sense_genes import (
+    direction_noise,
+    sense_cost,
+    vision_closeness_noise,
+    vision_direction_noise,
+    vision_reach,
+    working_acuity,
+)
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
 
 # Energy cost of thinking per tick, added to basal metabolism. Placeholders for the first brain
@@ -268,8 +275,11 @@ class AnimalTraits(BaseTraits):
         self.base_turn_rate: float = (0.05 + (0.25 * t["agility"])) / (1.0 + (0.5 * t["size"]))
 
         # Sensory geometry
-        self.effective_sight_range: float = t["sight_reach"] * (1.0 - (0.45 * t["sight_fov"]))
-        self.fov_degrees: float = t["fov_degrees"]
+        # The eye (SENSE.16): the field gene is the half-angle, and working acuity is capped by it.
+        self.acuity: float = working_acuity(t["sight_fov"], t["sight_acuity"])
+        self.effective_sight_range: float = vision_reach(t["sight_reach"], self.acuity)
+        self.fov_half_degrees: float = t["fov_half_degrees"]
+        self.fov_degrees: float = 2.0 * self.fov_half_degrees
         self.hearing_range: float = t["hearing_range"]
         self.smell_sensitivity: float = t["smell"]
         self.smell_range: float = t["smell_range"]
@@ -286,8 +296,10 @@ class AnimalTraits(BaseTraits):
             self.smell_range,
             t["touch"],
             t["taste"],
+            self.acuity,
         )
-        self.vision_noise: float = direction_noise("vision", t["sight_range"])
+        self.vision_noise: float = vision_direction_noise(self.acuity)
+        self.vision_closeness_noise: float = vision_closeness_noise(self.acuity)
         self.hearing_noise: float = direction_noise("hearing", t["hearing"])
         self.smell_noise: float = direction_noise("smell", t["smell"])
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))

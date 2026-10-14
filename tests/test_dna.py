@@ -30,7 +30,7 @@ def rng(seed: int = 1) -> random.Random:
 
 
 def test_layout_lengths_match_prototype():
-    assert ANIMAL_LAYOUT.length == 1000  # 92 body digits plus a 908-digit brain
+    assert ANIMAL_LAYOUT.length == 1004  # 96 body digits plus a 908-digit brain
     assert PLANT_LAYOUT.length == 30
     assert TINY.length == 5
 
@@ -53,18 +53,19 @@ def test_animal_gene_positions_follow_the_clusters():
     assert span(ANIMAL_LAYOUT, "speed") == (4, 8)
     assert span(ANIMAL_LAYOUT, "somatic_maint") == (12, 16)
     assert span(ANIMAL_LAYOUT, "recovery") == (16, 19)
-    assert span(ANIMAL_LAYOUT, "hearing") == (27, 31)
-    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (31, 35)
-    assert span(ANIMAL_LAYOUT, "touch") == (43, 47)
-    assert span(ANIMAL_LAYOUT, "fear") == (59, 63)
-    assert span(ANIMAL_LAYOUT, "repro_drive") == (63, 66)
-    assert span(ANIMAL_LAYOUT, "repro_cooldown") == (66, 69)
-    assert span(ANIMAL_LAYOUT, "fertility") == (69, 72)
-    assert span(ANIMAL_LAYOUT, "parenting") == (72, 75)
-    assert span(ANIMAL_LAYOUT, "sex_strategy") == (75, 76)
-    assert span(ANIMAL_LAYOUT, "brain_gain") == (76, 80)  # the operating genes follow the body
-    assert span(ANIMAL_LAYOUT, "learning_rate") == (88, 92)
-    assert span(ANIMAL_LAYOUT, "brain") == (92, 1000)
+    assert span(ANIMAL_LAYOUT, "sight_acuity") == (27, 31)
+    assert span(ANIMAL_LAYOUT, "hearing") == (31, 35)
+    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (35, 39)
+    assert span(ANIMAL_LAYOUT, "touch") == (47, 51)
+    assert span(ANIMAL_LAYOUT, "fear") == (63, 67)
+    assert span(ANIMAL_LAYOUT, "repro_drive") == (67, 70)
+    assert span(ANIMAL_LAYOUT, "repro_cooldown") == (70, 73)
+    assert span(ANIMAL_LAYOUT, "fertility") == (73, 76)
+    assert span(ANIMAL_LAYOUT, "parenting") == (76, 79)
+    assert span(ANIMAL_LAYOUT, "sex_strategy") == (79, 80)
+    assert span(ANIMAL_LAYOUT, "brain_gain") == (80, 84)  # the operating genes follow the body
+    assert span(ANIMAL_LAYOUT, "learning_rate") == (92, 96)
+    assert span(ANIMAL_LAYOUT, "brain") == (96, 1004)
     assert span(PLANT_LAYOUT, "root_reach") == (20, 24)
 
 
@@ -118,7 +119,7 @@ def test_random_is_seeded_and_valid():
     a = DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a == DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a != DNA.random(ANIMAL_LAYOUT, rng(8))
-    assert a.length == len(a) == 1000
+    assert a.length == len(a) == 1004
     assert a.layout is ANIMAL_LAYOUT
     assert set(a.sequence) <= {0, 1, 2, 3}
 

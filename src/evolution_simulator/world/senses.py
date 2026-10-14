@@ -88,8 +88,11 @@ def loudness(animal: Animal) -> float:
 class WorldSenses:
     """The default senses: the world's neighbour search and classifier feeding ``sense()``."""
 
-    def __init__(self, rules: SensingRules | None = None) -> None:
+    def __init__(self, rules: SensingRules | None = None, noisy: bool = True) -> None:
         self._rules = rules
+        self._noisy = noisy
+        """With ``noisy=False`` every report is exact and the world's random stream is untouched:
+        the zero-noise setting for tests and for studying the world without sensing error."""
 
     def perceive(self, world: World, animal: Animal) -> Percepts:
         # Imported here because ``sensing`` itself imports from this package.
@@ -178,7 +181,7 @@ class WorldSenses:
             neighbours,
             conditions,
             rules,
-            world.rng,
+            world.rng if self._noisy else None,
             edge_distance=world.edge_distance(position) - animal.radius,
             mass=traits.mass,
         )

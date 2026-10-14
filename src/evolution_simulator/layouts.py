@@ -5,7 +5,7 @@ so reordering, resizing, adding or removing a row changes every later position: 
 ``version`` when you do, since saved genomes carry it.
 
 The body is grouped into clusters of genes that feed one system, so the order is not the prototype's
-any more (layout version 6, ``DNA.15``); the brain block follows the body.
+any more (layout version 7, ``DNA.15``); the brain block follows the body.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ PLANT_MUTATION_PER_DIGIT: float = 0.005
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=6,
+    version=7,
     specs=(
         # Genes that feed one trait or one system sit together, tagged as a cluster (DNA.15), so
         # crossover tends to inherit them together (see docs/design/gene-clusters.md).
@@ -48,6 +48,7 @@ ANIMAL_LAYOUT = GenomeLayout(
         # senses
         GeneSpec("sight_range", cluster="sight"),
         GeneSpec("sight_fov", cluster="sight"),
+        GeneSpec("sight_acuity", cluster="sight"),
         GeneSpec("hearing", cluster="hearing"),
         GeneSpec("encoder_fidelity", cluster="hearing"),
         GeneSpec("smell", cluster="chemical"),
@@ -73,9 +74,9 @@ ANIMAL_LAYOUT = GenomeLayout(
         # the brain: read by the Brain object, not by the trait table
         BRAIN_GENE,
     ),
-    # The body keeps the prototype's 0.01 per digit (0.92 changes per child over its 92 digits). The
+    # The body keeps the prototype's 0.01 per digit (0.96 changes per child over its 96 digits). The
     # brain is about one change per child however long it is, about 0.0011 per brain digit.
-    segment_mutations={"body": 0.01 * 92, "brain": 1.0},
+    segment_mutations={"body": 0.01 * 96, "brain": 1.0},
 )
 
 PLANT_LAYOUT = GenomeLayout(
@@ -113,12 +114,44 @@ FOUNDER_LEVELS: Mapping[str, float] = {
 parenting, and the middle of the range for the rest. Evolution moves them from there."""
 
 
+FOUNDER_SENSE_SPREAD: float = 0.07
+"""How far a first generation's sense genes stray from the middle (0.5), either way, so the
+population is not a set of clones (``SENSE.16``)."""
+FOUNDER_DIET_TILT: float = 0.3
+"""How far diet moves the starting field of vision: ``0.5 - 0.3 * tilt`` where the tilt runs from -1
+(all plants) to +1 (all meat), so a pure predator starts with a narrow field and sharp eyes and a
+pure plant eater with a wide field and soft ones."""
+_MIDDLE_SENSES: tuple[str, ...] = ("sight_range", "hearing", "smell", "touch", "taste")
+
+
+def seed_sense_genes(dna: DNA, rng: random.Random) -> DNA:
+    """A copy of a first-generation genome with its sense genes at their starting levels.
+
+    The range genes and touch and taste start in the middle, 0.5 plus or minus
+    ``FOUNDER_SENSE_SPREAD``. The eye starts on its frontier (``sight_acuity = 1 - sight_fov``, so
+    none of the acuity gene goes unused) with the field tilted by the genome's own diet:
+    ``carnivore_eff - herbivore_eff`` from -1 to +1. After this the diet and the eye evolve
+    independently (``SENSE.19``'s default). Haploid genomes only.
+    """
+    spread = FOUNDER_SENSE_SPREAD
+
+    def around(level: float) -> float:
+        return min(1.0, max(0.0, level + rng.uniform(-spread, spread)))
+
+    tilt = dna.value("carnivore_eff") - dna.value("herbivore_eff")
+    for gene_id in _MIDDLE_SENSES:
+        dna = dna.with_value(gene_id, around(0.5))
+    field = around(0.5 - FOUNDER_DIET_TILT * tilt)
+    return dna.with_value("sight_fov", field).with_value("sight_acuity", 1.0 - field)
+
+
 def founder_animal_dna(rng: random.Random) -> DNA:
-    """A random animal genome with the reproduction genes set to ``FOUNDER_LEVELS``."""
+    """A random animal genome with the reproduction genes set to ``FOUNDER_LEVELS`` and the sense
+    genes at their starting levels (``seed_sense_genes``)."""
     dna = DNA.random(ANIMAL_LAYOUT, rng)
     for gene_id, level in FOUNDER_LEVELS.items():
         dna = dna.with_value(gene_id, level)
-    return dna
+    return seed_sense_genes(dna, rng)
 
 
 def dna_from_dict(data: Mapping[str, Any]) -> DNA:

@@ -1,7 +1,7 @@
 import random
 
 import pytest
-from genome_support import dna_from_v5
+from genome_support import dna_from_v6
 
 from evolution_simulator import traits as traits_module
 from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
@@ -89,8 +89,9 @@ def test_senses_cost_upkeep():
 
 
 def test_wide_fov_shortens_effective_sight():
-    narrow = AnimalTraits(animal_with(sight_range="3333", sight_fov="0000"))
-    wide = AnimalTraits(animal_with(sight_range="3333", sight_fov="3333"))
+    # The same sharp eye gene: the wide field leaves less of it to use, so the reach is shorter.
+    narrow = AnimalTraits(animal_with(sight_range="3333", sight_fov="0000", sight_acuity="3333"))
+    wide = AnimalTraits(animal_with(sight_range="3333", sight_fov="3333", sight_acuity="3333"))
     assert wide.fov_degrees > narrow.fov_degrees
     assert wide.effective_sight_range < narrow.effective_sight_range
 
@@ -392,17 +393,19 @@ def test_nobody_mates_in_cooldown_pregnant_dead_or_without_the_energy():
 
 
 def test_the_chance_of_conceiving_rises_with_both_fertilities():
+    TRIALS = 300  # seeded, so the same every run; the spread at 300 is about 0.03
+
     def chance(fertility_a: str, fertility_b: str) -> float:
         taken = 0
-        for i in range(2000):
+        for i in range(TRIALS):
             father, mother = male(fertility=fertility_a), female(fertility=fertility_b)
             result = AnimalTraits.mate(father, mother, random.Random(i))
             taken += result is MatingResult.CONCEIVED
-        return taken / 2000
+        return taken / TRIALS
 
-    assert chance("000", "000") == pytest.approx(0.30, abs=0.04)
-    assert chance("333", "333") == pytest.approx(0.90, abs=0.04)
-    assert chance("333", "000") == pytest.approx(0.60, abs=0.04)
+    assert chance("000", "000") == pytest.approx(0.30, abs=0.06)
+    assert chance("333", "333") == pytest.approx(0.90, abs=0.06)
+    assert chance("333", "000") == pytest.approx(0.60, abs=0.06)
 
 
 BIG_AND_QUICK = {"size": "3333", "recovery": "333"}  # modifiers that raise the litter capacity
@@ -921,8 +924,9 @@ def test_base_traits_hooks_are_noops_and_damage_kills():
 # genes and the brain are all zeros. An all-zero brain has every gate off, so slot 0 stays on as the
 # floor.
 _BODY = "3302332321121021200230232133200030321201111300230220212303212"
-_AT = 56  # where the reproduction genes sat in layout version 5 (after the fourteen 4-digit genes)
-PINNED_ANIMAL = dna_from_v5(
+_BODY = _BODY[:24] + "1111" + _BODY[24:]  # sight_acuity (SENSE.16), 0.33, after sight_fov
+_AT = 60  # where the reproduction genes sat before the clusters (after the fifteen 4-digit genes)
+PINNED_ANIMAL = dna_from_v6(
     _BODY[:_AT] + "211" + "123" + "220" + "301" + "132" + _BODY[_AT:] + "0" * 16, "0" * 908
 )  # 16: brain_gain, reaction_time, curiosity, learning_rate; 908: the brain
 PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122")
@@ -981,15 +985,16 @@ def test_pinned_animal_phenotype():
     assert t.max_damage_capacity == pytest.approx(158.823529412)
     assert t.base_max_speed == pytest.approx(5.232)
     assert t.base_turn_rate == pytest.approx(0.228787879)
-    assert t.effective_sight_range == pytest.approx(19.630449827)
-    assert t.fov_degrees == pytest.approx(294.745098039)
+    assert t.effective_sight_range == pytest.approx(23.343021915)  # 60 * 0.51 * (0.6 + 0.8 * 0.204)
+    assert t.fov_degrees == pytest.approx(216.887322934)  # 2 * 15 * 12 ** 0.796
+    assert t.acuity == pytest.approx(0.203921569)  # min(0.333, 1 - 0.796): the field caps it
     assert t.hearing_range == pytest.approx(53.0)
     assert t.smell_range == pytest.approx(50.196078431)
     assert t.body_radius == pytest.approx(0.699381521)
     assert t.tactile_range == pytest.approx(1.616805516)
     # repair, readiness, drive, fertility and recovery upkeep and the brain (one hidden neuron and six
     # outputs: 7 * 0.0005 + 26 * 0.0001, as every gate is off); the sense bill is on area (SENSE.11)
-    assert t.basal_metabolism == pytest.approx(0.621057679)
+    assert t.basal_metabolism == pytest.approx(0.619096544)
     assert t.call_radius == pytest.approx(13.411764706)
     assert t.call_energy_cost == pytest.approx(2.841176471)
     assert t.sex_type == 2

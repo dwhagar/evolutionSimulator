@@ -23,14 +23,14 @@ Done:
 
 Still to build, now that the owner has answered the open questions:
 - Plants asexual, slower to mutate and longer lived, `REPRO.3`; animal mate choice by genetic closeness, `REPRO.4`.
-- The reproduction genes: the first three are built (`REPRO.5`, `TRAIT.6`, [#74](https://github.com/dwhagar/evolutionSimulator/pull/74)) and mate choice by genetic closeness (`REPRO.4`). The owner's answers changed the gene set, so the design was revised (`REPRO.7`, [#77](https://github.com/dwhagar/evolutionSimulator/pull/77)); the build is `REPRO.8` (drive, cooldown, fertility with litters and gestation, parenting, the sex digit, a recovery gene, per-second charging), then plants, `REPRO.3` with `TRAIT.8`. Traits that read clusters of genes: design done (`DNA.14`, [#80](https://github.com/dwhagar/evolutionSimulator/pull/80)), build `DNA.15`.
+- The reproduction genes: the first three are built (`REPRO.5`, `TRAIT.6`, [#74](https://github.com/dwhagar/evolutionSimulator/pull/74)) and mate choice by genetic closeness (`REPRO.4`). The owner's answers changed the gene set, so the design was revised (`REPRO.7`, [#77](https://github.com/dwhagar/evolutionSimulator/pull/77)); the build is done (`REPRO.8`, `DNA.9`, `TRAIT.7`, [#101](https://github.com/dwhagar/evolutionSimulator/pull/101): drive, cooldown, fertility with litters and gestation, parenting, the sex digit, a recovery gene, per-hour charging); the plant lifespan gene `TRAIT.8` is next, and a re-check in the real world `REPRO.9`. Traits that read clusters of genes: design done (`DNA.14`, [#80](https://github.com/dwhagar/evolutionSimulator/pull/80)), build `DNA.15`.
 - Prototype quirk fixes, `TRAIT.5`; and one constants config, `TRAIT.3`.
 
 ## Next: world, senses and the thinking brain
 
 Not yet given a version; the owner sets milestones.
 - The world: built (`WORLD.2` to `WORLD.4`, [#53](https://github.com/dwhagar/evolutionSimulator/pull/53)): bounds, time scales, a spatial index, stand-in senses and the step loop. To come: the day-night cycle (`WORLD.5`), per-second physics for fast speeds (`WORLD.7`, waits on the owner's answer about time scales, question 8 on [#36](https://github.com/dwhagar/evolutionSimulator/issues/36)), plant balance (`WORLD.8`) and speed (`WORLD.9`, `WORLD.13`).
-- Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`.
+- Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`; the sense genes (field of vision, acuity) are built (`SENSE.16`, [#103](https://github.com/dwhagar/evolutionSimulator/pull/103)).
 - The brain acting and learning: design notes for a shape that evolves and for nightly learning are done (`BRAIN.13`, `BRAIN.15`, [#60](https://github.com/dwhagar/evolutionSimulator/pull/60)); the builds are `BRAIN.23` and `BRAIN.24`, then acting on the decisions, `BRAIN.10`.
 
 ## Later

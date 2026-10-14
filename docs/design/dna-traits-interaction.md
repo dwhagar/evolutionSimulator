@@ -46,12 +46,12 @@ See [brain.md](brain.md#as-built) for the layout, the cost and what is not built
 ### 1. Layout: where the genes are (`dna.py`, `layouts.py`)
 
 A `GenomeLayout` is an ordered list of `GeneSpec(id, length, cluster)`. Order fixes positions, so reordering or
-resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (1,000 digits,
-version 6: 92 body digits, that is 14 four-digit genes, five three-digit genes, one single-digit gene and the
+resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (1,004 digits,
+version 7: 96 body digits, that is 15 four-digit genes, five three-digit genes, one single-digit gene and the
 four brain operating genes, then a 908-digit brain block) and `PLANT_LAYOUT` (30 digits) are plain data.
 
 Genes that feed one trait or one system are tagged with a **cluster** name and sit next to each other
-(`DNA.15`): `frame` (size, speed, agility), `repair`, `sight`, `hearing`, `chemical`, `diet`, `temperament`
+(`DNA.15`): `frame` (size, speed, agility), `repair`, `sight` (range, field, acuity), `hearing`, `chemical`, `diet`, `temperament`
 and `reproduction`. The layout checks that a cluster's genes are consecutive and inside one segment, and
 lists them in `layout.clusters`. Crossover already keeps neighbours together (neighbouring genes are split
 in about 2 to 3% of children), so the tag costs nothing at run time; building the layout with

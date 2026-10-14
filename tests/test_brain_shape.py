@@ -165,7 +165,7 @@ def test_the_gain_must_be_positive_and_is_part_of_the_brain():
 def test_the_brain_block_matches_the_blueprint():
     assert BRAIN_GENE.count == DEFAULT_BLUEPRINT.value_count
     assert BRAIN_GENE.groups == DEFAULT_BLUEPRINT.group_sizes
-    assert ANIMAL_LAYOUT.version == 6 and ANIMAL_LAYOUT.length == 92 + 908
+    assert ANIMAL_LAYOUT.version == 7 and ANIMAL_LAYOUT.length == 96 + 908
 
 
 def test_unit_crossover_keeps_a_slot_with_its_gate():
@@ -323,7 +323,7 @@ def test_relative_size_needs_both_masses():
     assert look([near("prey", 10.0, 0.0)]).relative_size == 0.0
 
 
-def test_sound_only_reports_of_size_are_noisy_but_sight_is_exact():
+def test_reports_of_size_carry_the_error_of_the_organ_that_found_them():
     ears = SenseOrgans(hearing_range=50.0, hearing_noise=0.4)
     target = [near("prey", 10.0, 1.0)]
     exact = look(target, ears)
@@ -332,7 +332,9 @@ def test_sound_only_reports_of_size_are_noisy_but_sight_is_exact():
     assert noisy.relative_size != exact.relative_size
     eyes = SenseOrgans(vision_range=50.0, vision_noise=0.4, hearing_range=50.0, hearing_noise=0.4)
     seen = look(target, eyes, rng=rng(1))
-    assert seen.relative_size == pytest.approx(-0.5)  # vision found it: no size error
+    assert seen.relative_size != pytest.approx(-0.5)  # vision found it, with its own error
+    sharp = look(target, SenseOrgans(vision_range=50.0), rng=rng(1))
+    assert sharp.relative_size == pytest.approx(-0.5)  # a perfect eye makes none
 
 
 def test_daylight_is_passed_through():
