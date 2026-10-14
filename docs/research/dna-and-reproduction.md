@@ -9,7 +9,8 @@ side must provide so traits can be attached to it.
 
 **Status.** Draft. Open questions are tracked as GitHub issues (listed at the end), each with a
 recommended default so work can continue before they are answered. Prototype Python files from
-the owner have not arrived yet and will be folded in when they do.
+the owner (`dna.py` and `trait.py`) arrived after the first draft and are reviewed in
+[Review of the owner's prototype](#review-of-the-owners-prototype-dnapy-and-traitpy).
 
 **Confidence.** The biology here is textbook material. Numeric rates are order-of-magnitude
 figures for orientation, not values to copy; the simulation will use scaled-down rates anyway
@@ -28,9 +29,10 @@ figures for orientation, not values to copy; the simulation will use scaled-down
 9. [Variable-length genomes](#variable-length-genomes)
 10. [Proposed operators](#proposed-operators)
 11. [Parameter table (scaled for a simulation)](#parameter-table-scaled-for-a-simulation)
-12. [What the DNA object must provide](#what-the-dna-object-must-provide)
-13. [Open questions](#open-questions)
-14. [Sources](#sources)
+12. [Review of the owner's prototype](#review-of-the-owners-prototype-dnapy-and-traitpy)
+13. [What the DNA object must provide](#what-the-dna-object-must-provide)
+14. [Open questions](#open-questions)
+15. [Sources](#sources)
 
 ## Summary and recommendations
 
@@ -57,6 +59,15 @@ figures for orientation, not values to copy; the simulation will use scaled-down
   4. **Fixed number of gene slots** at first, with stable gene IDs reserved so duplication and
      deletion can be added later ([#5](https://github.com/dwhagar/evolutionSimulator/issues/5)).
   5. Every random operation takes an injected `random.Random` so runs are reproducible.
+- The owner's prototype already makes several of these choices (base-4 digit genome, fixed
+  length, haploid, clone and sexual paths) and is close to the recommended design. The review
+  below keeps what works and suggests a few changes. The two that need the owner's decision are
+  to cross over between genes rather than inside them
+  ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)) and whether to keep the
+  encoding in which the first digit of a gene matters most
+  ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)). The rest are small: set
+  mutation per genome, inject the random generator, describe the gene layout as data, and have
+  the simulation, not DNA, enforce who may mate.
 
 ## DNA in one page
 
@@ -443,6 +454,93 @@ starting default for a gene-level genome of 10 to 100 genes; all are meant to be
 | Mating | Any compatible pair, or by mate choice | Any two organisms | See [#4](https://github.com/dwhagar/evolutionSimulator/issues/4) |
 | Horizontal gene transfer | Common in bacteria | Off | Later, small operator |
 
+## Review of the owner's prototype (dna.py and trait.py)
+
+The owner uploaded two prototypes on 2026-10-14. Copies are in the project's shared files at
+`prototypes/owner-v1/` (not in the repo, because they use flat imports and are not yet package
+code). Numbers below were measured by running the prototype code.
+
+### What the prototype is
+
+| Prototype feature | Matches this research as |
+| --- | --- |
+| `BaseDNA`: fixed-length list of digits 0 to 3 (a four-letter alphabet, like A/C/G/T) | Level B/C hybrid: sequence-valued genes in fixed slots ([abstraction levels](#choosing-an-abstraction-level)) |
+| A gene is a 4-digit slice, read big-endian and scaled to 0.0 to 1.0 (`decode_normalized`) | Gene with a numeric allele; the trait layer applies the range |
+| `AnimalDNA` 65 digits (16 genes plus one sex digit), `PlantDNA` 24 digits (6 genes) | Fixed gene slots, one chromosome, position is identity |
+| `mutate`: each digit changes with probability `mutation_rate` to one of the other 3 values | Point substitution with no transition bias (the digits are abstract, so ts/tv does not apply) |
+| `crossover`: each digit taken from either parent with probability 0.5 | Uniform crossover for haploid parents |
+| `clone_with_mutation` and `reproduce` | Asexual and sexual paths ([#4](https://github.com/dwhagar/evolutionSimulator/issues/4)) |
+| One strand per organism | Haploid ([#3](https://github.com/dwhagar/evolutionSimulator/issues/3)) |
+| Crossing different DNA classes raises `TypeError` | A simple reproductive barrier between animals and plants |
+
+`AnimalTraits` and `PlantTraits` read DNA only through the decoded properties and compute the
+phenotype once at birth, which is the DNA-to-trait seam the note recommends. The size gene
+already affects mass, damage capacity, energy, speed, turn rate and body radius (pleiotropy), and
+all five senses draw on one shared metabolic cost (a trade-off between genes). Mutation applies
+only to the child, never to a living organism, which is the safe default.
+
+### What works well and should be kept
+
+- The decode API (`get_slice`, `decode_int`, `decode_normalized`) is the right seam. If traits
+  only call decoded properties, the genome can later become diploid (decode both strands and
+  combine with a dominance coefficient) or move toward gene IDs without touching `trait.py`.
+- 0.65 expected mutated digits per animal child and 0.24 per plant child (the animal figure was
+  confirmed over 20,000 clones) fits the guideline of at most about one change per organism.
+- `clone_with_mutation` copies first and then mutates, so a parent is never altered.
+- Different classes cannot mate, which is a cheap species barrier.
+
+### Suggested changes
+
+1. **Cross over between genes, not inside them** ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)).
+   Digit-by-digit crossover treats all 65 digits as unlinked and splices the digits of single
+   genes. For two unrelated parents the child's gene matches neither parent 70% of the time
+   (30% match), so crossover acts as an extra mutation source and breaks up evolved values. It
+   also means genes have no linkage, so gene order has no effect. Swapping whole genes, with
+   about one cut point per chromosome (the `meiotic_recombine` sketch above, cutting only at gene
+   boundaries), keeps inherited values intact and gives linkage between neighbouring genes. The
+   current gene order is already grouped by function (body, senses, behaviour), which would make
+   that linkage meaningful.
+2. **Decide on the mutation effect size and write it down** ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)).
+   Reading digits big-endian makes the first digit worth 64/255 of the range and the last 1/255.
+   Mean change per mutation as a share of the trait range, by digit position, is 0.42, 0.105,
+   0.026 and 0.007 (overall 0.14). One quarter of all mutations move a trait by at least 25% of
+   its range and about four in ten by under 2%. With 16 genes at 1% per digit about 15% of
+   animal children carry a jump of 25% or more in some trait. This is like the first and third
+   letters of a codon, so it is defensible, but it should be a deliberate choice. A
+   per-position mutation weight keeps the encoding and lets small changes dominate later.
+3. **Express mutation as expected changes per genome.** `mutation_rate` is per digit, so the same
+   0.01 gives 0.65 changes per animal but 0.24 per plant. Defining the setting as expected
+   mutations per genome (λ) and deriving the per-digit probability as λ divided by the length
+   keeps species comparable when genome sizes change.
+4. **Inject the random number generator.** `BaseDNA` uses the global `random` module in the
+   constructor, `crossover` and `mutate`. Accept an optional `rng: random.Random` (falling back
+   to the module generator) so runs are reproducible and tests are independent of each other.
+5. **Make the layout data, not class constants plus one property per gene.** A table of
+   `GeneSpec(name, start, length)` per species gives the same fixed layout, makes adding a gene a
+   one-line change, and gives the layout a single version number, which matters because changing
+   it invalidates any saved genome. It also lets the DNA class stay generic and trait-agnostic;
+   today `AnimalDNA` has properties named `speed`, `fear` and so on, so the DNA object knows trait
+   names, which this note recommends avoiding.
+6. **Treat the sex digit as a trait with simulation rules.** The sex digit is inherited and
+   mutated like any other digit. A cross of a type-0 parent with a type-3 parent gave type-0 and
+   type-3 children in a 50:50 split (2,002 and 1,971 of 4,000, the rest mutated), as expected, but
+   two parents of the same type can only have a child of that type, plus mutation, and the
+   code does not stop them mating. From `consume_mating_cost` the implied grouping is types 0 and
+   1 male-like and 2 and 3 female-like; only 0 and 3 have behaviour offsets in the traits. The
+   mate-compatibility check belongs to the simulation, not DNA. If it requires one of each, a
+   1:1 sex ratio tends to emerge because the rarer sex gets more matings (Fisher's principle),
+   although small populations can still lose one sex by chance.
+7. **Unused gene.** `fertility` (digits 56 to 59) is never read in `trait.py`, so it is
+   selectively neutral and will drift to random values. Either use it or remove it, since
+   neutral genes also count toward the mutation rate.
+8. **Imports.** `trait.py` does `from dna import ...`; inside the package these become relative
+   imports (`from .dna import ...`).
+
+Not DNA topics but noticed while reading, for the traits side: `PlantTraits` does not call
+`_refresh_vitality_dependents()` at construction, so `vitality` is 1.0 until the first update
+even though health starts at half; and `AnimalTraits.__init__` computes drives once without
+ever calling `_update_needs_and_drives()`, so flags start unset until the first tick.
+
 ## What the DNA object must provide
 
 Requirements the scaffolding should satisfy. Items marked *later* should not be built yet but
@@ -470,6 +568,8 @@ must not be designed out.
 - `reproduce(*parents, rng, params) -> Genome` as the single entry point: one parent clones,
   two parents recombine.
 - Serialise and deserialise (JSON-friendly) so runs and populations can be saved and compared.
+- Keep the owner's decode API (`get_slice`, `decode_int`, `decode_normalized`) as the only way
+  traits read DNA, and describe each species' gene layout as data (see the prototype review).
 
 **Interface with traits (Research 2)**
 
@@ -503,9 +603,13 @@ this note and the first scaffolding will assume until answered.
 | Haploid or diploid | [#3](https://github.com/dwhagar/evolutionSimulator/issues/3) | Diploid with haploid option |
 | Asexual, sexual or both; distinct sexes | [#4](https://github.com/dwhagar/evolutionSimulator/issues/4) | Both modes, no sexes |
 | Fixed or variable length genomes | [#5](https://github.com/dwhagar/evolutionSimulator/issues/5) | Fixed, with stable gene IDs |
+| Crossover between genes or inside them | [#14](https://github.com/dwhagar/evolutionSimulator/issues/14) | Between genes, about one cut per chromosome |
+| Keep first-digit-matters-most gene encoding | [#15](https://github.com/dwhagar/evolutionSimulator/issues/15) | Keep, with a per-position mutation weight setting |
 
-Prototype Python files from the owner are expected later in this thread; this note will be
-updated to reflect any choices made there.
+The owner's prototype already implies answers to the first four: it is a digit-sequence genome
+(gene-level with sequence-valued genes), haploid, fixed length, with both clone and sexual
+paths and no chromosomal sexes. Where that differs from a default above (haploid instead of
+diploid), the questions stay open until the owner confirms the prototype's choice is final.
 
 ## Sources
 
