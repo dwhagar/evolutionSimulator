@@ -11,7 +11,13 @@ Design for TRAIT.13 to TRAIT.16, from the owner's request of 2026-10-14. Written
 - An **effort to eat** is built in: tougher plants and more toxic plants take longer to eat.
 - Animals get a **resistance** gene: the more an animal resists toxic plants (or poisoned animals), the longer it takes to eat, but the more food it can eat.
 
-## The rule behind all of it
+## The rule behind all of it: two balancers per gene
+
+The owner's general rule (2026-10-14, for every gene, plant and animal): **every gene needs two balancers.** The first is an **inter-gene reaction**: the gene is connected to other genes through auxiliary traits, so raising it changes something else about the organism. The owner's example: a plant with more seeds is easier to eat, so it is more likely to get eaten. The owner has not yet said what the second balancer is. Until they do, the working default is the one the animal side already uses (TRAIT.9): a **direct cost** (upkeep, a share of a budget, a delay). Both are recorded per gene in the balancer table, and a test fails if a gene has fewer than two entries. If the owner names a different second balancer, the table gets that column instead. ([#216](https://github.com/dwhagar/evolutionSimulator/issues/216), question 4.)
+
+In the table below, the "side effect" part is the first balancer (the inter-gene link) and the "cost" part is the working second one. The animal genes need the same table (TRAIT.17).
+
+The TRAIT.9 rule for animals also still applies:
 
 The TRAIT.9 rule for animals applies: no gene can be raised to its maximum for free. Every gene below is either paid for (upkeep, a share of the seed budget, a delay) or limited by another gene. A test per layout (the animal one from TRAIT.9 is the model) raises each gene alone to its maximum and checks that the plant or animal is worse off in some way that the table below names.
 
@@ -26,7 +32,7 @@ Today's plant genes: `max_biomass` (size), `growth_rate`, `toxicity`, `dispersal
 | `toughness` (new, higher) | Takes longer to eat, so fewer bites per grazer and per day (effort to eat). | Upkeep (structural tissue), and it slows growth: the plant puts energy into structure, not leaves. Lowered again by fast seeding. |
 | `toxicity` (higher) | Poisons grazers, and raises the effort to eat. | Defence upkeep grows with toxicity and, with the default for question 1, with size (`toxin_cost * toxicity^1.5 * size factor`); it slows growth a little; and a seed carries toxin, so `seed_provision` has to cover it. |
 | `seeding_interval` (shorter, faster seeding) | More bursts per lifetime. | Each burst spends biomass (exists), and **new:** the plant is easier to eat (effective toughness falls as seeding gets faster), because it is spending on seed and not on defence. |
-| `seed_clutch` (more seeds) | More seedlings per burst. | The burst budget is shared, so each seed gets less (`seed_provision` is the share of the plant's own size per seed; a bigger clutch spends more of the budget). More seeds also compete with each other near the parent. |
+| `seed_clutch` (more seeds) | More seedlings per burst. | **Inter-gene link:** a plant with more seeds is easier to eat (the owner's example): effective toughness falls with the clutch, as with fast seeding. **Cost:** the burst budget is shared, so each seed gets less (`seed_provision` is the share of the plant's own size per seed; a bigger clutch spends more of the budget). More seeds also compete with each other near the parent. |
 | `seed_provision` (bigger seeds) | A seedling starts bigger and survives better, and germinates sooner. | It spends more of the burst budget, so fewer seeds can be paid for. |
 | `dispersal_radius` (further) | Seeds escape the parent's shade and soil limit and reach new ground. | **New:** a travel cost per seed (energy in proportion to the distance, taken from the seed's provision), so far seeds start smaller. |
 | `root_reach` (wider) | **New:** the radius of ground the plant draws on (fixing the dead gene; see below). | Root upkeep that grows with the reach squared, and it competes with more neighbours. |
@@ -36,7 +42,7 @@ Today's plant genes: `max_biomass` (size), `growth_rate`, `toxicity`, `dispersal
 
 - **Toxicity and size.** Default (question 1, A): the defence upkeep is `toxin_cost * toxicity^1.5` scaled by the plant's mass share, so a big plant pays more to be as poisonous as a small one. Alternatives: B (a bite of a big plant carries more toxin) and C (a bigger plant is less poisonous per bite). Whatever the answer, the toxin must cost something that grows with size.
 - **Size and germination.** A seed does not start growing at once: it waits `germination_days = base * (max_biomass / reference) ^ exponent` simulated days, shortened by a well provisioned seed (`seed_provision`). A tiny, fast plant germinates almost at once; a giant takes a season. Until then the seed is a plant that is alive but does not grow, cannot be eaten and cannot seed. (Build it as a countdown on the new plant, like `seed_cooldown`; it must be saved and restored.)
-- **Seeding speed and ease of eating.** The effective toughness of a plant is `toughness * (1 - growth_softness * growth_rate_share) * (1 - seeding_softness * seeding_speed_share)` where the shares are the gene values on the 0 to 1 scale, with seeding speed the inverse of the interval. Faster seeding or growth gives a lower number.
+- **Seeding, seed count and ease of eating.** The effective toughness of a plant is `toughness * (1 - growth_softness * growth_rate_share) * (1 - seeding_softness * seeding_speed_share) * (1 - clutch_softness * clutch_share)` where the shares are the gene values on the 0 to 1 scale, with seeding speed the inverse of the interval. Faster growth, faster seeding or a bigger clutch gives a lower number.
 
 ### Fixing `root_reach`
 
@@ -83,6 +89,7 @@ Default (question 3, A): an animal that ate poison keeps a `toxin_load` that fad
 3. TRAIT.14 (effort to eat) by the same thread; it needs the `toughness` gene.
 4. TRAIT.15 (animal resistance gene, animal layout version 10) by the thread that built SENSE.21, since it holds the layout bump history. It needs TRAIT.14 (the effort formula) and SENSE.21 (version 9).
 5. TRAIT.16 (poisoned animals), after TRAIT.15, if the owner confirms the default.
-6. A small viewer item (inspector fields: toughness, germination, effort, resistance) and the species/gene-chart names for the new genes, after each layout bump (the catalogue names and units are in `catalogue.py` and the viewer tables).
+6. TRAIT.17 (the same two-balancer table and test for every animal gene) is independent of the plant builds apart from the layout bumps; it comes after TRAIT.15 so the new gene is in the table, and can start earlier as an audit that lists the gaps.
+7. A small viewer item (inspector fields: toughness, germination, effort, resistance) and the species/gene-chart names for the new genes, after each layout bump (the catalogue names and units are in `catalogue.py` and the viewer tables).
 
 Each build updates [dna-and-traits.md](dna-and-traits.md), [trait-config.md](trait-config.md) (new rules fields), the persistence field tables and the layout version notes, and checks old saved plants and animals load (migration).
