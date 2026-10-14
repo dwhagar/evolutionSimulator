@@ -10,7 +10,8 @@ half is the design: what goes in, what comes out, how the brain is stored in the
 and how it would be built. A reader who only wants the decision can read the
 [summary](#summary) and the [open questions](#open-questions).
 
-**Status.** Draft for review. Nothing in this note is built. All figures marked *measured* were
+**Status.** Draft for review. The first building blocks are built (`BRAIN.2`, `DNA.11`, `DNA.12`; see
+[As built](#as-built)); the world loop, seeding and the behaviour flags are not. All figures marked *measured* were
 produced by running small Python scripts while writing it; the others are standard figures from the
 literature, quoted from memory (see [Sources](#sources)).
 
@@ -26,11 +27,12 @@ literature, quoted from memory (see [Sources](#sources)).
 8. [What thinking costs](#what-thinking-costs)
 9. [Getting evolution started](#getting-evolution-started)
 10. [How it connects to the DNA and traits objects](#how-it-connects-to-the-dna-and-traits-objects)
-11. [Speed](#speed)
-12. [Risks and how to see them early](#risks-and-how-to-see-them-early)
-13. [Open questions](#open-questions)
-14. [Sources](#sources)
-15. [Glossary](#glossary)
+11. [As built](#as-built)
+12. [Speed](#speed)
+13. [Risks and how to see them early](#risks-and-how-to-see-them-early)
+14. [Open questions](#open-questions)
+15. [Sources](#sources)
+16. [Glossary](#glossary)
 
 ## Summary
 
@@ -101,6 +103,7 @@ inputs, but the arithmetic is exactly this repeated. In Python the whole pass is
 
 ```python
 import math
+
 
 def forward(net, x):
     w1, b1, w2, b2 = net  # hidden weights and biases, output weights and biases
@@ -361,6 +364,64 @@ once at birth to set the body, then tracks energy, health and flags). The brain 
 One point to watch: because the brain steers, the existing behaviour flags stop being a description
 of the whole decision. `flag_wants_food` and the like should be set from the brain's outputs (or
 removed) rather than computed independently, so there is one source of truth.
+
+## As built
+
+Built by the Foundations 2 thread (`BRAIN.2`, `DNA.11`, `DNA.12`) with the design above as the default for
+every open question ([#23](https://github.com/dwhagar/evolutionSimulator/issues/23): neural network).
+Anything the owner answers differently is a change to one constant or one table row.
+
+| Piece | Where | What it does |
+| --- | --- | --- |
+| `Brain`, `BrainShape` | `brain.py` | The network. Pure: `decide(inputs) -> outputs` from weights alone, no DNA, traits or world. `DEFAULT_SHAPE` is 17 inputs, 8 hidden, 6 outputs, 198 numbers. Hidden neurons use `tanh`; output 0 (turn) is `tanh` and the other five are logistic (0 to 1), as in the worked example. |
+| `Percepts`, `build_inputs`, `BrainDecision`, `decode_outputs` | `brain_adapter.py` | The world side. The world fills in a `Percepts` (13 of the 17 inputs: nearest plant, prey, threat and mate, touch, calls, crowding); the animal adds its own energy, health, vitality and readiness to mate; the six outputs come back named, with the action outputs counting as "do it" above 0.5. Inputs are clamped to their ranges and must be finite. When `WORLD.1` settles how the world measures things, only this module changes. |
+| `BlockSpec` | `dna.py` | `DNA.11`. A gene that is an array of values: `count` values of `digits_per_value` digits decoded onto `low`..`high`, in `groups` that recombination keeps together. The brain is one block of 198 two-digit values over -2 to 2 (16 levels, steps of 0.267, no exact zero) in segment `brain`. `dna.values("brain")` reads it; `BlockSpec.encode` is the other way, for seeding. |
+| Segments and `crossover_by_unit` | `dna.py` | `DNA.12`. Mutation can be set as expected changes per segment, and crossover can take whole neurons from either parent. See [dna-and-traits.md](dna-and-traits.md). |
+| `AnimalTraits.brain`, `.brain_upkeep`, `.think(percepts)` | `traits.py` | The hookup. The brain is built from the genome at birth; `think` adds the animal's own state to the percepts, runs the brain and returns the decision. |
+
+**Genome.** `ANIMAL_LAYOUT` is now 461 digits at layout version 2: the 65 body digits, unchanged in position,
+then the 396 brain digits. The body genes are read by the trait table as before; the brain is read only by
+`Brain`, so `TraitSet.unread_genes()` does not list it.
+
+**Brain layout.** The 198 numbers are grouped per hidden neuron so a neuron's wiring travels together: for
+each of the 8 hidden neurons its bias, its 17 incoming weights and its 6 outgoing weights (24 numbers), then
+the 6 output biases. Crossover by unit takes whole neurons, with their outgoing weights, from either parent,
+which is the "per-neuron block" recommendation under [Storing the brain in the DNA](#storing-the-brain-in-the-dna).
+
+**Mutation.** `ANIMAL_LAYOUT` sets about 0.65 expected changes per child for the body (the prototype's 0.01 per
+digit, unchanged) and 1.0 for the brain (about 0.0025 per brain digit), so the brain's 396 digits do not take
+over the mutation count (0.01 per digit would have given about 4 changes in the brain alone). Both numbers
+are data on the layout and can be overridden per call. The first-digit-dominates problem
+([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)) is not addressed: it needs the owner's call
+on Gray code or per-position weights, and neither is built.
+
+**Cost of thinking.** `traits.py` has three placeholder constants: 0.0005 per hidden or output neuron, 0.0001
+per active connection (a weight above 0.25 in absolute value; biases are not counted), and the 0.25 threshold.
+`brain_upkeep` is added to `basal_metabolism`. A random brain costs about 4% of an animal's basal budget (2.7%
+to 7% over 300 random animals, *measured*), and a fully wired one (every weight at +2) about 4.3% on average
+(2.9% to 7.6%). Because random weights are mostly above the threshold, the connection term only varies between
+0 and 0.018 per tick, so pruning is a weak lever until the constants are calibrated against a world. They move
+into the `TRAIT.3` config object.
+
+**Tests.** `tests/test_brain.py` (the worked example, a reference forward pass written against the documented
+layout, output ranges, repeatability, zero brain, cost counting, adapter), `tests/test_dna_blocks.py` (blocks,
+segments, per-segment mutation counts, per-neuron crossover) and `tests/test_animal_brain.py` (the hookup, the
+cost, pinned decisions for a fixed genome). All randomness is seeded.
+
+**Not built yet.**
+
+- Using the decision. `think` only returns it. Setting `flag_wants_to_attack`, `flag_wants_mate`,
+  `flag_ready_to_signal`, `signal_to_emit`, movement and feeding from the outputs, and retiring the fixed rule
+  as a second source of truth, belongs with the world loop (`WORLD.2`). The fixed rule still runs on every tick.
+- Seeding the first generation (`BRAIN.9`, [#27](https://github.com/dwhagar/evolutionSimulator/issues/27)).
+  `DNA.random` gives random brains, which behave randomly, as warned under
+  [Getting evolution started](#getting-evolution-started).
+- The default crossover. `reproduce` still crosses over per digit, which blends weights inside a neuron;
+  animals should pass `crossover=DNA.crossover_by_unit` until the owner answers
+  [#14](https://github.com/dwhagar/evolutionSimulator/issues/14).
+- Decision interval, memory ([#24](https://github.com/dwhagar/evolutionSimulator/issues/24)), learning
+  ([#26](https://github.com/dwhagar/evolutionSimulator/issues/26)) and an evolvable size
+  ([#28](https://github.com/dwhagar/evolutionSimulator/issues/28)).
 
 ## Speed
 

@@ -15,8 +15,8 @@ def plant_dna(sequence: str) -> DNA:
     return DNA(PLANT_LAYOUT, sequence)
 
 
-LOW_ANIMAL = animal_dna("0" * 65)
-HIGH_ANIMAL = animal_dna("3" * 65)
+LOW_ANIMAL = animal_dna("0" * ANIMAL_LAYOUT.length)
+HIGH_ANIMAL = animal_dna("3" * ANIMAL_LAYOUT.length)
 LOW_PLANT = plant_dna("0" * 24)
 HIGH_PLANT = plant_dna("3" * 24)
 

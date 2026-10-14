@@ -30,7 +30,7 @@ def rng(seed: int = 1) -> random.Random:
 
 
 def test_layout_lengths_match_prototype():
-    assert ANIMAL_LAYOUT.length == 65
+    assert ANIMAL_LAYOUT.length == 461  # 65 body digits plus a 396-digit brain
     assert PLANT_LAYOUT.length == 24
     assert TINY.length == 5
 
@@ -54,6 +54,7 @@ def test_animal_gene_positions_match_prototype():
     assert span(ANIMAL_LAYOUT, "fertility") == (56, 60)
     assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (60, 64)
     assert span(ANIMAL_LAYOUT, "sex_strategy") == (64, 65)
+    assert span(ANIMAL_LAYOUT, "brain") == (65, 461)
     assert span(PLANT_LAYOUT, "root_reach") == (20, 24)
 
 
@@ -107,7 +108,7 @@ def test_random_is_seeded_and_valid():
     a = DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a == DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a != DNA.random(ANIMAL_LAYOUT, rng(8))
-    assert a.length == len(a) == 65
+    assert a.length == len(a) == 461
     assert a.layout is ANIMAL_LAYOUT
     assert set(a.sequence) <= {0, 1, 2, 3}
 
@@ -293,10 +294,10 @@ def test_invalid_rate_rejected(rate):
 
 
 def test_uniform_crossover_digits_come_from_parents():
-    a, b = animal("0" * 65), animal("3" * 65)
+    a, b = animal("0" * N), animal("3" * N)
     child = a.crossover(b, rng(4))
     assert set(child.sequence) <= {0, 3}
-    assert set(child.sequence) == {0, 3}  # 65 coin flips: both parents contribute
+    assert set(child.sequence) == {0, 3}  # one coin flip per digit: both parents contribute
 
 
 def test_crossover_of_identical_parents_is_that_genome():
@@ -314,13 +315,13 @@ def test_crossover_is_deterministic_and_leaves_parents_alone():
 
 
 def test_one_point_crossover_has_one_cut():
-    a, b = animal("0" * 65), animal("3" * 65)
+    a, b = animal("0" * N), animal("3" * N)
     for seed in range(20):
         child = a.crossover_one_point(b, rng(seed))
         cut = child.sequence.index(3)
         assert child.sequence[:cut] == (0,) * cut
-        assert child.sequence[cut:] == (3,) * (65 - cut)
-        assert 1 <= cut <= 64
+        assert child.sequence[cut:] == (3,) * (N - cut)
+        assert 1 <= cut <= N - 1
 
 
 def test_gene_crossover_keeps_genes_whole():
@@ -334,13 +335,13 @@ def test_gene_crossover_keeps_genes_whole():
 
 
 def test_gene_crossover_mixes_both_parents():
-    a, b = animal("0" * 65), animal("3" * 65)
+    a, b = animal("0" * N), animal("3" * N)
     child = a.crossover_by_gene(b, rng(6))
     assert set(child.sequence) == {0, 3}
 
 
 def test_crossover_rejects_mismatched_species():
-    a, p = animal("0" * 65), plant("0" * 24)
+    a, p = animal("0" * N), plant("0" * 24)
     for op in (a.crossover, a.crossover_one_point, a.crossover_by_gene):
         with pytest.raises(TypeError):
             op(p, rng())
@@ -370,7 +371,7 @@ def test_reproduce_with_partner_crosses_then_mutates():
 
 
 def test_reproduce_accepts_other_crossover_strategies():
-    a, b = animal("0" * 65), animal("3" * 65)
+    a, b = animal("0" * N), animal("3" * N)
     child = a.reproduce(b, rng(3), mutation_rate=0.0, crossover=DNA.crossover_one_point)
     assert child == a.crossover_one_point(b, rng(3))
     child = a.reproduce(b, rng(3), mutation_rate=0.0, crossover=DNA.crossover_by_gene)
