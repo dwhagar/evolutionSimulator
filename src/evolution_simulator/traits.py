@@ -35,6 +35,8 @@ BRAIN_NEURON_COST: float = 0.0005
 BRAIN_CONNECTION_COST: float = 0.0001
 """Per active connection, a weight whose absolute value is above ``BRAIN_ACTIVE_THRESHOLD``."""
 BRAIN_ACTIVE_THRESHOLD: float = 0.25
+"""The brain's dead zone (``BRAIN.21``): a weight at or below this is off, both for cost and in
+``Brain.decide``, so a connection pays only if it does something."""
 DECISION_INTERVAL: int = 1
 """Ticks between brain decisions (``BRAIN.11``); between them the animal keeps its last decision.
 Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to move
@@ -155,14 +157,16 @@ class AnimalTraits(BaseTraits):
         self.smell_noise: float = direction_noise("smell", t["smell"])
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
         # The brain is read from the genome once at birth, like the body.
-        self.brain: Brain = Brain.from_values(DEFAULT_SHAPE, dna.values("brain"))
+        self.brain: Brain = Brain.from_values(
+            DEFAULT_SHAPE, dna.values("brain"), dead_zone=BRAIN_ACTIVE_THRESHOLD
+        )
         self.wanderer: Wanderer = Wanderer()
         self.decision_interval: int = decision_interval
         self._decision: BrainDecision | None = None
         self._ticks_since_decision: int = 0
         self.brain_upkeep: float = (
             BRAIN_NEURON_COST * self.brain.neuron_count
-            + BRAIN_CONNECTION_COST * self.brain.active_connections(BRAIN_ACTIVE_THRESHOLD)
+            + BRAIN_CONNECTION_COST * self.brain.active_connections()
         ) / self.decision_interval
         self.basal_metabolism = (
             (0.18 * (self.mass**0.75))

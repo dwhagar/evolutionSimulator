@@ -19,6 +19,13 @@ the design note). For each hidden neuron ``j`` in turn:
 
 followed by the ``outputs`` output biases. That is ``hidden * (inputs + 1 + outputs) + outputs``
 numbers: 198 for the default 17-8-6 shape.
+
+Dead zone
+---------
+A brain can be built with a ``dead_zone``: a weight (not a bias) whose absolute value is at or below
+it is off. It does nothing in ``decide`` and is not counted by ``active_connections``, so the
+energy cost of a connection and its effect on behaviour use the same threshold (``BRAIN.21``). The
+numbers given to the brain, and returned by ``to_values``, are never changed.
 """
 
 from __future__ import annotations
@@ -88,24 +95,32 @@ class Brain:
     docstring. ``decide`` is the only behaviour.
     """
 
-    __slots__ = ("_hidden", "_outputs", "shape")
+    __slots__ = ("_hidden", "_outputs", "_values", "dead_zone", "shape")
 
-    def __init__(self, shape: BrainShape, values: Sequence[float]) -> None:
+    def __init__(self, shape: BrainShape, values: Sequence[float], dead_zone: float = 0.0) -> None:
         if len(values) != shape.weight_count:
             raise ValueError(f"Expected {shape.weight_count} brain values, got {len(values)}.")
         numbers = tuple(float(v) for v in values)
         if not all(math.isfinite(v) for v in numbers):
             raise ValueError("Brain values must be finite numbers.")
+        if not (math.isfinite(dead_zone) and dead_zone >= 0.0):
+            raise ValueError(f"The dead zone must be a finite number, 0 or more, got {dead_zone}.")
+
+        def weight(value: float) -> float:
+            return 0.0 if abs(value) <= dead_zone else value
+
         size = shape.neuron_size
         hidden: list[tuple[float, tuple[float, ...]]] = []
         outgoing: list[list[float]] = [[] for _ in range(shape.outputs)]
         for j in range(shape.hidden):
             block = numbers[j * size : (j + 1) * size]
-            hidden.append((block[0], block[1 : 1 + shape.inputs]))
-            for k, weight in enumerate(block[1 + shape.inputs :]):
-                outgoing[k].append(weight)
+            hidden.append((block[0], tuple(weight(w) for w in block[1 : 1 + shape.inputs])))
+            for k, w in enumerate(block[1 + shape.inputs :]):
+                outgoing[k].append(weight(w))
         output_biases = numbers[shape.hidden * size :]
         object.__setattr__(self, "shape", shape)
+        object.__setattr__(self, "dead_zone", float(dead_zone))
+        object.__setattr__(self, "_values", numbers)
         object.__setattr__(self, "_hidden", tuple(hidden))
         object.__setattr__(
             self,
@@ -120,8 +135,10 @@ class Brain:
         raise AttributeError("Brain is immutable.")
 
     @classmethod
-    def from_values(cls, shape: BrainShape, values: Sequence[float]) -> Brain:
-        return cls(shape, values)
+    def from_values(
+        cls, shape: BrainShape, values: Sequence[float], dead_zone: float = 0.0
+    ) -> Brain:
+        return cls(shape, values, dead_zone)
 
     @classmethod
     def zeros(cls, shape: BrainShape) -> Brain:
@@ -129,22 +146,21 @@ class Brain:
         return cls(shape, (0.0,) * shape.weight_count)
 
     def to_values(self) -> tuple[float, ...]:
-        """The flat layout ``from_values`` reads; a round trip gives an equal brain."""
-        values: list[float] = []
-        for j, (bias, incoming) in enumerate(self._hidden):
-            values.append(bias)
-            values.extend(incoming)
-            values.extend(weights[j] for _, weights in self._outputs)
-        values.extend(bias for bias, _ in self._outputs)
-        return tuple(values)
+        """The flat layout ``from_values`` reads, as given (the dead zone is not applied); a round
+        trip gives an equal brain."""
+        return self._values
 
     def __eq__(self, other: object) -> bool:
         if not isinstance(other, Brain):
             return NotImplemented
-        return self.shape == other.shape and self.to_values() == other.to_values()
+        return (
+            self.shape == other.shape
+            and self.dead_zone == other.dead_zone
+            and self._values == other._values
+        )
 
     def __hash__(self) -> int:
-        return hash((self.shape, self.to_values()))
+        return hash((self.shape, self.dead_zone, self._values))
 
     def __repr__(self) -> str:
         s = self.shape
@@ -172,9 +188,11 @@ class Brain:
         return self.shape.hidden + self.shape.outputs
 
     def active_connections(self, threshold: float = 0.0) -> int:
-        """Connections whose weight has an absolute value above ``threshold``.
+        """Connections still on whose weight has an absolute value above ``threshold``.
 
-        Counts the weights between layers (input to hidden, hidden to output), not the biases.
+        Weights inside the dead zone are off, so with the default threshold this is every
+        connection that takes part in ``decide``. Counts the weights between layers (input to
+        hidden, hidden to output), not the biases.
         """
         count = sum(1 for _, weights in self._hidden for w in weights if abs(w) > threshold)
         count += sum(1 for _, weights in self._outputs for w in weights if abs(w) > threshold)
