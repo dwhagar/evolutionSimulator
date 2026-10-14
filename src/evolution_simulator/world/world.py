@@ -811,7 +811,9 @@ class World:
 
     def state_digest(self) -> str:
         """A hash of the whole state: tick, random generator, and every organism's place, energy
-        and genome. Two runs that are really the same give the same digest."""
+        and genome. Two runs that are really the same give the same digest. It is a check, not a
+        full copy: whatever else a world holds is saved by ``persistence.py`` (``UX.9``), which
+        has to learn about any new state."""
         parts: list[str] = [str(self.tick), repr(self.rng.getstate())]
         for animal in self.animals:
             parts.append(

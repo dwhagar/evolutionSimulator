@@ -82,6 +82,38 @@ visited in id order, neighbour searches return ids in order, ties break on id, a
 state is read. `World.state_digest()` hashes the whole state (including the random generator) so a
 test or a user can check two runs match.
 
+## Saving and loading (UX.9)
+
+`world/persistence.py` saves a whole world and loads it back so that it runs on exactly as the saved one would
+have: `save_world(world, "run.json.gz")` and `load_world("run.json.gz")` (gzip when the name ends in
+`.gz`), or `world_to_dict` and `world_from_dict` for the JSON-ready document. It is independent of any window
+and is what the run store (`UX.10`) and the save and load screen (`UX.18`) will call.
+
+- **What is written.** The `WorldConfig` tree (every rule, read back by type, so a rule added later takes
+  its default from an older save), the clock, the next id, the random generator's state, the largest body
+  and canopy seen, this tick's calls, and every animal, plant and corpse: genome, position and the numbers
+  that change over a life (energy, health, damage, age, cooldowns), the cached decision and wander turn,
+  the learner (the day log, the open decisions and the learned offsets), the learned-brain flag and the
+  pregnancy with its litter's genomes and its father. The body itself (traits, brain, costs) is rebuilt from the
+  genome, the rules and the tick length by the same constructors that made it, and the spatial indexes
+  are rebuilt from positions in id order.
+- **Checked on load.** The document names its format and version, the gene-layout versions and the
+  `state_digest` taken at save time; a file of another kind, from a newer program, from other gene layouts or
+  with a restored state that does not reproduce the digest raises `SaveFormatError` instead of loading
+  something almost right.
+- **Versioned.** `FORMAT_VERSION` counts changes to the document's layout. When a change keeps old saves
+  readable (a field renamed or moved) add a function to `_MIGRATIONS` that turns version `n` into `n + 1`;
+  loading runs the chain. A change to a gene layout makes older genomes unreadable, which the layout check reports.
+- **Keeping it current.** Whoever adds state to the world, an organism or the learner adds it to
+  `persistence.py` (the scalar fields of organisms are name tables, so a new number is one line). The
+  test `tests/test_persistence.py` is the guard: it saves a world holding every kind of state at several moments (asleep, mid-day, with litters on the way and
+  fathers dead), compares every attribute of the restored world with the original (`tests/persistence_support.py`,
+  not only what `state_digest` hashes), and runs both on and against an uninterrupted run.
+- **Not saved.** The `Senses` object (a `WorldSenses` is saved by its settings; anything else is passed
+  to `load_world(senses=...)`) and sleep listeners beyond the default learning one
+  (`load_world(sleep_listeners=...)`). A father who has died and left the world is not kept: a missing father pays nothing at the birth,
+  the same as a dead one.
+
 ## Time (WORLD.3)
 
 A tick is `seconds_per_tick` of simulated time, one hour by default (`WORLD.7`; it was a second). The speed is how many simulated
