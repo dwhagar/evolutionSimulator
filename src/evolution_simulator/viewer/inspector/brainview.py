@@ -13,9 +13,7 @@ from dataclasses import dataclass
 
 from evolution_simulator.brain import BrainNetwork
 from evolution_simulator.brain_adapter import ACTION_THRESHOLD, OUTPUT_NAMES
-from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.sense_channels import INPUT_CHANNELS, InputChannel
-from evolution_simulator.sense_genes import vision_reach, working_acuity
 from evolution_simulator.world.views import AnimalDetail
 
 OUTPUT_TIPS: dict[str, str] = {
@@ -236,21 +234,12 @@ class SenseGeometry:
 
 
 def sense_geometry(detail: AnimalDetail) -> SenseGeometry:
-    """The ranges the overlays draw, worked out as the animal's traits do (acuity lengthens the eye,
-    low vitality shortens eye and ear). The vitality floor is the default rules'."""
-    t = detail.traits
-    floor = DEFAULT_RULES.body.sense_floor
-    scale = floor + (1.0 - floor) * min(1.0, max(0.0, detail.vitality))
-    vision = fov = hearing = smell = touch = None
-    if all(key in t for key in ("sight_reach", "sight_fov", "sight_acuity")):
-        acuity = working_acuity(t["sight_fov"], t["sight_acuity"])
-        vision = vision_reach(t["sight_reach"], acuity) * scale
-    if "fov_half_degrees" in t:
-        fov = t["fov_half_degrees"]
-    if "hearing_range" in t:
-        hearing = t["hearing_range"] * scale
-    if "smell_range" in t:
-        smell = t["smell_range"]
-    if "tactile_factor" in t:
-        touch = detail.radius * t["tactile_factor"]
-    return SenseGeometry(vision, fov, hearing, smell, touch)
+    """The ranges the overlays draw: the animal's own (``AnimalDetail`` carries them as the animal
+    holds them) and the half-width of its field of view from its traits."""
+    return SenseGeometry(
+        vision_range=detail.vision_range,
+        fov_half_degrees=detail.traits.get("fov_half_degrees"),
+        hearing_range=detail.hearing_range,
+        smell_range=detail.smell_range,
+        touch_range=detail.touch_range,
+    )
