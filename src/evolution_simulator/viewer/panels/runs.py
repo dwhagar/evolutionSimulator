@@ -253,6 +253,33 @@ class RunsPanel(QWidget):
     def fail(self, text: str) -> None:
         self.context.show_message(text, 10000)
 
+    def ask_to_save(self, never_saved: bool) -> QMessageBox.StandardButton:
+        """Ask whether to keep the world on screen as it closes; tests replace this."""
+        what = (
+            "This world has never been saved."
+            if never_saved
+            else "This run has gone on since its last checkpoint."
+        )
+        return QMessageBox.question(
+            self,
+            "Save this run?",
+            f"{what} Save it before closing?",
+            QMessageBox.StandardButton.Save
+            | QMessageBox.StandardButton.Discard
+            | QMessageBox.StandardButton.Cancel,
+            QMessageBox.StandardButton.Save,
+        )
+
+    def confirm_close(self) -> bool:
+        """The window is closing: offer to save a world that would be lost. ``False`` keeps the
+        window open (Cancel, or a save that failed)."""
+        if not self.manager.unsaved_on_close:
+            return True
+        answer = self.ask_to_save(self.manager.current_run is None)
+        if answer == QMessageBox.StandardButton.Save:
+            return self.save_now()
+        return answer == QMessageBox.StandardButton.Discard
+
     # ---- the actions -------------------------------------------------------------------------
 
     def save_now(self) -> bool:
@@ -382,6 +409,7 @@ def build(context: ViewerContext) -> RunsPanel:
     context.actions["show_runs"] = show
     context.add_menu_action("file", save)
     context.add_menu_action("file", show)
+    context.add_close_guard(panel.confirm_close)
 
     def update_enabled(*_args) -> None:
         save.setEnabled(manager.can_save)

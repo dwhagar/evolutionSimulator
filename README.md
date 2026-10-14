@@ -34,7 +34,7 @@ python -m evolution_simulator.viewer --fake     # a made-up world, for trying th
 A plain launch opens the newest saved run, or, with none saved, a new world with the default
 founders and the New run panel to change them. `--new` (or `--seed`, `--animals`, `--plants`) starts a
 new world even when runs are saved, and `--in-process` keeps the simulation in the window's own
-process, for debugging.
+process, for debugging. Closing the window on a world that was never saved asks "Save this run?".
 
 ## Windows download
 

@@ -286,6 +286,39 @@ def test_a_made_up_world_in_a_process_cannot_be_saved(made, store, qapp):
         manager.save_now()
 
 
+def test_closing_a_hosted_world_asks_only_when_it_was_never_saved(made, store, qapp, tmp_path):
+    controller = made(hosted_world(store.root))
+    manager = RunManager.install(controller, store)
+    settings = QSettings(str(tmp_path / "w.ini"), QSettings.Format.IniFormat)
+    window = MainWindow(controller, settings=settings)
+    asked = []
+
+    def ask(never_saved):
+        asked.append(never_saved)
+        return QMessageBox.StandardButton.Cancel
+
+    window.panels["runs"].ask_to_save = ask
+    window.show()
+    assert window.close()  # nothing has happened yet
+    window.show()
+    controller.send(Step(DAY))
+    pump(controller, lambda: controller.frame is not None and controller.frame.tick >= DAY)
+    assert manager.unsaved_on_close
+    assert not window.close() and asked == [True]
+
+    window.panels["runs"].ask_to_save = lambda never_saved: QMessageBox.StandardButton.Save
+    assert window.close()
+    assert manager.current_run is not None and not manager.unsaved_progress
+
+    # A saved run goes on: the simulation process writes a last checkpoint, so nothing is asked.
+    window.show()
+    window.panels["runs"].ask_to_save = ask
+    controller.send(Step(DAY))
+    pump(controller, lambda: controller.frame.tick >= 2 * DAY)
+    assert manager.unsaved_progress and not manager.unsaved_on_close
+    assert window.close() and asked == [True]
+
+
 def test_resuming_a_different_run_saves_the_one_on_screen(made, store, qapp):
     controller = made(hosted_world(store.root))
     manager = RunManager.install(controller, store)

@@ -71,6 +71,7 @@ def window(controller, manager, tmp_path):
     win = MainWindow(controller, run_label="world, seed 3", settings=settings)
     win.show()
     yield win
+    win.ask_before_close = False  # a test may have left the close prompt on Cancel
     win.close()
 
 
@@ -194,6 +195,108 @@ def test_a_failed_save_is_said_on_the_status_bar(window, panel, manager, monkeyp
     assert not panel.save_now()
     assert "disk full" in window.statusBar().currentMessage()
     assert manager.current_run is None
+
+
+# --- closing the window (UX.37) -------------------------------------------------------------
+
+
+def ask_on_close(panel, choice):
+    """Answer the close prompt with ``choice``; the list collects ``never_saved`` of each ask."""
+    asked = []
+
+    def ask(never_saved):
+        asked.append(never_saved)
+        return choice
+
+    panel.ask_to_save = ask
+    return asked
+
+
+Button = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError).QMessageBox.StandardButton
+
+
+def test_closing_a_world_that_was_never_saved_asks_and_cancel_keeps_it_open(
+    window, panel, controller, manager
+):
+    advance(controller, 5)
+    asked = ask_on_close(panel, Button.Cancel)
+    assert not window.close()
+    assert window.isVisible() and asked == [True]
+    assert manager.current_run is None
+
+
+def test_discarding_closes_without_saving(window, panel, controller, manager, store):
+    advance(controller, 5)
+    asked = ask_on_close(panel, Button.Discard)
+    assert window.close()
+    assert asked == [True] and not store.list_runs()
+
+
+def test_saving_on_close_keeps_the_run_then_closes(window, panel, controller, manager, store):
+    advance(controller, 5)
+    ask_on_close(panel, Button.Save)
+    assert window.close()
+    assert manager.current_run is not None
+    assert [r.id for r in store.list_runs()] == [manager.current_run.id]
+    assert manager.current_run.checkpoints()[-1].tick == 5
+
+
+def test_a_save_that_fails_on_close_keeps_the_window_open(
+    window, panel, controller, manager, monkeypatch
+):
+    def broken(*_a, **_k):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(manager.store, "create", broken)
+    advance(controller, 5)
+    ask_on_close(panel, Button.Save)
+    assert not window.close()
+    assert window.isVisible() and "disk full" in window.statusBar().currentMessage()
+
+
+def test_nothing_is_asked_when_there_is_nothing_to_lose(window, panel, controller, manager):
+    asked = ask_on_close(panel, Button.Cancel)
+    assert window.close()  # a world at its first tick
+    assert asked == []
+
+
+def test_a_saved_run_that_went_on_is_offered_a_last_save(window, panel, controller, manager):
+    manager.save_now()
+    asked = ask_on_close(panel, Button.Cancel)
+    assert window.close()  # nothing since the checkpoint
+    window.show()
+    advance(controller, 5)
+    assert not window.close()
+    assert asked == [False]
+    ask_on_close(panel, Button.Save)
+    assert window.close()
+    assert manager.current_run.checkpoints()[-1].tick == 5
+
+
+def test_a_made_up_world_is_not_offered_a_save(qapp, clock, tmp_path):
+    controller = make_controller(FakeSimulation(10, 10), clock)
+    RunManager.install(controller, RunStore(tmp_path / "runs"))
+    settings = QtCore.QSettings(str(tmp_path / "f.ini"), QtCore.QSettings.Format.IniFormat)
+    win = MainWindow(controller, settings=settings)
+    win.show()
+    advance(controller, 5)
+    ask_on_close(win.panels["runs"], Button.Cancel)
+    assert win.close()
+    controller.backend.close()
+
+
+def test_the_window_can_be_told_not_to_ask(window, controller, panel):
+    advance(controller, 5)
+    asked = ask_on_close(panel, Button.Cancel)
+    window.ask_before_close = False
+    assert window.close() and asked == []
+
+
+def test_a_close_guard_can_keep_the_window_open(window):
+    window.close_guards.append(lambda: False)
+    assert not window.close()
+    window.close_guards.clear()
+    assert window.close()
 
 
 # --- the list -----------------------------------------------------------------------------

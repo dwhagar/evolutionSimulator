@@ -9,7 +9,7 @@ Run menu are kept in ``window.actions`` and handed to the panels in their ``View
 from __future__ import annotations
 
 import logging
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 
 from PySide6.QtCore import QByteArray, QSettings, Qt
 from PySide6.QtGui import QAction, QActionGroup, QCloseEvent, QKeySequence
@@ -85,6 +85,10 @@ class MainWindow(QMainWindow):
         self._speed_actions: dict[str, QAction] = {}
         self.crash_box: QMessageBox | None = None
         """The dialog shown when the simulation process fails, while it is open."""
+        self.close_guards: list[Callable[[], bool]] = []
+        """Asked in turn when the window closes; any that returns ``False`` keeps it open."""
+        self.ask_before_close = True
+        """``False`` closes without asking (a smoke test that closes the window itself)."""
 
         self.setWindowTitle(APP_NAME if run_label is None else f"{APP_NAME} - {run_label}")
         self.resize(*DEFAULT_SIZE)
@@ -99,6 +103,7 @@ class MainWindow(QMainWindow):
             self.add_menu_action,
             self.set_run_label,
             self.settings,
+            self.close_guards.append,
         )
         self._build_panels(discover_panels() if specs is None else list(specs), context)
         self._default_state = self.saveState(LAYOUT_VERSION)
@@ -263,6 +268,9 @@ class MainWindow(QMainWindow):
         self.settings.remove("window")
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if self.ask_before_close and not all(guard() for guard in self.close_guards):
+            event.ignore()
+            return
         self.controller.stop()
         self.save_layout()
         super().closeEvent(event)

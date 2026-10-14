@@ -172,6 +172,15 @@ class RunManager(QObject):
             return tick > 0
         return tick > self.current_run.summary.tick
 
+    @property
+    def unsaved_on_close(self) -> bool:
+        """Closing the window would lose ticks: the world was never saved, or (a world in this
+        process) has gone on since its last checkpoint. A world in its own process writes a last
+        checkpoint of its run when the window closes, so only one never saved counts there."""
+        if not self.can_save or not self.unsaved_progress:
+            return False
+        return self.hosted() is None or self.current_run is None
+
     # ---- saving ------------------------------------------------------------------------------
 
     def save_now(self, name: str | None = None) -> CheckpointInfo:
