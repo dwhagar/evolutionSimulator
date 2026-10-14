@@ -57,6 +57,13 @@ The numbers are starting values to tune, not measurements of the running simulat
 
 ## What exists today
 
+**Update.** `REPRO.5` and `TRAIT.6` were built from the first version of this note
+([#74](https://github.com/dwhagar/evolutionSimulator/pull/74)) before this revision merged. Animal layout
+version 3 already has `caregiving`, `repro_interval` and `repro_drive` (3 digits each, body 70 digits),
+`AnimalTraits.give_birth` (both parents pay, or nobody does), the repair surcharge, stretch and `0.20 s^2`
+upkeep, and the drive threshold and `Temperament` field. The table below is the state before #74; the
+[delta to build](#delta-from-the-code-after-74) says what is left.
+
 | Thing | Where | Current behaviour |
 | --- | --- | --- |
 | `fertility` | `layouts.py` (4 digits) | Decoded, never read |
@@ -82,10 +89,10 @@ All gene values are 0 to 1, read by the existing `TraitDef` mechanism. Three dig
 | `recovery` | `recovery` | 0 to 1, then derived | linear | Healing and energy regain ([Recovery](#recovery-recovery)) |
 | `sex_strategy` | `sex`, `drive_modifier` | digit 0 to 3 | category | `sex = digit % 2`; digit 2 is +25% drive, 3 is -25% |
 
-The old `fertility` gene (4 digits) is replaced by the new one (3 digits). Net change: 15 digits added
-for the five new genes, 4 removed, so the digits before the brain become 76 (from 65) and
-`sex_strategy` and the brain block move along by 11. `ANIMAL_LAYOUT.version` goes up by one. The sex
-digit keeps its single digit.
+Counted from the layout after #74 (70 digits before the brain): `caregiving` becomes `parenting`,
+`repro_interval` becomes `repro_cooldown`, `repro_drive` stays, and `fertility` (3 digits) and
+`recovery` (3 digits) are added, so the digits before the brain become 76 and `sex_strategy` and the
+brain block move along by 6. `ANIMAL_LAYOUT.version` goes to 4. The sex digit keeps its single digit.
 
 ### Drive (`repro_drive`)
 
@@ -252,14 +259,28 @@ a check once births work: run many generations and see where `fertility`, `repro
 mating effort. The repair birth surcharge (2.0) and cooldown stretch (1.0) were chosen from a small grid, because
 the first values (1.0 and 0.5) let full repair win whenever food was plentiful.
 
+## Delta from the code after #74
+
+| Built in #74 | Change to the revised design |
+| --- | --- |
+| `caregiving` (newborn energy share 0.10 to 0.80) | Rename to `parenting`; same range; later adds the protection behaviour |
+| `repro_interval`, a log share of lifespan (0.01 to 0.25) | Becomes `repro_cooldown` in simulated days (2 to 90, log); the juvenile period becomes 6% of lifespan (was one interval) |
+| `repro_drive`, threshold and `Temperament` field | Keep; add the wear multiplier, the sex-digit modifier and the 0 factor in a cooldown or pregnancy |
+| `give_birth`: one child per pair, paid at once | Conception chance, litter, pregnancy list in the world, each parent paying `litter * care_fraction_own / 2` |
+| `REPAIR_BIRTH_SURCHARGE` 1.0, stretch 0.5 (share-of-lifespan interval) | 2.0 and 1.0, applied to the cooldown in days |
+| Wear `0.075` per tick, charged per tick | `WEAR_BASE` 0.0362 per reference tick, charged by `dt` (`WORLD.7`) |
+| `fertility` removed | Reinstated with a job (above); `recovery` added |
+| `sex_strategy` costs and cooldowns of the prototype | Mod 2 is the sex, 2 and 3 modify the drive |
+
 ## What to build
 
-One builder should take `REPRO.5`, `TRAIT.6`, `TRAIT.7` and `WORLD.7`'s per-second charging together,
-because they change the same functions and the same layout version. Plant work (`REPRO.3`, `TRAIT.8`)
-can follow as a second change.
+One builder should take the delta above (the rest of `REPRO.7`'s genes, `TRAIT.7` and `WORLD.7`'s
+per-second charging) together, because they change the same functions and the same layout version. The
+list is written against the code after #74. Plant work (`REPRO.3`, `TRAIT.8`) can follow as a second
+change.
 
-1. `layouts.py` (animals): replace `fertility` (4 digits) with `repro_drive`, `repro_cooldown`,
-   `fertility`, `parenting`, `recovery` (3 digits each); bump `ANIMAL_LAYOUT.version`; set the first
+1. `layouts.py` (animals): rename `caregiving` to `parenting` and `repro_interval` to `repro_cooldown`,
+   add `fertility` and `recovery` (3 digits each), bump `ANIMAL_LAYOUT.version` to 4; set the first
    generation's values (`fertility` 0.75, `parenting` 0, the rest 0.5) with `DNA.replaced` or the
    world's seeding code.
 2. `trait_defs.py`: the traits in the tables above; `sex_strategy` yields `sex` (mod 2) and
