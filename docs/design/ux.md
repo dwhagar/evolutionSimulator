@@ -190,6 +190,21 @@ dependencies (a test checks that no core module names Qt or numpy).
   someone listens, and listening changes nothing about a run. `World.trace_brain(id)` keeps the
   inputs, hidden values and outputs of that animal's last brain run (`AnimalDetail.brain`, filled
   in once its brain has run since).
+- **Added for the inspector and the brain view (`UX.29`).** `Ate` joins `Born`, `Died` and `Mated`
+  (`world/events.py`): `Ate(tick, eater, food, target, amount)`, one per bite of a plant or a corpse
+  that the animal did not refuse (a kill is the victim's `Died` with the killer; the meal from its
+  corpse is an `Ate`). `AnimalDetail.network` is a `BrainNetwork` (`brain.py`): hidden biases, the
+  weight from each input to each hidden neuron, the weight from each hidden neuron to each output,
+  output biases, gain, which genome slots the neurons came from (`slots`, out of `slot_count`) and
+  which outputs are signed; a weight inside the dead zone reads 0, so draw a connection where it is
+  not 0; learned changes are included. It is read from the brain, not from a run, so it is always
+  there and selecting never forces a brain run; only `AnimalDetail.brain` (the live inputs, hidden
+  values and outputs) waits for the next run. `AnimalDetail.children` is the ids of the living
+  animals that name it as a parent (`World.children_of(id)`, a scan of the animals; a dead child is
+  not listed). `evolution_simulator.catalogue` has `describe_gene(id)` and `describe_trait(name)`:
+  a display name, a unit and a one-line meaning for every gene of both layouts and every trait of both
+  tables; a test fails if a gene or trait is added without one. None of it is state: listening and
+  reading a detail leave `state_digest` alone (tested).
 - **Session.** `Session(simulation)` takes `handle(command)` (`Play`, `Pause`, `Step(n)`,
   `SetSpeed(preset | seconds per second | "max")`, `Select(id)`, `Deselect`; a bad one raises
   `CommandError`) and `update()`, which runs the ticks real time owes (inside a work budget; the rest

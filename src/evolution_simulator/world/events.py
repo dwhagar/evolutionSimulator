@@ -1,4 +1,4 @@
-"""World events (UX.6): births, deaths and matings, told to listeners as they happen.
+"""World events (UX.6, UX.29): births, deaths, matings and meals, told to listeners as they happen.
 
 A listener is any callable taking one event, added with ``World.add_event_listener``. Events are
 built only while someone listens, so a headless run with no listener pays nothing. They are
@@ -61,6 +61,22 @@ class Mated:
     conceived: bool
 
 
-WorldEvent = Born | Died | Mated
+@dataclass(frozen=True, slots=True)
+class Ate:
+    """An animal took a bite of food it did not refuse: from a plant it touched or a corpse. A bite
+    that killed an animal is the victim's ``Died`` (with the killer); the meal that follows is a
+    separate ``Ate`` from the corpse."""
+
+    tick: int
+    eater: int
+    food: str
+    """``"plant"`` or ``"corpse"``."""
+    target: int
+    """The plant's or the corpse's id."""
+    amount: float
+    """Biomass or meat taken from it."""
+
+
+WorldEvent = Born | Died | Mated | Ate
 
 EventListener = Callable[[WorldEvent], None]

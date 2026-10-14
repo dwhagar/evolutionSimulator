@@ -18,11 +18,12 @@ import math
 import random
 from dataclasses import dataclass
 
+from evolution_simulator.brain import DEFAULT_BLUEPRINT, DEFAULT_SHAPE, Brain, BrainNetwork
 from evolution_simulator.brain_adapter import INPUT_NAMES, OUTPUT_NAMES, BrainDecision, BrainTrace
 from evolution_simulator.deaths import DeathCause
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.daycycle import DayCycle
-from evolution_simulator.world.events import Born, Died, EventListener, WorldEvent
+from evolution_simulator.world.events import Ate, Born, Died, EventListener, WorldEvent
 from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.views import (
     AnimalDetail,
@@ -197,9 +198,18 @@ class FakeSimulation:
             partner=None,
             decision=BrainDecision(turn, animal.speed, 0.0, 0.0, 0.0, 0.0),
             brain=brain,
+            network=self._network(animal),
+            children=(),
             traits={"speed": animal.speed, "size": animal.radius},
             genome="0123" * 8,
         )
+
+    def _network(self, animal: _Animal) -> BrainNetwork:
+        """A stable made-up wiring (the same for the same animal) for the network drawing."""
+        rng = random.Random(animal.id)
+        values = [rng.uniform(-2.0, 2.0) for _ in range(DEFAULT_SHAPE.weight_count)]
+        brain = Brain.from_values(DEFAULT_SHAPE, values, dead_zone=0.5)
+        return brain.network(tuple(range(DEFAULT_SHAPE.hidden)), DEFAULT_BLUEPRINT.max_hidden)
 
     def step(self) -> StepReport:
         self._tick += 1
@@ -216,6 +226,9 @@ class FakeSimulation:
             animal.y = min(
                 self._bounds.size[1], max(0.0, animal.y + math.sin(animal.heading) * step)
             )
+        if self._listeners and self._animals and self._tick % 4 == 0:
+            eater = next(iter(self._animals))
+            self._emit(Ate(self._tick, eater, "plant", 0, 1.0))
         wanted = round(self._base * (1.0 + math.sin(math.tau * self._tick / self._period) / 3.0))
         while len(self._animals) < wanted:
             self._add_animal(announce=True)

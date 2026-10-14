@@ -54,7 +54,7 @@ from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
 from evolution_simulator.world.corpses import Corpse, CorpseRules
-from evolution_simulator.world.events import Born, Died, EventListener, Mated, WorldEvent
+from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import (
@@ -343,6 +343,10 @@ class World:
         """The inspector's picture of one living animal, or ``None`` if there is none by that id."""
         animal = self._animals.get(animal_id)
         return None if animal is None else animal_detail(self, animal)
+
+    def children_of(self, animal_id: int) -> tuple[int, ...]:
+        """The ids of the living animals that name ``animal_id`` as a parent, oldest first."""
+        return tuple(a.id for a in self.animals if animal_id in a.parents)
 
     def trace_brain(self, animal_id: int | None) -> bool:
         """Keep the brain's last inputs, hidden values and outputs for this animal (and stop for
@@ -759,6 +763,8 @@ class World:
             return True  # it tasted the poison and refused
         eaten, toxicity = best.traits.graze(self.config.graze_amount * dt)
         animal.traits.feed(eaten, is_meat=False, toxicity=toxicity, dt=dt)
+        if self._event_listeners:
+            self._emit(Ate(self._event_tick, animal.id, "plant", best.id, eaten))
         return True
 
     def _attack(self, animal: Animal, dt: float) -> None:
@@ -804,6 +810,8 @@ class World:
         taken = min(corpse.meat, self.config.corpses.bite * dt)
         corpse.meat -= taken
         animal.traits.feed(taken, is_meat=True, dt=dt)
+        if self._event_listeners:
+            self._emit(Ate(self._event_tick, animal.id, "corpse", corpse.id, taken))
         return True
 
     def _leave_corpses(self) -> None:

@@ -10,7 +10,7 @@ from evolution_simulator.config import DayCycle, PlantRules
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
 from evolution_simulator.world.corpses import Corpse, CorpseRules
-from evolution_simulator.world.events import Born, Died, EventListener, Mated, WorldEvent
+from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.persistence import SaveFormatError, load_world, save_world
 from evolution_simulator.world.senses import Senses, WorldSenses
@@ -41,6 +41,7 @@ __all__ = [
     "Animal",
     "AnimalDetail",
     "AnimalView",
+    "Ate",
     "AttackRules",
     "Born",
     "Bounds",

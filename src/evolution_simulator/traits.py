@@ -595,6 +595,12 @@ class AnimalTraits(BaseTraits):
         self._ticks_since_decision = 1
         return decision
 
+    @property
+    def brain_slots(self) -> tuple[int, ...]:
+        """The genome slots of the hidden neurons that exist (their gates are on), in the order of
+        the hidden layer."""
+        return DEFAULT_BLUEPRINT.slots_on(self.dna.values("brain"))
+
     def _interrupted(self, percepts: Percepts) -> bool:
         """Whether something happened since the brain last ran that should not wait for the next
         scheduled decision (``BRAIN.22``): it is hurting, a threat has appeared, or it is newly in

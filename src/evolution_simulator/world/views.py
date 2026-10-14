@@ -18,6 +18,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NamedTuple
 
+from evolution_simulator.brain import DEFAULT_BLUEPRINT, BrainNetwork
 from evolution_simulator.brain_adapter import BrainDecision, BrainTrace
 from evolution_simulator.deaths import DeathCause
 
@@ -113,6 +114,11 @@ class AnimalDetail:
     brain: BrainTrace | None
     """The inputs, hidden values and outputs of the last brain run; only filled in once the
     animal is traced (``World.trace_brain``) and its brain has run since."""
+    network: BrainNetwork
+    """The brain's wiring: biases, weights and which genome slots are switched on. Always filled
+    (it is read from the brain, not from a run), and it includes what the animal has learned."""
+    children: tuple[int, ...]
+    """The ids of its living children, oldest first."""
     traits: dict[str, float]
     """The trait table, by trait id."""
     genome: str
@@ -206,6 +212,8 @@ def animal_detail(world: World, animal: Animal) -> AnimalDetail:
         partner=animal.partner,
         decision=animal.last_decision,
         brain=traits.brain_trace,
+        network=traits.brain.network(traits.brain_slots, DEFAULT_BLUEPRINT.max_hidden),
+        children=world.children_of(animal.id),
         traits={name: float(value) for name, value in traits.phenotype.items()},
         genome=str(traits.dna),
         death_cause=traits.death_cause,
