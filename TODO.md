@@ -60,6 +60,11 @@ DNA API; the code stays at `refs/pull/20/head`.
 | BRAIN.14 | Behaviour comes from genetic factors as well as the network: the behaviour genes (aggression, fear, and the reproduction genes from REPRO.5) feed the brain | ready | |
 | BRAIN.15 | Learning during life: creatures sleep at night to regain energy and their weights update (this is also their memory). Design note first: the learning rule, what counts as reward, and whether changes are inherited ([#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 5) | research | Research 1 |
 | BRAIN.16 | Random wander fallback: a creature that cannot decide moves in a random direction or turns, so its senses start giving it information | ready | |
+| BRAIN.17 | Owner question (filed by Research 1): maximum brain size and dormant neurons | waiting on owner | Research 1 files the issue |
+| BRAIN.18 | Owner question: which brain operating settings are genes (gain, reaction speed, learning rate, curiosity, sleep need) | waiting on owner | Research 1 files the issue |
+| BRAIN.19 | Owner question: what counts as reward in learning | waiting on owner | Research 1 files the issue |
+| BRAIN.20 | Owner question: how large a nightly change may be | waiting on owner | Research 1 files the issue |
+| BRAIN.21 | Use one threshold for both the brain's energy cost and `Brain.decide` (cost counts only weights above `BRAIN_ACTIVE_THRESHOLD` 0.25 while `decide` uses every weight, so small weights act for free) | ready | |
 | BRAIN.9 | Seed the first generation by fitting weights to the current fixed rule (95%+ agreement on random inputs, tested); `BlockSpec.encode` and `DNA.replaced` are ready for it | blocked | [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 4 |
 | BRAIN.10 | Act on the brain's decisions: set the attack, mate and signal flags and the movement and feeding from `think()`, and retire the fixed rule as a second source of truth | blocked | WORLD.2, SENSE.1 |
 | BRAIN.11 | Decision interval: run the brain every n ticks instead of every tick | ready | |
@@ -73,6 +78,7 @@ DNA API; the code stays at `refs/pull/20/head`.
 | WORLD.3 | Time scale: a tick is 1 second by default; selectable speeds where one second of real time equals 1 minute, 1 hour, 1 day, 7 days, 1 month, 1 year, 10 years, 100 years or 1000 years | ready | WORLD.2 |
 | WORLD.4 | World bounds set by the user, default 1000 by 1000 (edges to confirm, [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 3) | ready | WORLD.2 |
 | WORLD.5 | Day-night cycle: creatures sleep at night to regain energy; ties to BRAIN.15 | blocked | WORLD.3, BRAIN.15 |
+| WORLD.6 | Owner question (filed by Research 1): are sleeping creatures vulnerable | waiting on owner | Research 1 files the issue |
 
 ## Senses
 
