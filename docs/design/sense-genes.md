@@ -38,7 +38,8 @@ and `world/senses.py` (the stand-in the world uses today).
 9. [Risks](#risks)
 10. [What to build](#what-to-build)
 11. [Constants for the TRAIT.3 config](#constants-for-the-trait3-config)
-12. [Questions for the owner](#questions-for-the-owner)
+12. [Smell trails (`SENSE.20`)](#smell-trails-sense20)
+13. [Questions for the owner](#questions-for-the-owner)
 
 ## Summary
 
@@ -316,7 +317,7 @@ means no code does it yet.
 | Needs | On main | Gap |
 | --- | --- | --- |
 | Things that smell | `Neighbour.scent` (0 to 1) exists | The world must supply it: plants from biomass (available in `PlantTraits`), animals from mass |
-| A decay or drift of scent over time and space (trails) | No | A scent field with decay if trails are wanted (`SENSE.20`) |
+| A decay or drift of scent over time and space (trails) | Yes (`SENSE.20`), off by default: decay only, no drift | Built: `world/scent.py`; see [Smell trails](#smell-trails-sense20) |
 | Dead bodies as a scent source | Yes (`WORLD.12`): a corpse is reported to meat eaters as prey, smelled at the full range, and rots | Built: `world/corpses.py` |
 | Wind or water currents | No | Not planned |
 
@@ -462,6 +463,53 @@ Depends on `SENSE.12` (the wiring) being in place.
 | `VISION_COST_PER_AREA` | `8e-6 * (1 + a_eff)` | `sense_cost` |
 | `FOUNDER_SENSE_SPREAD` | 0.07 around 0.5 | seeding |
 | `FOUNDER_DIET_TILT` | 0.3 (field `0.5 - 0.3 * tilt`) | seeding |
+
+## Smell trails (`SENSE.20`)
+
+Behind `TraitRules.world.scent.enabled` (off by default) the world keeps a coarse grid of scent. Every
+few ticks each living animal adds scent to the cell it stands in, every corpse adds some each tick, and
+all of it fades with a half-life (24 hours by default). `WorldSenses` reads the grid as one more smell
+source, so a trail is smelled like any other scent, with no change to the brain inputs or the brain
+layout.
+
+| Rule (`ScentRules`) | Default | Meaning |
+| --- | --- | --- |
+| `enabled` | `False` | Off: no field, no cost, saves and digests are unchanged |
+| `cell_size` | 20 | Side of a grid cell, in world units |
+| `deposit`, `deposit_interval` | 0.25, 4 | Strength laid per reference tick; laid every 4th tick (staggered by id) at four times the amount, which costs a quarter as much |
+| `carrion_deposit` | 0.5 | The same for a corpse |
+| `half_life_hours` | 24 | Strength halves this often; decay is lazy (computed when read), never swept |
+| `min_strength`, `purge_interval` | 0.05, 24 | Trails below this are dropped every 24 ticks |
+
+How a trail is read:
+
+- A cell keeps one record per kind (animal, carrion): strength (capped at 1), and the latest
+  depositor's mass, whether it eats meat, and its id. Strength is what is left after decay.
+- A nose with smell reach `R` picks up a cell when the cell centre is within `R x strength`, so a fresh
+  trail is smelled from far and an old one only up close. The animal's own trail is never smelled.
+- A trail is classed by who left it. A meat eater smells the nearest animal trail it could eat as
+  prey (mass ratio at most `PREY_MASS_RATIO`, at the weak smell limit like a live prey) and the nearest
+  carrion trail as carrion prey (full limit). Any animal smells a bigger meat eater's trail as a threat.
+  Mates and young are not reported from a trail: the field does not hold sex or genome, and a mate has
+  to be met.
+- A trail is smell only. It does not block touch, cannot be seen or heard and does not count as
+  crowding; it appears at the cell centre.
+- The grid is part of `state_digest` and the save file (optional `scent` key, so no format bump)
+  and a saved run continues identically.
+
+Not built: drift with wind or water, and trails that carry the depositor's sex or genes.
+
+Cost, measured with the field on against off (best of 2, process time):
+
+| World | Off | On | Extra |
+| --- | --- | --- | --- |
+| 300 animals, 3000 plants | 33.8 ms/tick | 35.9 ms/tick | +6% |
+| 1000 animals, 3000 plants | 141.7 ms/tick | 149.7 ms/tick | +6% |
+| 300 animals, 200 plants | 21.8 ms/tick | 24.0 ms/tick | +10% |
+
+It is off by default because it changes how animals behave (hunters follow prey, grazers do not),
+which would shift the founder baselines that `WORLD.15` calibrates against. Turning it on is a decision
+for the owner.
 
 ## Questions for the owner
 

@@ -58,6 +58,7 @@ from evolution_simulator.world.corpses import Corpse
 from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
+from evolution_simulator.world.scent import ANIMAL, CARRION, ScentField
 from evolution_simulator.world.senses import (
     MEAT_EATER,
     Senses,
@@ -218,6 +219,11 @@ class World:
         self._plant_index = SpatialIndex(INDEX_CELL_SIZE)
         self._corpses: dict[int, Corpse] = {}
         self._corpse_index = SpatialIndex(INDEX_CELL_SIZE)
+        scent_rules = self.config.traits.world.scent
+        self.scent: ScentField | None = (
+            ScentField(scent_rules, self.dt) if scent_rules.enabled else None
+        )
+        """Smell trails (``SENSE.20``); ``None`` when the run does not have them."""
         self.max_canopy: float = 0.0
         """Largest canopy radius of any plant added so far; bounds the plant search radius."""
         self.max_body: float = 0.0
@@ -619,6 +625,9 @@ class World:
             ):
                 self._attack(animal, dt)
 
+        if self.scent is not None:
+            self._lay_scent(dt)
+
         # 3. Mate, then deliver the litters that are due.
         self._refresh_animal_index()
         self._mate(animals)
@@ -879,6 +888,35 @@ class World:
             self._corpses[corpse.id] = corpse
             self._corpse_index.insert(corpse.id, corpse.position, corpse.radius)
 
+    def _lay_scent(self, dt: float) -> None:
+        """Animals and corpses add to the scent of the cell they are in (``SENSE.20``), and now and
+        then trails too weak to matter are dropped."""
+        field = self.scent
+        assert field is not None
+        rules = field.rules
+        tick = self.tick
+        every = rules.deposit_interval
+        amount = rules.deposit * dt * every
+        if amount > 0.0:
+            for animal in self.animals:
+                if (tick + animal.id) % every == 0 and animal.is_alive:
+                    traits = animal.traits
+                    field.deposit(
+                        ANIMAL,
+                        animal.position,
+                        amount,
+                        tick,
+                        traits.mass,
+                        traits.effective_carn_eff > MEAT_EATER,
+                        animal.id,
+                    )
+        amount = rules.carrion_deposit * dt
+        if amount > 0.0:
+            for corpse in self.corpses:
+                field.deposit(CARRION, corpse.position, amount, tick, corpse.mass, False, corpse.id)
+        if tick % rules.purge_interval == 0:
+            field.purge(tick)
+
     def _rot_corpses(self, dt: float) -> None:
         """Corpses lose meat to rot and are removed when almost nothing is left."""
         rules = self.config.corpses
@@ -1037,4 +1075,6 @@ class World:
             )
         for corpse in self.corpses:
             parts.append(f"C{corpse.id}|{corpse.position.coords!r}|{corpse.meat!r}")
+        if self.scent is not None:
+            parts.append(f"S{self.scent.records()!r}")
         return hashlib.sha256("\n".join(parts).encode()).hexdigest()

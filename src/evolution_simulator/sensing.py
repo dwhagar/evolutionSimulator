@@ -187,6 +187,9 @@ class Neighbour:
     carrion: bool = False
     """A corpse, reported as prey: it is smelled at the full range (it is not hiding), makes no
     sound and does not count towards crowding."""
+    trail: bool = False
+    """Scent left behind (``SENSE.20``) rather than the thing itself: only smell picks it up (it is
+    not seen, heard or touched), and it does not count towards crowding."""
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
@@ -282,18 +285,20 @@ def sense(
         nx, ny = n.position.coords
         dx, dy = nx - px, ny - py
         distance = max(0.0, math.hypot(dx, dy) - radius - n.radius)
-        nearest = min(nearest, distance)
+        trail = n.trail
+        if not trail:
+            nearest = min(nearest, distance)
         sees = False
-        if reach_vision > 0.0 and distance <= reach_vision:
+        if reach_vision > 0.0 and distance <= reach_vision and not trail:
             sees = distance == 0.0 or (
                 abs(math.atan2(dy * fx - dx * fy, dx * fx + dy * fy)) <= half_fov
             )
-        hears = reach_hearing > 0.0 and distance <= reach_hearing * n.loudness
+        hears = reach_hearing > 0.0 and distance <= reach_hearing * n.loudness and not trail
         smell_limit = weak_smell if role in ("prey", "threat") and not n.carrion else reach_smell
         smells = smell_limit > 0.0 and distance <= smell_limit * n.scent
         if n.alarm_call_radius > 0.0 or n.mating_call_radius > 0.0:
             callers.append((distance, n, dx, dy))
-        if role == "plant" or n.carrion:
+        if role == "plant" or n.carrion or trail:
             crowded = False
         else:
             crowded = (sees and "vision" in _CROWDING_SENSES) or (
