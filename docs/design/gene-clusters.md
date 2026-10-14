@@ -163,7 +163,7 @@ fidelity setting. Useful as an experiment: compare runs with and without.
 ### Proposed cluster order for the animal body
 
 Genes are placed so that every cluster is consecutive. Changing the order moves positions, so it should
-land with the next layout version bump (`REPRO.7`'s delta already bumps it to 4). Names are the current
+land with the next layout version bump (`REPRO.7`'s delta already bumps it to 5). Names are the current
 and planned gene IDs.
 
 | Cluster | Genes in order | Feeds |

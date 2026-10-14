@@ -92,7 +92,7 @@ All gene values are 0 to 1, read by the existing `TraitDef` mechanism. Three dig
 Counted from the layout after #74 (70 digits before the brain): `caregiving` becomes `parenting`,
 `repro_interval` becomes `repro_cooldown`, `repro_drive` stays, and `fertility` (3 digits) and
 `recovery` (3 digits) are added, so the digits before the brain become 76 and `sex_strategy` and the
-brain block move along by 6. `ANIMAL_LAYOUT.version` goes to 4. The sex digit keeps its single digit.
+brain block move along by 6. `ANIMAL_LAYOUT.version` goes to 5 (Foundations 2 takes 4 for the brain; use the next free number if that changes). The sex digit keeps its single digit.
 
 ### Drive (`repro_drive`)
 
@@ -280,7 +280,7 @@ list is written against the code after #74. Plant work (`REPRO.3`, `TRAIT.8`) ca
 change.
 
 1. `layouts.py` (animals): rename `caregiving` to `parenting` and `repro_interval` to `repro_cooldown`,
-   add `fertility` and `recovery` (3 digits each), bump `ANIMAL_LAYOUT.version` to 4; set the first
+   add `fertility` and `recovery` (3 digits each), bump `ANIMAL_LAYOUT.version` to 5 (4 is taken by the brain work); set the first
    generation's values (`fertility` 0.75, `parenting` 0, the rest 0.5) with `DNA.replaced` or the
    world's seeding code.
 2. `trait_defs.py`: the traits in the tables above; `sex_strategy` yields `sex` (mod 2) and
