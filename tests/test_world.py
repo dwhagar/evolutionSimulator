@@ -465,6 +465,28 @@ def test_seeds_are_clones_of_the_parent_with_a_few_mutations():
     assert mean_distance < 0.05  # about 0.15 digits changed in 30
 
 
+def test_a_plant_ages_by_the_hour_whatever_the_tick():
+    hourly = hourly_world()
+    week = hourly.add_plant(plant_dna(longevity="000"), HERE)  # lives 7 days: 168 hours
+    hourly.run(167)
+    assert week.is_alive
+    hourly.step()
+    assert not week.is_alive and week.id not in {p.id for p in hourly.plants}
+
+    slow = make(day_cycle=None)  # one-second ticks: a week is far away
+    plant = slow.add_plant(plant_dna(longevity="000", growth_rate="3333", toxicity="0000"), HERE)
+    slow.run(500)
+    assert plant.traits.lived_ticks == pytest.approx(500 / 3600)
+
+
+def test_a_first_generation_of_plants_lives_about_a_month_give_or_take():
+    world = make(seed=4)
+    world.populate(plants=40)
+    spans = sorted(p.traits.phenotype["lifespan_days"] for p in world.plants)
+    assert 18 <= spans[0] and spans[-1] <= 50
+    assert spans[-1] > spans[0] * 1.2  # not all the same, so they do not die on one day
+
+
 # --- reports ------------------------------------------------------------------
 
 

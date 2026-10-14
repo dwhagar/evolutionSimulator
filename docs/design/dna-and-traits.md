@@ -9,7 +9,7 @@ Written 2026-10-14 by the Foundations 1 thread.
 | --- | --- |
 | `dna.py` | `DNA` (immutable genome), `GenomeLayout`, `GeneSpec` and `BlockSpec` (the gene table); knows gene IDs only |
 | `diploid.py` | `DiploidDNA` (two `DNA` strands read through a `DominanceModel`), `DominanceModel`, `CODOMINANT` |
-| `layouts.py` | `ANIMAL_LAYOUT` (472 digits: 76 body, 396 brain) and `PLANT_LAYOUT` (30 digits) as plain data, and `dna_from_dict` |
+| `layouts.py` | `ANIMAL_LAYOUT` (472 digits: 76 body, 396 brain) and `PLANT_LAYOUT` (33 digits) as plain data, and `dna_from_dict` |
 | `brain.py`, `brain_adapter.py` | The `Brain` network and the world-side inputs and outputs; see [brain.md](brain.md) |
 | `trait_defs.py` | `TraitDef` and `TraitSet`: what each trait reads from DNA, its range, scale and mutation step; `ANIMAL_TRAITS`, `PLANT_TRAITS` |
 | `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits`: runtime organism state and the formulas built on the traits; `AnimalTraits` also builds the animal's `Brain` |
@@ -197,26 +197,30 @@ into clusters, with the five reproduction genes next to each other: layout versi
 - **Long-run check.** `scripts/reproduction_check.py` runs the real traits in a small food-limited ecology and
   reports where the genes settle; see [reproduction-genes.md](reproduction-genes.md#long-run-check).
 
-## Plants (REPRO.3)
+## Plants (REPRO.3 and TRAIT.8)
 
-Plants are asexual, mutate slower and live longer than animals. `PLANT_LAYOUT` is version 2 and 30 digits: the
-six old genes plus `seed_provision` (3 digits) and `seeding_interval` (3 digits).
+Plants are asexual and mutate slower than animals. `PLANT_LAYOUT` is version 3 and 33 digits: the six old
+genes plus `seed_provision`, `seeding_interval` and `longevity` (3 digits each).
 
 - **Asexual.** A seed's genome is `dna.reproduce(None, rng)`: a clone with the layout's default mutations,
   which for plants are 0.005 per digit (0.15 changed digits per seed, half the animal body's per-digit rate).
-- **Lives longer.** A plant dies when its age reaches `PLANT_LIFESPAN_TICKS` (25,000, five times the longest
-  animal). It is a placeholder constant until `TRAIT.8`, which may turn it into a gene.
+- **Lifespan is a gene (`TRAIT.8`).** `longevity` is 7 to 365 simulated days on a log scale (`lifespan_days`;
+  a month, 30.4 days, is gene value 0.371, where a first generation starts, give or take 0.1). A plant dies when
+  the time it has lived reaches that. Ageing is charged per reference tick (an hour) times the world's `dt`, like
+  the animals', so only an hourly tick ages a plant as designed (`WORLD.7`). Long life trades against the rest:
+  growth is multiplied by `1 - 0.3 * longevity` and the seed budget share by `1 - 0.4 * longevity`
+  (`PLANT_LONGEVITY_GROWTH`, `PLANT_LONGEVITY_SEEDS`), so a perennial grows slower and seeds less than an
+  annual. Plants therefore start shorter-lived than animals (a month against a year) and can evolve longer.
 - **Pays for seeds.** `seed_provision` (5% to 50% of the seed's own full biomass, log scale) is what each
   seed starts with. The 35% seed budget (`SEED_BUDGET_SHARE`) is spent on as many seeds as it pays for, up to
   `seed_clutch`, so `seed_capacity = min(seed_clutch, budget / (provision * max_biomass))`. If the seeds
   came out bigger than the budget (a mutated `max_biomass`), `launch_seeds` scales every seed down together.
-- **Waits between bursts.** `seeding_interval` (the `seeding_fraction` trait, `INTERVAL_FRACTION_RANGE`) is a
-  share of the lifespan. A seedling is a juvenile for one interval, and after each burst the cooldown starts
-  again. A plant seeds when it has reached 85% of its full size, its vitality is above 0.4, the cooldown is over
+- **Waits between bursts.** `seeding_interval` (the `seeding_days` trait) is 2 to 60 simulated days on a log
+  scale. A seedling is a juvenile for 6% of its lifespan, and after each burst the cooldown starts again for
+  the interval. A plant seeds when it has reached 85% of its full size, its vitality is above 0.4, the cooldown is over
   and the budget pays for at least one seed.
-- **Not built.** Plants have no behaviour, so there is no plant drive gene. The balance is untested: with
-  plants now taking a share of a 25,000 tick life to mature, food will be scarcer than in the prototype
-  until the world is tuned (`WORLD`/`TRAIT.3`).
+- **Not built.** Plants have no behaviour, so there is no plant drive gene. Growth and upkeep are still per
+  tick, not per hour, so the balance is untested until `WORLD.7` makes the hourly tick the default.
 
 ## Changes from the prototype
 

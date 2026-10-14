@@ -3,7 +3,6 @@ import random
 import pytest
 from genome_support import dna_from_v6
 
-from evolution_simulator import traits as traits_module
 from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import AnimalTraits, BaseTraits, MatingResult, PlantTraits
@@ -832,8 +831,8 @@ def test_grazing_cannot_exceed_standing_biomass_and_can_kill():
     assert traits.graze(5.0) == (0.0, 0.0)
 
 
-def test_the_seed_budget_is_35_percent_of_biomass():
-    traits = PlantTraits(HIGH_PLANT)
+def test_the_seed_budget_is_35_percent_of_biomass_for_a_short_lived_plant():
+    traits = PlantTraits(LOW_PLANT)
     traits.current_biomass = traits.max_biomass
     assert traits.seed_budget == pytest.approx(traits.max_biomass * 0.35)
 
@@ -878,10 +877,12 @@ def test_launch_seeds_scales_down_together_when_over_budget():
     assert len(shares) == 1
 
 
-def test_a_young_plant_waits_a_seeding_interval_before_it_seeds():
-    traits = PlantTraits(plant_with(max_biomass="3333", growth_rate="3333", seeding_interval="333"))
-    assert traits.seed_cooldown == traits.seeding_interval_ticks
-    for _ in range(traits.seeding_interval_ticks - 1):
+def test_a_young_plant_waits_a_share_of_its_lifespan_before_it_seeds():
+    traits = PlantTraits(plant_with(max_biomass="3333", growth_rate="3333", longevity="000"))
+    assert traits.seed_cooldown == pytest.approx(0.06 * traits.lifespan_ticks)  # 6% of 7 days
+    traits.set_starting_biomass(traits.max_biomass)  # full grown, so only the wait holds it back
+    wait = round(traits.seed_cooldown)
+    for _ in range(wait - 2):
         traits.update_growth_and_metabolism()
     assert not traits.flag_ready_to_seed
     for _ in range(5):
@@ -889,16 +890,53 @@ def test_a_young_plant_waits_a_seeding_interval_before_it_seeds():
     assert traits.flag_ready_to_seed
 
 
-def test_the_seeding_interval_gene_sets_the_wait():
+def test_the_seeding_interval_gene_sets_the_wait_in_days():
     short = PlantTraits(plant_with(seeding_interval="000"))
     long = PlantTraits(plant_with(seeding_interval="333"))
-    assert short.seeding_interval_ticks < long.seeding_interval_ticks
-    assert long.seeding_interval_ticks <= traits_module.PLANT_LIFESPAN_TICKS
+    assert short.phenotype["seeding_days"] == pytest.approx(2.0)
+    assert long.phenotype["seeding_days"] == pytest.approx(60.0)
+    assert short.seeding_interval_ticks == pytest.approx(48.0)
+    assert long.seeding_interval_ticks == pytest.approx(1440.0)
+
+
+def test_the_longevity_gene_sets_the_lifespan_in_days():
+    short, middle, long = (PlantTraits(plant_with(longevity=g)) for g in ("000", "132", "333"))
+    assert short.phenotype["lifespan_days"] == pytest.approx(7.0)
+    assert long.phenotype["lifespan_days"] == pytest.approx(365.0)
+    assert short.lifespan_ticks == pytest.approx(7 * 24)
+    assert short.lifespan_ticks < middle.lifespan_ticks < long.lifespan_ticks
+    default = PlantTraits(plant_with().with_value("longevity", 0.371))
+    assert default.phenotype["lifespan_days"] == pytest.approx(30.4, abs=1.0)  # a simulated month
+
+
+def test_a_long_life_slows_growth_and_shrinks_the_seed_budget():
+    short = PlantTraits(plant_with(longevity="000", max_biomass="3333", growth_rate="3333"))
+    long = PlantTraits(plant_with(longevity="333", max_biomass="3333", growth_rate="3333"))
+    assert long.base_growth_rate == pytest.approx(short.base_growth_rate * 0.7)
+    for plant in (short, long):
+        plant.current_biomass = plant.max_biomass
+    assert short.seed_budget == pytest.approx(0.35 * short.max_biomass)
+    assert long.seed_budget == pytest.approx(0.35 * 0.6 * long.max_biomass)
+    assert long.seed_budget < short.seed_budget
+
+
+def test_a_plant_ages_and_counts_down_in_reference_ticks():
+    long = PlantTraits(plant_with(longevity="333"))
+    start = long.seed_cooldown  # 6% of a year
+    long.update_growth_and_metabolism(dt=24.0)
+    assert long.lived_ticks == 24.0 and long.age_ticks == 1
+    assert long.seed_cooldown == pytest.approx(start - 24.0)
+    traits = PlantTraits(plant_with(longevity="000"))  # 168 reference ticks
+    for _ in range(6):
+        traits.update_growth_and_metabolism(dt=24.0)
+    assert traits.is_alive and traits.lived_ticks == 144.0
+    traits.update_growth_and_metabolism(dt=24.0)
+    assert not traits.is_alive  # a week-long life ends at the seventh day
 
 
 def test_a_plant_dies_of_old_age():
     traits = PlantTraits(plant_with(max_biomass="3333"))
-    traits.age_ticks = traits.lifespan_ticks - 1
+    traits.lived_ticks = traits.lifespan_ticks - 1.0
     traits.update_growth_and_metabolism()
     assert not traits.is_alive
 
@@ -929,7 +967,7 @@ _AT = 60  # where the reproduction genes sat before the clusters (after the fift
 PINNED_ANIMAL = dna_from_v6(
     _BODY[:_AT] + "211" + "123" + "220" + "301" + "132" + _BODY[_AT:] + "0" * 16, "0" * 908
 )  # 16: brain_gain, reaction_time, curiosity, learning_rate; 908: the brain
-PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122")
+PINNED_PLANT = plant_dna("330233232112102120023023" + "211" + "122" + "000")
 
 
 def test_animal_drive_flags_are_set_at_birth():

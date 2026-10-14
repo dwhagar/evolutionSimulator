@@ -87,12 +87,14 @@ REPAIR_COOLDOWN_STRETCH: float = 1.0
 """The cooldown is multiplied by ``1 + REPAIR_COOLDOWN_STRETCH * somatic_maint``."""
 
 # Plants (REPRO.3).
-PLANT_LIFESPAN_TICKS: int = 25_000
-"""How long a plant lives, in ticks: about five times an average animal's. A configured constant until
-plants get a lifespan gene (TRAIT.8, owner question 10 on issue #36); meant to move into the shared
-config object (TRAIT.3)."""
 SEED_BUDGET_SHARE: float = 0.35
-"""Share of its biomass a plant can put into one burst of seeds (the prototype's fixed number)."""
+"""Share of its biomass a plant can put into one burst of seeds (the prototype's fixed number), before
+the longevity trade-off."""
+PLANT_LONGEVITY_GROWTH: float = 0.3
+"""Growth is multiplied by ``1 - PLANT_LONGEVITY_GROWTH * longevity``: a long-lived plant grows slower."""
+PLANT_LONGEVITY_SEEDS: float = 0.4
+"""The seed budget share is multiplied by ``1 - PLANT_LONGEVITY_SEEDS * longevity``: a long-lived plant
+seeds less."""
 SEED_READY_SHARE: float = 0.85
 """A plant is ready to seed once it holds this share of its full size (the prototype's number)."""
 
@@ -948,8 +950,11 @@ class PlantTraits(BaseTraits):
         self.toxicity: float = t["toxicity"]
         self.chemical_defense_tax: float = 0.05 * (self.toxicity**1.5)
 
-        # Baseline photosynthetic intake per tick
-        self.base_growth_rate: float = t["base_growth_rate"]
+        # Baseline photosynthetic intake per tick; a long life slows growth (TRAIT.8)
+        self.longevity: float = t["longevity"]
+        self.base_growth_rate: float = t["base_growth_rate"] * (
+            1.0 - (PLANT_LONGEVITY_GROWTH * self.longevity)
+        )
         self.basal_metabolism = (0.02 * (self.mass**0.5)) + self.chemical_defense_tax
 
         # ---------------------------------------------------------------------
@@ -960,35 +965,38 @@ class PlantTraits(BaseTraits):
         self.current_energy = self.current_biomass
         self.current_health = self.max_damage_capacity * 0.5
         self.growth_cooldown: int = 0
+        self.lived_ticks: float = 0.0
+        """Reference ticks (hours) lived so far; the plant dies of old age at ``lifespan_ticks``."""
 
         # Environmental factors: Sunlight availability (0.0 to 1.0) and soil competition
         self.sunlight_factor: float = 1.0
         self.soil_competition_factor: float = 1.0
 
-        # Behavioral/Lifecycle flag. A seedling is a juvenile for one seeding interval, like an
-        # animal (REPRO.5): the gene that sets the gap between bursts sets the age of the first.
+        # Behavioral/Lifecycle flag. A seedling is a juvenile for a share of its lifespan, like an
+        # animal (REPRO.5 and TRAIT.8): it can first seed at 6% of its lifespan.
         self.flag_ready_to_seed: bool = False
-        self.seed_cooldown: int = self.seeding_interval_ticks
+        self.seed_cooldown: float = MATURITY_SHARE * self.lifespan_ticks
 
         # A seedling's vitality follows its starting health, not the default of 1.0.
         self._refresh_vitality_dependents()
         self._update_needs_and_drives()
 
     @property
-    def lifespan_ticks(self) -> int:
-        """Ticks a plant lives (a configured constant for now: no lifespan gene yet)."""
-        return PLANT_LIFESPAN_TICKS
+    def lifespan_ticks(self) -> float:
+        """Reference ticks (hours) a plant lives if nothing kills it: the ``longevity`` gene in days."""
+        return self.phenotype["lifespan_days"] * TICKS_PER_DAY
 
     @property
-    def seeding_interval_ticks(self) -> int:
-        """Shortest gap between seed bursts, and the age of the first, as a share of the lifespan
-        (the ``seeding_interval`` gene)."""
-        return max(1, round(self.phenotype["seeding_fraction"] * self.lifespan_ticks))
+    def seeding_interval_ticks(self) -> float:
+        """Reference ticks between seed bursts at the shortest (the ``seeding_interval`` gene in days)."""
+        return self.phenotype["seeding_days"] * TICKS_PER_DAY
 
     @property
     def seed_budget(self) -> float:
-        """Biomass this plant can put into a burst of seeds right now."""
-        return SEED_BUDGET_SHARE * self.current_biomass
+        """Biomass this plant can put into a burst of seeds right now: a share of its biomass that
+        shrinks as the plant lives longer."""
+        share = SEED_BUDGET_SHARE * (1.0 - (PLANT_LONGEVITY_SEEDS * self.longevity))
+        return share * self.current_biomass
 
     def seed_capacity(self) -> int:
         """How many seeds the budget pays for if each starts with ``seed_provision`` of this
@@ -1011,17 +1019,20 @@ class PlantTraits(BaseTraits):
         self.sunlight_factor = min(1.0, max(0.05, sunlight))
         self.soil_competition_factor = min(1.0, max(0.05, soil_competition))
 
-    def update_growth_and_metabolism(self) -> None:
-        """Advances one tick of photosynthesis, chemical defense upkeep, and maturation."""
+    def update_growth_and_metabolism(self, dt: float = 1.0) -> None:
+        """Advances one tick of photosynthesis, chemical defense upkeep, and maturation. ``dt`` is the
+        tick in reference ticks (hours): ageing and the seeding cooldown run on that clock. Growth and
+        upkeep are still charged per tick (``WORLD.7``)."""
         if not self.is_alive:
             return
 
         self.age_ticks += 1
-        if self.age_ticks >= self.lifespan_ticks:
+        self.lived_ticks += dt
+        if self.lived_ticks >= self.lifespan_ticks:
             self._die()  # old age
             return
-        if self.seed_cooldown > 0:
-            self.seed_cooldown -= 1
+        if self.seed_cooldown > 0.0:
+            self.seed_cooldown = max(0.0, self.seed_cooldown - dt)
 
         # Photosynthetic intake scaled by growth gene, light, and soil access
         photosynthetic_gain = (
@@ -1059,7 +1070,7 @@ class PlantTraits(BaseTraits):
         self.flag_ready_to_seed = (
             self.current_biomass >= (self.max_biomass * SEED_READY_SHARE)
             and self.vitality > 0.4
-            and self.seed_cooldown == 0
+            and self.seed_cooldown <= 0.0
             and self.seed_capacity() >= 1
         )
 

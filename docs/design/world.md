@@ -56,10 +56,12 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
    pay, nobody is charged and she keeps carrying them.
 4. Plants grow in id order; a ready plant drops up to `seed_capacity` seeds within its dispersal radius
    and pays each one its `seed_provision` of its own full size. Seeds are mutated clones of the parent
-   (`REPRO.3`); a plant seeds only after its cooldown is over and at most `seed_capacity` seeds at once.
+   (`REPRO.3`); a plant seeds only after its cooldown is over and at most `seed_capacity` seeds at once. A
+   plant's age and cooldown also run on the reference-tick clock (`TRAIT.8`: it lives `longevity` days, a
+   month for a first generation, and can first seed at 6% of that).
 5. The dead are removed and the tick counter goes up by one.
 
-Aging, energy burn, healing, the mating cooldown and the pregnancy run per **reference tick** (an hour of
+Aging (plants too), energy burn, healing, the mating cooldown and the pregnancy run per **reference tick** (an hour of
 simulated time) and are scaled by `World.dt = seconds_per_tick / 3600`; movement, grazing and plant growth
 are per tick. A one-hour tick (`TimeScale(seconds_per_tick=3600)`) is what the numbers were set for; the
 world's default is still a one-second tick until `WORLD.7` switches it, so a default world burns energy

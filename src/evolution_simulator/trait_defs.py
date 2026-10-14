@@ -35,9 +35,11 @@ CARE_FRACTION_RANGE: tuple[float, float] = (0.10, 0.80)
 """A newborn's starting energy as a share of its own energy store (``parenting``)."""
 COOLDOWN_DAYS_RANGE: tuple[float, float] = (2.0, 90.0)
 """Gap between matings in simulated days (``repro_cooldown``, log scale)."""
-INTERVAL_FRACTION_RANGE: tuple[float, float] = (0.01, 0.25)
-"""Shortest gap between seed bursts as a share of the plant lifespan (``seeding_interval``, log
-scale). Plants only until the plant genes move to days (``TRAIT.8``)."""
+LIFESPAN_DAYS_RANGE: tuple[float, float] = (7.0, 365.0)
+"""How long a plant lives, in simulated days (``longevity``, log scale). A month, 30.4 days, is gene
+value 0.371."""
+SEEDING_DAYS_RANGE: tuple[float, float] = (2.0, 60.0)
+"""Shortest gap between seed bursts, in simulated days (``seeding_interval``, log scale)."""
 
 SEED_PROVISION_RANGE: tuple[float, float] = (0.05, 0.50)
 """A seed's starting biomass as a share of its own full size (``seed_provision``, log scale). The
@@ -546,11 +548,20 @@ PLANT_TRAITS = TraitSet(
             description="A seed starts with this share of its own full size.",
         ),
         TraitDef(
-            "seeding_fraction",
+            "seeding_days",
             ("seeding_interval",),
-            *INTERVAL_FRACTION_RANGE,
+            *SEEDING_DAYS_RANGE,
             scale=Scale.LOG,
-            description="Shortest gap between seed bursts, as a share of the plant lifespan.",
+            description="Shortest gap between seed bursts, in simulated days.",
+        ),
+        # Lifespan (TRAIT.8).
+        _level("longevity", "Long life slows growth and shrinks the seed budget."),
+        TraitDef(
+            "lifespan_days",
+            ("longevity",),
+            *LIFESPAN_DAYS_RANGE,
+            scale=Scale.LOG,
+            description="Simulated days until an uneaten plant dies of old age.",
         ),
     ),
 )
