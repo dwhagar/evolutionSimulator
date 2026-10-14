@@ -106,7 +106,7 @@ Layout versions: REPRO.5 took animal layout version 3, BRAIN.23 with SENSE.9 ver
 
 ## Interface
 
-Set by the owner on 2026-10-14: a graphical interface, task area `UX`. Working default until the owner answers [#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to [#126](https://github.com/dwhagar/evolutionSimulator/issues/126): a native desktop program (Qt through PySide6, pyqtgraph for charts), the simulation kept as a headless core and the viewer a separate layer, the simulation running in its own process so the window stays responsive at fast speeds, Windows first. The web option stays open as an owner question (viewing from another machine is its only real advantage). Research 4 owns UX.1; the builds wait for its design note.
+Set by the owner on 2026-10-14: a graphical interface, task area `UX`. Working default until the owner answers [#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to [#126](https://github.com/dwhagar/evolutionSimulator/issues/126): a native desktop program (Qt through PySide6, pyqtgraph for charts), the simulation kept as a headless core and the viewer a separate layer, the simulation running in its own process so the window stays responsive at fast speeds, Windows first. The web option stays open as an owner question (viewing from another machine is its only real advantage). Research 4 owns UX.1 and proposed the build order below; the builds wait for its design note. Parallel tracks once UX.6 lands: UX.7, UX.8 and UX.9, then UX.11 to UX.13 after UX.7.
 
 | ID | Item | Status | Needs |
 | --- | --- | --- | --- |
@@ -115,14 +115,22 @@ Set by the owner on 2026-10-14: a graphical interface, task area `UX`. Working d
 | UX.3 | Owner question: which computers ([#124](https://github.com/dwhagar/evolutionSimulator/issues/124)). Default: Windows first | waiting on owner | [#124](https://github.com/dwhagar/evolutionSimulator/issues/124) |
 | UX.4 | Owner question: watch and inspect only, or also change things while it runs ([#125](https://github.com/dwhagar/evolutionSimulator/issues/125)). Default: watch and inspect first, commands through one interface so interventions can follow | waiting on owner | [#125](https://github.com/dwhagar/evolutionSimulator/issues/125) |
 | UX.5 | Owner question: saving and resuming runs, running without a window, always recording history ([#126](https://github.com/dwhagar/evolutionSimulator/issues/126)). Default: yes to all three | waiting on owner | [#126](https://github.com/dwhagar/evolutionSimulator/issues/126) |
-| UX.6 | Build the split between simulation and viewer: a simulation host that runs the world in its own process and publishes snapshots (positions, headings, sizes, kind, energy, selected-creature details, tick, speed) and history samples, and accepts commands (pause, speed, step, select), with a small client library and a fake simulation for tests; no window yet | blocked | UX.1 |
-| UX.7 | Build the world renderer: a zoomable, pannable top-down view of the world (plants, animals, corpses, the day and night shading, the world edge), drawn from snapshots, fast at thousands of creatures | blocked | UX.1, UX.6 |
-| UX.8 | Build the controls: pause, step, speed and the time-scale presets, the tick and the simulated clock and day, status of the run | blocked | UX.1, UX.6 |
-| UX.9 | Build the creature inspector: click a creature to see its traits, genes (with clusters), state, current decision and brain inputs and outputs, family links | blocked | UX.1, UX.6 |
-| UX.10 | Build the charts: population by kind, mean and spread of chosen genes over time, births and deaths, energy | blocked | UX.1, UX.6 |
-| UX.11 | Build the new-run and settings dialog: world size, counts, seed, the rules trees (`TraitRules` and the world configs), presets | blocked | UX.1, UX.6 |
-| UX.12 | Build save and load of a run (whole world state plus history) and a headless run command, once [#126](https://github.com/dwhagar/evolutionSimulator/issues/126) is answered | blocked | UX.1, UX.5, UX.6 |
-| UX.13 | Package the program for Windows (a single installable or portable build) and document how to build it | blocked | UX.1, UX.3, UX.8 |
+| UX.6 | Simulation session (`evolution_simulator.session`, no GUI dependencies): wraps a world with snapshot types (positions, headings, sizes, kind, energy, tick, speed, day phase, selected-creature details), commands (pause, speed, step, select) and events, in process, with a fake for tests, and a headless run command | blocked | UX.1 |
+| UX.7 | Process host: the simulation in its own process with a command queue, a snapshot channel with backpressure and a crash report, so the window stays responsive at fast speeds | blocked | UX.1, UX.6 |
+| UX.8 | Statistics recorder in the core: population, birth and death series, trait means, gene histograms, downsampled ring buffers | blocked | UX.1, UX.6 |
+| UX.9 | World save and load in the core: serialize and restore the whole world (organisms, brains, learner state, RNG) and prove `state_digest` round-trips. Independent of the window, so it can start now; the world still changes, so keep the format versioned | ready | |
+| UX.10 | Run store: run folders, a manifest (config, seed, version), autosave checkpoints and a history index | blocked | UX.9, UX.5 |
+| UX.11 | App shell: PySide6 window, a `gui` extra in `pyproject.toml`, an entry point and an offscreen-Qt test harness | blocked | UX.1, UX.2, UX.7 |
+| UX.12 | World view: pan and zoom, a cached plant layer, animals and corpses, day and night shading, colour modes | blocked | UX.11 |
+| UX.13 | Time and speed controls: pause, step, presets, achieved against requested speed, elapsed time and the day and night readout | blocked | UX.11 |
+| UX.14 | Selection and creature inspector: traits, energy, age, sex, genome with clusters, family | blocked | UX.12, UX.6 |
+| UX.15 | Brain and senses view: the network with live activations and overlays for vision, hearing and smell | blocked | UX.14 |
+| UX.16 | Charts: population and trait series and gene distributions (pyqtgraph) | blocked | UX.8, UX.11 |
+| UX.17 | Setup screen: world configuration, counts, seeds and presets (the `TraitRules` tree and world configs) | blocked | UX.11 |
+| UX.18 | Save and load and run-history screens | blocked | UX.10, UX.11 |
+| UX.19 | Windows packaging: a PyInstaller folder build and zip, and a manual-dispatch release workflow (no push or pull request triggers, to keep CI weekly only) | blocked | UX.3, UX.11 |
+| UX.20 | Interaction tools (spawn, remove, feed, move): parked until the owner answers [#125](https://github.com/dwhagar/evolutionSimulator/issues/125) | waiting on owner | [#125](https://github.com/dwhagar/evolutionSimulator/issues/125) |
+| UX.21 | Polish: themes, shortcuts, help and about. Last | blocked | UX.12 to UX.18 |
 
 ## Done
 

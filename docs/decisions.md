@@ -10,10 +10,10 @@ The owner asked how an interface should be made, wanted a graphical one, and ask
 
 | Question | Task | Decision | What follows |
 | --- | --- | --- | --- |
-| Web or native window? ([#123](https://github.com/dwhagar/evolutionSimulator/issues/123)) | UX.2 | Open. Default: native desktop | `UX.1` design note recommends; builds `UX.6` to `UX.13` wait for it. |
-| Which computers? ([#124](https://github.com/dwhagar/evolutionSimulator/issues/124)) | UX.3 | Open. Default: Windows first | `UX.13`. |
-| Watch only or intervene? ([#125](https://github.com/dwhagar/evolutionSimulator/issues/125)) | UX.4 | Open. Default: watch and inspect first | `UX.8`, `UX.9`. |
-| Save, resume, headless runs? ([#126](https://github.com/dwhagar/evolutionSimulator/issues/126)) | UX.5 | Open. Default: yes to all | `UX.12`. |
+| Web or native window? ([#123](https://github.com/dwhagar/evolutionSimulator/issues/123)) | UX.2 | Open. Default: native desktop | `UX.1` design note recommends; builds `UX.6` to `UX.21` wait for it. |
+| Which computers? ([#124](https://github.com/dwhagar/evolutionSimulator/issues/124)) | UX.3 | Open. Default: Windows first | `UX.19`. |
+| Watch only or intervene? ([#125](https://github.com/dwhagar/evolutionSimulator/issues/125)) | UX.4 | Open. Default: watch and inspect first | `UX.13`, `UX.14`, `UX.20`. |
+| Save, resume, headless runs? ([#126](https://github.com/dwhagar/evolutionSimulator/issues/126)) | UX.5 | Open. Default: yes to all | `UX.9`, `UX.10`, `UX.18`. |
 
 ## 2026-10-14: request for sense genes
 
