@@ -376,6 +376,8 @@ class World:
         # 1. Sense and decide, all from the same start-of-tick world. Sleepers do not.
         for animal in animals:
             if not animal.asleep:
+                if self._newly_touched(animal):
+                    animal.traits.interrupt()
                 decision = animal.traits.cached_decision(self.rng)
                 if decision is None:
                     decision = animal.traits.think(self.senses.perceive(self, animal), self.rng)
@@ -425,6 +427,29 @@ class World:
             plant_births=plant_births,
             plant_deaths=plant_deaths,
         )
+
+    def _newly_touched(self, animal: Animal) -> bool:
+        """Whether something is in contact with an animal that was not when its brain last ran
+        (``BRAIN.22``). It lets touch cut the decision interval short without sensing every tick, and
+        costs a neighbour query only for animals that are between decisions."""
+        traits = animal.traits
+        if traits.decided_touch or traits.decision_interval <= 1:
+            return False
+        # Imported here because ``sensing`` itself imports from this package.
+        from evolution_simulator.sensing import organs_from_traits
+
+        reach = organs_from_traits(traits).touch_reach
+        if reach <= 0.0:
+            return False
+        body = animal.radius
+        position = animal.position
+        for plant, centre, canopy in self.plants_in_reach(position, reach + body):
+            if centre - body - canopy <= reach:
+                return True
+        for other, centre, radius in self.animals_in_reach(position, reach + body):
+            if other is not animal and centre - body - radius <= reach:
+                return True
+        return False
 
     def _refresh_competition(self, plants: list[Plant]) -> None:
         """Update the shade and soil of this tick's share of the plants (see ``PlantRules``)."""
