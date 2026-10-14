@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `BRAIN.23`, `SENSE.9`: The evolving brain shape: a gated 16-slot brain with a dead zone, operating genes (`brain_gain`, `reaction_time`, `curiosity`, `learning_rate`), and the three new inputs (pain, daylight, relative size), at animal layout version 4. [#85](https://github.com/dwhagar/evolutionSimulator/pull/85)
 - `REPRO.3` (plant part): Plants are asexual with a mutated clone, slower mutation, `seed_provision` and `seeding_interval` genes, a seed count paid from the seed budget, and a lifespan (plant layout version 2). [#81](https://github.com/dwhagar/evolutionSimulator/pull/81)
 - `DNA.14`: Design note on traits that read clusters of genes (`docs/design/gene-clusters.md`); owner questions 7 and 8 added to [#69](https://github.com/dwhagar/evolutionSimulator/issues/69); the build is `DNA.15`. [#80](https://github.com/dwhagar/evolutionSimulator/pull/80)
 - `WORLD.8`: Plants limit each other's soil and light, so a plant population settles below the cap. [#79](https://github.com/dwhagar/evolutionSimulator/pull/79)
