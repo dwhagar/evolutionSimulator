@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.7`: The simulation can run in its own process: a host that runs the session, a client with process, in-process and fake versions, back-pressure so a slow window never makes the simulation queue frames, a crash report and tests with real spawned processes. [#154](https://github.com/dwhagar/evolutionSimulator/pull/154)
 - `UX.10`: The run store: a folder per run with a manifest, automatic checkpoints (newest few plus one per simulated year), the recorded history, listing, deleting and a size warning, and resuming a run exactly where it stopped. [#159](https://github.com/dwhagar/evolutionSimulator/pull/159)
 - `UX.29`: Core additions for the creature inspector: an event when an animal eats, the selected animal's brain weights and active neurons, its living children, and a catalogue naming every gene and trait with its unit and meaning. [#157](https://github.com/dwhagar/evolutionSimulator/pull/157)
 - `UX.11`: The viewer app shell: a PySide6 window (menus, status bar, dock slots, saved layout) behind the optional `gui` extra, with a screen-per-module panel system, a backend interface for the simulation, an entry point and offscreen tests; runs on the fake simulation or a real world. [#153](https://github.com/dwhagar/evolutionSimulator/pull/153)
