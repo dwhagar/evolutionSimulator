@@ -4,7 +4,7 @@ An evolution simulator written in Python.
 
 ## Getting started
 
-Requires Python 3.11 or newer.
+Requires Python 3.12 or newer.
 
 ```bash
 python -m venv .venv
