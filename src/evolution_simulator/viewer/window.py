@@ -96,6 +96,7 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage,
             self.add_menu_action,
             self.set_run_label,
+            self.settings,
         )
         self._build_panels(discover_panels() if specs is None else list(specs), context)
         self._default_state = self.saveState(LAYOUT_VERSION)

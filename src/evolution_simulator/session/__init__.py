@@ -4,7 +4,7 @@ No window code, no threads and no dependencies, so it runs in the simulation pro
 or under a test, and the core never imports Qt or numpy. The pieces:
 
 - ``Session``: ``handle(command)`` and ``update()``, which says what to send.
-- ``commands``: ``Play``, ``Pause``, ``Step``, ``SetSpeed``, ``Select``, ``Deselect``.
+- ``commands``: ``Play``, ``Pause``, ``Step``, ``SetSpeed``, ``Select``, ``Deselect``, ``NewRun``.
 - ``snapshot``: ``Frame``, ``Block`` and ``Status``, the packed picture of the world.
 - ``FakeSimulation``: a made-up world with the same face as ``World``, for building screens.
 - ``Simulation``: what the session needs from a world (``World`` has all of it).
@@ -27,6 +27,7 @@ from evolution_simulator.session.commands import (
     Command,
     CommandError,
     Deselect,
+    NewRun,
     Pause,
     Play,
     Select,
@@ -53,11 +54,13 @@ from evolution_simulator.session.messages import (
 )
 from evolution_simulator.session.protocol import Simulation
 from evolution_simulator.session.session import (
+    RunStarted,
     Session,
     SessionEvent,
     SessionRules,
     StatusChanged,
     Update,
+    build_world,
 )
 from evolution_simulator.session.snapshot import (
     ANIMAL_COLUMNS,
@@ -97,6 +100,7 @@ __all__ = [
     "HostRules",
     "InProcessClient",
     "Inbox",
+    "NewRun",
     "NewRunSpec",
     "Pause",
     "Play",
@@ -107,6 +111,7 @@ __all__ = [
     "RequestPlants",
     "ResumeSpec",
     "RunNotice",
+    "RunStarted",
     "SaveNow",
     "Select",
     "Session",
@@ -123,6 +128,7 @@ __all__ = [
     "Stopped",
     "Update",
     "WorldSpec",
+    "build_world",
     "fake_client",
     "make_host",
     "run_host",

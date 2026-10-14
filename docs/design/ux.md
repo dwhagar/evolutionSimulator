@@ -545,6 +545,56 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
   the checklist in the UX.19 pull request (a real build, the SmartScreen flow, and the pipe-block finding:
   a hung viewer holding four unacknowledged frames must not stall the host's `Pipe.send`).
 
+### As built: the setup screen (`UX.17`)
+
+File > New run (Ctrl+N) opens the **New run** dock (`viewer/panels/setup.py`, left, closed at first).
+From the top: a preset box (Default, Small and quick, Large world, No night, No learning, and the
+user's own), the counts, the seed with a Random button, the seeded-brain switch, a filter box, the
+settings form, a line that says what is wrong (Start is disabled until nothing is), and Start run.
+
+- **The form is generated.** `viewer/config_form.py` builds a `ConfigForm` from any frozen dataclass
+  instance: a check box for a `bool`, a text box for numbers, text and tuples, a collapsible section for
+  a nested dataclass, and a section with an *on* box for `X | None` (day cycle, learning). Nothing names
+  a field, so when TRAIT.11 moved the bite, corpse and world settings into `TraitRules` the form picked them
+  up with no change (any later field will too). The tooltip is the one-line text under the field in the source (read by `viewer/configdata.py`
+  from the class source, so a frozen build without source shows only the default), a bold label means the
+  value differs from the default and a section header counts its changes. `value()` builds the dataclass
+  with the classes' own checks and raises `ConfigError` with the dotted path of the bad field. The seed
+  is left out of the form (`skip`) and has its own box.
+- **The command.** `NewRun(config, animals, plants, seeded)` is a new `Command` (`session/commands.py`);
+  `Session.handle` builds the world with `build_world` (or the `new_run=` factory a test passes), swaps it
+  in and publishes `RunStarted(label, animals, plants)`. The new run is paused at tick 0, nothing is
+  selected, and the next frame carries the plants. The speed the viewer had set stays unless the config's
+  own `traits.time.speed` was changed from its default. A world that cannot be built raises
+  `CommandError` and changes nothing. The frame counter (`seq`) goes on rising. The counts are checked
+  against the config's `max_animals` and `max_plants`. `ViewerController` drops its frame, plants and
+  detail on `RunStarted` (and forwards the event), and the window renames itself from it.
+- **Presets** are `RunSetup` values (`viewer/presets.py`: counts, seeded, `WorldConfig`) saved as JSON
+  (`configdata.to_data` and `from_data`; a missing field keeps its default and an unknown one is ignored,
+  so old presets survive a changed config). The user's presets and the last run started live in the
+  viewer settings under `setup/presets` and `setup/last`; a panel reaches the settings through
+  `ViewerContext.settings`.
+- **Where the world is built.** The command carries the config and `Session` builds the world, so with
+  the process host (UX.7) a large world is built in the simulation process and the window stays alive;
+  `LocalBackend` builds it in the viewer's process, which freezes the window for a moment. The host never
+  drops `RunStarted` (it is exempt from the event caps) and discards the old run's pending world events.
+  `LocalBackend` starts a new `Recorder` on the new world and publishes the empty history at once, so
+  the charts clear; `ViewerController` also forgets `history`.
+- **Saved runs (UX.18, UX.31).** The File entry and the label come through
+  `ViewerContext.add_menu_action` and `set_run_label`. Starting a run asks `RunManager`: if a saved run
+  is current, `detach()` writes its last checkpoint before the world is replaced and nothing is asked;
+  a world that was never saved (tick above 0, no current run) is only replaced after a yes. Then the
+  new run is saved at once (`save_now(name)`, the owner's default is that history is always recorded;
+  the Run name box, empty for "seed N"), so it is in the list from tick 0 and autosaves. A backend that
+  cannot save (a made-up world) starts the run unsaved, and a failed save says so and carries on.
+  Through the process host it is the host that does the same: `Host` finishes the run it was saving
+  (last checkpoint), swaps the world, starts a new `Recorder` (the next `HistoryBatch` is a full, empty
+  history) and, if it was in a run, creates one named `NewRun.name` in the same store with its own
+  `RunNotice`; a refused `NewRun` leaves the world and keeps its autosave.
+- **Found on the way.** `LocalBackend` subscribed `self._events.append` and then rebound `self._events`
+  in each poll, so every event after the first poll went into a list nobody read. It subscribes a method
+  now (`_heard`) and a test polls twice.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

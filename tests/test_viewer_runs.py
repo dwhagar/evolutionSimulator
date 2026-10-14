@@ -132,7 +132,7 @@ def test_folder_size_counts_every_file(tmp_path):
 
 def test_the_file_menu_gets_save_and_saved_runs_above_quit(window):
     texts = [a.text().replace("&", "") for a in window.file_menu.actions()]
-    assert texts[:2] == ["Save run now", "Saved runs..."]
+    assert texts.index("Saved runs...") == texts.index("Save run now") + 1  # side by side
     assert texts[-1] == "Quit"
     assert window.actions["save_run"].isEnabled()
 

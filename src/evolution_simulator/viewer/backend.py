@@ -13,8 +13,11 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from evolution_simulator.history import HistorySamples, Recorder
-from evolution_simulator.session import Command, Frame, Session, SessionEvent, Status
+from evolution_simulator.session import Command, Frame, RunStarted, Session, SessionEvent, Status
 from evolution_simulator.world.views import AnimalDetail
+
+NOTHING_PUBLISHED = -1
+"""``LocalBackend._published`` after a new run: the next history, even an empty one, is news."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,7 +64,7 @@ class LocalBackend:
     def __init__(self, session: Session, *, record: bool | Recorder = True) -> None:
         self.session = session
         self._events: list[SessionEvent] = []
-        self._unsubscribe = session.subscribe(self._events.append)
+        self._unsubscribe = session.subscribe(self._heard)
         self.recorder: Recorder | None = (
             record
             if isinstance(record, Recorder)
@@ -70,6 +73,14 @@ class LocalBackend:
             else None
         )
         self._published: int | None = None
+
+    def _heard(self, event: SessionEvent) -> None:
+        self._events.append(event)
+        if isinstance(event, RunStarted) and self.recorder is not None:
+            # a new world: the old history is not its history, and the empty one goes out at once
+            self.recorder.close()
+            self.recorder = Recorder(self.session.simulation)
+            self._published = NOTHING_PUBLISHED
 
     def send(self, command: Command) -> None:
         self.session.handle(command)

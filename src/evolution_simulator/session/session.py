@@ -26,12 +26,14 @@ from collections import deque
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 
+from evolution_simulator.config import TimeRules
 from evolution_simulator.deaths import DeathCause
 from evolution_simulator.session.commands import (
     MAX_SPEED,
     Command,
     CommandError,
     Deselect,
+    NewRun,
     Pause,
     Play,
     Select,
@@ -50,7 +52,7 @@ from evolution_simulator.session.snapshot import (
 from evolution_simulator.world.events import Died, WorldEvent
 from evolution_simulator.world.timescale import SPEED_PRESETS, Pacer, TimeScale
 from evolution_simulator.world.views import AnimalDetail
-from evolution_simulator.world.world import StepReport
+from evolution_simulator.world.world import StepReport, World
 
 
 def _preset_for(speed: float) -> str | None:
@@ -68,7 +70,28 @@ class StatusChanged:
     status: Status
 
 
-SessionEvent = WorldEvent | StatusChanged
+@dataclass(frozen=True, slots=True)
+class RunStarted:
+    """A ``NewRun`` replaced the world (UX.17). Everything a viewer holds about the old run (the
+    selected animal, the plants last sent, the tick counter) is out of date; the next frame, which
+    carries the plants, shows the new world."""
+
+    label: str
+    animals: int
+    plants: int
+
+
+SessionEvent = WorldEvent | StatusChanged | RunStarted
+
+
+def build_world(command: NewRun) -> World:
+    """The real world a ``NewRun`` asks for."""
+    try:
+        world = World(command.config)
+        world.populate(animals=command.animals, plants=command.plants, seeded=command.seeded)
+    except ValueError as error:
+        raise CommandError(f"The world could not be built: {error}") from error
+    return world
 
 
 @dataclass(frozen=True)
@@ -120,10 +143,25 @@ class Session:
         *,
         rules: SessionRules | None = None,
         clock: Callable[[], float] = time.monotonic,
+        new_run: Callable[[NewRun], Simulation] = build_world,
     ) -> None:
+        """``new_run`` builds the simulation a ``NewRun`` command asks for; a test passes its own."""
         self.simulation = simulation
         self.rules = rules if rules is not None else SessionRules()
         self._clock = clock
+        self._new_run = new_run
+        self._subscribers: list[Callable[[SessionEvent], None]] = []
+        self._listening = False
+        self._seq = 0
+        self._samples: deque[tuple[float, float]] = deque()
+        self._last_update = clock()
+        self._status_sent: Status | None = None
+        self._restart()
+
+    def _restart(self) -> None:
+        """Everything that belongs to one run: paused at the simulation's own tick length and
+        speed, nothing selected, nothing sent yet. The frame counter and subscribers carry on."""
+        simulation = self.simulation
         self._tick_seconds = simulation.time_scale.seconds_per_tick
         self._running = False
         self._steps_left = 0
@@ -132,21 +170,15 @@ class Session:
         self._selected: int | None = None
         self._last_detail: AnimalDetail | None = None
         self._death_cause: DeathCause | None = None
-        self._subscribers: list[Callable[[SessionEvent], None]] = []
-        self._listening = False
-        self._seq = 0
         self._ticks_dropped = 0
         self._last_drop_at: float | None = None
-        self._samples: deque[tuple[float, float]] = deque()
-        now = clock()
-        self._last_update = now
+        self._samples.clear()
         self._last_frame_at: float | None = None
         self._last_plants_at: float | None = None
         self._plants_tick: int | None = None
         self._last_detail_at: float | None = None
         self._detail_tick: int | None = None
         self._dirty = True
-        self._status_sent: Status | None = None
 
     # -------------------------------------------------------------------------
     # Status and events
@@ -233,10 +265,30 @@ class Session:
             self._select(command.animal_id)
         elif isinstance(command, Deselect):
             self._deselect()
+        elif isinstance(command, NewRun):
+            self._start_run(command)
         else:
             raise CommandError(f"Unknown command {command!r}.")
         self._dirty = True
         self._announce_status()
+
+    def _start_run(self, command: NewRun) -> None:
+        simulation = self._new_run(command)  # built first, so a failure changes nothing
+        old = self.simulation
+        if self._listening:
+            old.remove_event_listener(self._on_event)
+            self._listening = False
+        if self._selected is not None:
+            old.trace_brain(None)
+        self.simulation = simulation
+        speed = self._speed
+        self._restart()
+        if command.config.traits.time.speed == TimeRules().speed:
+            self._speed = speed  # the viewer's choice, not a setting of the world
+            if speed is not None:
+                self._pacer = Pacer(TimeScale(self._tick_seconds, speed))
+        self._sync_listener()
+        self._publish(RunStarted(command.label, command.animals, command.plants))
 
     def _set_speed(self, speed: float | str) -> None:
         if speed == MAX_SPEED:

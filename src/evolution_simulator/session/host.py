@@ -27,6 +27,7 @@ The rules that keep the window alive (``docs/design/ux.md``, "Frame pacing"):
 
 from __future__ import annotations
 
+import logging
 import time
 import traceback
 from collections.abc import Callable
@@ -35,7 +36,7 @@ from multiprocessing.connection import Connection
 
 from evolution_simulator.history import Recorder, Sample
 from evolution_simulator.runs import Autosaver, Run
-from evolution_simulator.session.commands import CommandError
+from evolution_simulator.session.commands import CommandError, NewRun
 from evolution_simulator.session.messages import (
     Ack,
     CommandRejected,
@@ -54,8 +55,16 @@ from evolution_simulator.session.messages import (
     Stopped,
 )
 from evolution_simulator.session.protocol import Simulation
-from evolution_simulator.session.session import Session, SessionEvent, SessionRules, StatusChanged
+from evolution_simulator.session.session import (
+    RunStarted,
+    Session,
+    SessionEvent,
+    SessionRules,
+    StatusChanged,
+)
 from evolution_simulator.session.specs import Prepared
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -167,11 +176,51 @@ class Host:
                 self._manual_saves += 1
         elif isinstance(message, Shutdown):
             self._stopping = True
+        elif isinstance(message, NewRun):
+            self._new_run(message)
         else:
             try:
                 self.session.handle(message)  # type: ignore[arg-type]
             except CommandError as error:
                 self._rejected.append(CommandRejected(message, str(error)))
+
+    def _new_run(self, command: NewRun) -> None:
+        """Replace the world (UX.17). The run being saved gets its last checkpoint first; the new
+        world gets a new recorder, announced in full, and, if the old one was in a run, a run of its
+        own in the same store, named ``command.name``."""
+        old_run, old_autosaver = self.run, self._autosaver
+        self._autosaver = None
+        if old_autosaver is not None:
+            try:
+                old_autosaver.finish()
+            except Exception:  # leaving a run must not fail because the disk did
+                log.exception("The last checkpoint of %s could not be written", old_run)
+        try:
+            self.session.handle(command)
+        except CommandError as error:
+            self._rejected.append(CommandRejected(command, str(error)))
+            if old_run is not None:  # the world stays, so carry on saving it
+                self._autosaver = old_run.autosave(
+                    self.session.simulation,  # type: ignore[arg-type]
+                    self.recorder,
+                )
+            return
+        world = self.session.simulation
+        if self.recorder is not None:
+            self.recorder.remove_sample_listener(self._on_sample)
+            self.recorder.close()
+            self.recorder = Recorder(world)  # type: ignore[arg-type]
+            self.recorder.add_sample_listener(self._on_sample)
+            self._pending_samples.clear()
+            self._need_full = True
+        self.run, self._resumed_from = None, None
+        self._manual_saves, self._noticed_saves = 0, None
+        if old_run is not None:
+            try:
+                self.run = old_run.store.create(world, name=command.name, recorder=self.recorder)  # type: ignore[arg-type]
+                self._autosaver = self.run.autosave(world, self.recorder)  # type: ignore[arg-type]
+            except Exception:  # the new world runs on, unsaved
+                log.exception("The new run could not be saved")
 
     # -------------------------------------------------------------------------
     # To the viewer
@@ -185,6 +234,11 @@ class Host:
         return self.in_flight < self.rules.max_in_flight
 
     def _on_event(self, event: SessionEvent) -> None:
+        if isinstance(event, RunStarted):
+            # the world was replaced: its pending world events are stale, and this one must arrive
+            self._events = [e for e in self._events if isinstance(e, StatusChanged)]
+            self._events.append(event)
+            return
         if not isinstance(event, StatusChanged):
             now = self._clock()
             if now - self._window_start >= 1.0:
