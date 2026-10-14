@@ -247,10 +247,21 @@ This follows the interface in the DNA note's "What the DNA object must provide" 
 - **Phenotype is computed once at birth** from DNA, as in the prototype. Vitality, health and energy are runtime state kept separately.
 - **All constants in one place.** The `k_*` constants and exponents from section 4, plus the hand-written costs from the prototype, live in one config object.
 
-### 9.5 What Foundations 1 builds from this note
+### 9.5 What Foundations 1 built, and what is left
 
-1. `traits` package with `BaseTraits`, `AnimalTraits` and `PlantTraits` ported from the prototype: same formulas, same behavior, tests that lock in the current numbers.
-2. Trait definitions as data (name, gene IDs, range, scale, mutation step), and a config object for the cost constants.
-3. Fixes from the table in 9.3 that are not open questions: initial state, mating cost precondition, injected random generator, relative imports.
-4. Defaults for the open issues until answered: remove `fertility` (#17), keep `somatic_maint` as is (#16), world model unspecified (#10).
-5. Tests: phenotype within range, derived values monotonic in the gene value, the energy budget is non-negative for the reference organism, a dead organism clears all flags, and the same seed gives the same result.
+Foundations 1 merged the DNA and traits objects in PR #18 (design note: [docs/design/dna-and-traits.md](../design/dna-and-traits.md)) while this note was being finished. It is a faithful port of the prototype, with the formulas unchanged, an injected random generator, immutable DNA, gene layout declared as descriptors, and `crossover_by_gene` available as an option. Against the contract in 9.4:
+
+| Contract item | State in #18 |
+|---|---|
+| Injected `random.Random` | Done, including `inspect_food`. |
+| Gene layout as data | Done (`Gene()` and `Locus()` descriptors). |
+| Crossover between genes ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)) | Available as `crossover_by_gene`; the default is still the prototype's per-digit crossover. |
+| Per-position mutation weight ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)) | Not done. |
+| Mutation as expected changes per genome | Not done; rate is still per digit. |
+| DNA does not know trait names | Not done; `AnimalDNA` still exposes `speed`, `fear` and so on. |
+| Trait definitions as data (gene IDs, range, scale, mutation step) | Not done. |
+| All constants in one config object | Not done (listed in `TODO.md`). |
+| Initial-state fixes, mating-cost guard | Not done; recorded as known quirks. |
+| `fertility` removed or used ([#17](https://github.com/dwhagar/evolutionSimulator/issues/17)) | Unchanged, waiting on the owner. |
+
+These are the natural next tasks for a follow-up thread, once the owner has answered #14, #15, #16 and #17.
