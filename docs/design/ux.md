@@ -237,6 +237,44 @@ dependencies (a test checks that no core module names Qt or numpy).
   exactly as an uninterrupted pair; tested with `save_world`). `save_history(path)` writes JSON, gzip by
   suffix. The run store (`UX.10`) puts this file beside the world checkpoints.
 
+### As built: the shell (`UX.11`)
+
+`evolution_simulator.viewer` is the PySide6 window, behind the `gui` extra (`pip install
+"evolution-simulator[gui]"`: PySide6, numpy, pyqtgraph). The core never imports it (the isolation test
+skips this package and still checks that `viewer.backend` and `viewer.app` load without Qt).
+`evolution-simulator-gui` or `python -m evolution_simulator.viewer` opens it, on `FakeSimulation` by
+default and the real world with `--world` (in this process, until UX.7 and UX.17 exist).
+
+- **Backend.** The window talks to a `Backend` (`send(command)`, `poll() -> Batch`, `status`) and never
+  to a `Session`. `LocalBackend` runs a `Session` in the same process; UX.7's client fits the same two
+  methods.
+- **Controller.** `ViewerController` polls the backend every 16 ms and emits `frame_received`,
+  `detail_received`, `status_changed`, `event_received`, `command_failed` and `backend_failed`. It keeps
+  the latest `frame`, `detail`, `status` and `plants` (a frame that carries no plants leaves the last
+  ones in `controller.plants`). A panel only connects to signals; it starts from the latest values when
+  it is built late.
+- **Panels.** Each module in `viewer/panels/` whose name does not start with `_` exposes `PANEL`, a
+  `PanelSpec` (id, title, area `center|left|right|top|bottom`, a `factory(context)` and an order), or a
+  tuple of them. The window finds them by itself, so a screen is its own file and nothing shared is
+  edited. The shell ships placeholders in `world.py` (centre), `controls.py` (top), `inspector.py` and
+  `charts.py` (right, stacked): UX.12 to UX.16 replace the module with the same name and keep its
+  `PANEL.id` and `area`; UX.17 adds a module. A module that fails to import, or a factory that raises,
+  is logged and replaced by a message in its slot instead of stopping the window.
+- **Context.** `factory(context)` gets a `ViewerContext`: `context.controller`, `context.send(command)`,
+  `context.show_message(text)` for the status bar, and `context.actions`, the window's actions by name
+  (`play_pause`, `step`, `speed_<preset>`, `speed_max`, `quit`, `reset_layout`, `about`). A button
+  should share an action rather than make a second one, so the shortcuts (Space, Right) and the checked
+  speed stay in one place; UX.13 owns the rest of the keys.
+- **Window.** Menus File, Run, View (a toggle for each dock, and Reset layout) and Help; a status bar with
+  the run label, the clock, day or night, tick, counts and speed asked and got. Geometry and dock state
+  are saved on close with `QSettings` and restored on start (`--settings FILE` keeps them in an `.ini`
+  instead); `LAYOUT_VERSION` in `viewer/window.py` is bumped when the default docks change so an old
+  saved layout is dropped.
+- **Tests.** `tests/conftest.py` has a `qapp` fixture on Qt's offscreen platform; tests that use it
+  skip when PySide6 (or a library it needs on Linux, such as `libEGL`) is missing. A new screen's test
+  builds the panel with `MainWindow(controller, specs=[...])` over a `LocalBackend(Session(FakeSimulation(...),
+  clock=...))` and calls `controller.poll()` to deliver frames without a timer.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these
