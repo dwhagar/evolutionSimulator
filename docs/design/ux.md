@@ -1,7 +1,7 @@
 # The graphical interface
 
 Design note for `UX.1`. It answers the owner's question (2026-10-14): "I want a graphical
-interface, should we do it web? native Windows?" and plans the builds `UX.6` to `UX.13` in
+interface, should we do it web? native Windows?" and plans the builds `UX.6` to `UX.21` in
 [TODO.md](../../TODO.md). The owner's questions are
 [#123](https://github.com/dwhagar/evolutionSimulator/issues/123) (native or web),
 [#124](https://github.com/dwhagar/evolutionSimulator/issues/124) (which computers),
@@ -71,7 +71,7 @@ in [#123](https://github.com/dwhagar/evolutionSimulator/issues/123).
 **Licence note.** The project is released under CC0 and depends on PySide6 (LGPL v3). Depending on it is
 fine. A Windows build that ships PySide6's libraries must include its licence text and keep them as
 separate, replaceable files, which a PyInstaller *folder* build does and a single-file build does not
-as cleanly. `UX.13` carries this.
+as cleanly. `UX.19` carries this.
 
 ## Layers and the process split
 
@@ -122,14 +122,14 @@ One small command set; every future intervention (issue #125) is a new command, 
 
 | Command | Meaning | Item |
 | --- | --- | --- |
-| `new_run(config, seed)` | Build a world from a `WorldConfig` (and the rules tree), populate it, start paused | `UX.11` |
-| `play` / `pause` / `step(n)` | Run, stop, or run exactly `n` ticks | `UX.8` |
-| `set_speed(preset or seconds-per-second)` | How many simulated seconds per real second | `UX.8` |
-| `select(id)` / `deselect` | Send details of this creature (the viewer picks from the snapshot it already has) | `UX.9` |
-| `set_snapshot_rate(hz)` / `want(layers)` | The viewer says how often and which parts it needs, so a minimised window costs nothing | `UX.6` |
-| `save(name)` / `load(path)` | Write or restore a run | `UX.12` |
-| `shutdown` | Stop cleanly | `UX.6` |
-| later: `add_animal`, `remove`, `set_rule`, `edit_genes` | Only if the owner picks "also change things" in [#125](https://github.com/dwhagar/evolutionSimulator/issues/125) | after `UX.4` |
+| `new_run(config, seed)` | Build a world from a `WorldConfig` (and the rules tree), populate it, start paused | `UX.17` |
+| `play` / `pause` / `step(n)` | Run, stop, or run exactly `n` ticks | `UX.13` |
+| `set_speed(preset or seconds-per-second)` | How many simulated seconds per real second | `UX.13` |
+| `select(id)` / `deselect` | Send details of this creature (the viewer picks from the snapshot it already has) | `UX.14` |
+| `set_snapshot_rate(hz)` / `want(layers)` | The viewer says how often and which parts it needs, so a minimised window costs nothing | `UX.7` |
+| `save(name)` / `load(path)` | Write or restore a run | `UX.9`, `UX.18` |
+| `shutdown` | Stop cleanly | `UX.7` |
+| later: `add_animal`, `remove`, `set_rule`, `edit_genes` | Only if the owner picks "also change things" in [#125](https://github.com/dwhagar/evolutionSimulator/issues/125) | `UX.20` |
 
 ### What the simulation publishes
 
@@ -167,8 +167,7 @@ so in the status). A slow window therefore slows nothing but itself.
 
 **What the core still has to provide.** The existing `World` is enough to read positions, but a viewer
 that reaches into `world.animals[i].traits...` would tie the screens to the internals. These pieces are
-missing or implicit today, and are the content of the first builds (`UX.6` and the items proposed
-below):
+missing or implicit today, and are the content of the first builds (`UX.6` to `UX.9`):
 
 | Need | Today | What to add |
 | --- | --- | --- |
@@ -232,7 +231,7 @@ status bar. A sketch of the default layout:
 +--------------------------------------------------------------------------------------+
 ```
 
-### World view (`UX.7`)
+### World view (`UX.12`)
 
 Top-down view of the box. Drag to pan, wheel to zoom, double-click to fit. The edge is a visible wall.
 Day and night tint the ground, matching `World.daylight`. A scale bar in world units (the simulation
@@ -244,14 +243,14 @@ pointing along their heading; sleeping ones are dimmed and drawn with a mark; pr
 dot. A small overview map appears when zoomed in. Colours come from a colour-blind-safe palette, and
 no meaning rests on colour alone (shape or marks also differ).
 
-### Controls and status (`UX.8`)
+### Controls and status (`UX.13`)
 
 Play, pause, single step and "step a day"; the speed presets from `TimeScale`, a custom value, and
 "as fast as possible"; the requested versus achieved speed; the simulated clock ("year 2, day 41, 03:00"),
 day or night, the tick, the counts, the seed, and the run name. Keyboard: space to play or pause, the
 arrow keys to step, `+`/`-` for speed, `F` to follow the selected creature.
 
-### Creature inspector (`UX.9`)
+### Creature inspector (`UX.14`, brain tab `UX.15`)
 
 Click a creature (or pick it from a list) and a panel shows tabs:
 
@@ -267,7 +266,7 @@ Click a creature (or pick it from a list) and a panel shows tabs:
   ([brain-shape.md](brain-shape.md)). It shows what the creature "sees" and decides, tick by tick.
 - **Family:** parents, children, the closest relatives alive, and a "select" link on each.
 
-### Charts and history (`UX.10`)
+### Charts and history (`UX.16`)
 
 pyqtgraph line charts that update live and can be zoomed, with a time axis in simulated days or years:
 
@@ -285,7 +284,7 @@ holds more than a few thousand points per chart. One sample is a few hundred num
 hundred simulated years is a few MB before merging. The recorder is in the core, and
 runs with or without a window.
 
-### New run and settings (`UX.11`)
+### New run and settings (`UX.17`)
 
 A dialog with a short form on top and an "Advanced" section below:
 
@@ -300,7 +299,7 @@ A dialog with a short form on top and an "Advanced" section below:
 - **Preferences** (separate): theme (follows the system), the quality of drawing, the folder for saved
   runs, and the default colour mode.
 
-### Saving, loading and run history (`UX.12`)
+### Saving, loading and run history (`UX.9`, `UX.10`, `UX.18`)
 
 See the next section. The screens are: File, Save / Save as / Open; an autosave notice in the status bar;
 and a **Run history** window listing every run with its name, seed, program version, simulated age,
@@ -368,7 +367,7 @@ Other rules that keep it fast:
   Nothing else changes, because only the world view draws.
 - Optional: a "performance" mode that draws every animal as a dot and skips shading.
 
-## Packaging for Windows (`UX.13`)
+## Packaging for Windows (`UX.19`)
 
 - **Run from source** (`pip install -e ".[gui]"` then `python -m evolution_simulator.viewer`) for
   anyone with Python. The `gui` extra holds PySide6-Essentials, pyqtgraph and numpy; the core stays at
@@ -406,47 +405,46 @@ Other rules that keep it fast:
 
 ## Build order
 
-The builds in [TODO.md](../../TODO.md) are `UX.6` to `UX.13`. They share one main window, one wire format and
-one process, so the safest order has three small foundations that everything else waits for, then
-four or five items that can be built at the same time. Items marked *new* are not in TODO yet; the TODO
-thread decides their numbers.
+The builds in [TODO.md](../../TODO.md) are `UX.6` to `UX.21`. They share one main window, one wire format and
+one process, so the safest order has one small foundation that everything else waits for, then
+items that can be built at the same time.
 
 **Wave 1: the contract (one thread; small, everything waits for it).**
-`UX.6a` *(part of UX.6)* the session, snapshot types, command set, events hook and `FakeSimulation`,
-in process, no window, with tests. Putting it first fixes the interface the screens are written
-against.
+`UX.6`, the session: snapshot types, command set, events hook, `FakeSimulation`, all in process with no
+window, plus the headless run command. Putting it first fixes the interface the screens are written
+against. `UX.9` (world save and load) has no dependency and can start at once, beside it.
 
 **Wave 2: in parallel, each in its own files.**
 
 | Item | What | Needs |
 | --- | --- | --- |
-| `UX.6b` *(rest of UX.6)* | The simulation process, `SimClient` over a pipe, frame pacing and drop-when-behind, crash report | 6a |
-| *new* Statistics recorder | The daily samples, merging, histograms, in the core | 6a |
-| *new* World save and load | Serialise and restore a whole world; the digest round-trip test | none (core only) |
-| *new* App shell | `gui` extra, `evolution_simulator.viewer`, the empty main window with dock slots, menu, status bar, theme, the offscreen test harness. Each later screen is a module that fills one dock slot, so the screens do not edit the same file | 6a (against the fake) |
+| `UX.7` | The simulation process, `SimClient` over a pipe, frame pacing and drop-when-behind, crash report | `UX.6` |
+| `UX.8` | Statistics recorder: daily samples, merging, histograms, in the core | `UX.6` |
+| `UX.9` | Serialise and restore a whole world; the digest round-trip test (extend the digest if it hides pregnancies or learned values); JSON and gzip, no pickle | none |
+| `UX.11` | App shell: `gui` extra, `evolution_simulator.viewer`, the empty main window with dock slots, menu, status bar, theme and the offscreen test harness. Each later screen is a module that fills one dock slot, so the screens do not edit the same file | `UX.7` (it can start against the fake) |
+| `UX.10` | Run store on top of `UX.9` | `UX.9`, `UX.5` |
 
 **Wave 3: the screens, in parallel (each against `FakeSimulation`, then the real host).**
-`UX.7` world view, `UX.8` controls, `UX.9` inspector (split: body and genes first, then *new* brain and senses view with the
-overlays), `UX.10` charts (needs the statistics recorder), `UX.11` new-run and settings dialog (needs
-the config form generator, which is its first step).
+`UX.12` world view, `UX.13` controls, `UX.14` inspector (body and genes) then `UX.15` brain and senses
+view with the overlays, `UX.16` charts (needs `UX.8`), `UX.17` setup screen (its first step is the
+form generator that reads the frozen config dataclasses).
 
 **Wave 4.**
-`UX.12` save, load and run history: the screens and the run store on top of the new save and load, plus
-the headless command (the command only needs 6a and the save and load, so it can start in Wave 3).
-`UX.13` Windows packaging, once the controls exist, then re-run on every release.
+`UX.18` save, load and run-history screens (needs `UX.10`); `UX.19` Windows packaging once the controls
+exist, then re-run on every release; `UX.21` polish last.
 
 **Parked.**
-Interventions ([#125](https://github.com/dwhagar/evolutionSimulator/issues/125)); a web viewer
+Interventions `UX.20` ([#125](https://github.com/dwhagar/evolutionSimulator/issues/125)); a web viewer
 ([#123](https://github.com/dwhagar/evolutionSimulator/issues/123)); comparing two runs on one chart;
-video or GIF export; a family tree view. The first two depend on the owner's answers; the others add
-screens, not new foundations.
+video or GIF export; a family tree view
+([#134](https://github.com/dwhagar/evolutionSimulator/issues/134)). The first two depend on the owner's
+answers; the others add screens, not new foundations.
 
-Rough sizes: 6a small; 6b, statistics, save and load, shell: medium each; world view, inspector body
-and genes, charts, dialog: medium; brain view and run history: medium; controls: small; packaging: small to
-medium (mostly trial and error on Windows). The window cannot be run on a Linux machine like this
-sandbox beyond the offscreen tests, so the Windows packaging and the first look at the real window
-need the owner's eyes; each screen thread should attach a screenshot from the offscreen
-renderer to its PR.
+Rough sizes: `UX.6`, `UX.8` and `UX.13` small to medium; `UX.7`, `UX.9`, `UX.10`, `UX.11`, `UX.12`, `UX.14`, `UX.16`,
+`UX.17`: medium; `UX.15` and `UX.18`: medium; `UX.19`: small to medium (mostly trial and error on
+Windows). The window cannot be run on a Linux machine like this sandbox beyond the offscreen tests,
+so the Windows packaging and the first look at the real window need the owner's eyes; each screen
+thread should attach a screenshot from the offscreen renderer to its PR.
 
 ## Questions this note adds
 
@@ -454,16 +452,16 @@ Filed as issues, each with a default so nothing waits. The earlier four are
 [#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to
 [#126](https://github.com/dwhagar/evolutionSimulator/issues/126).
 
-1. [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) **Look of the creatures** (`UX.7`): colour by what by default, and the shape. Default: triangles by heading,
+1. [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) **Look of the creatures** (`UX.12`): colour by what by default, and the shape. Default: triangles by heading,
    colour by diet, switchable.
-2. [#130](https://github.com/dwhagar/evolutionSimulator/issues/130) **Slow and impossible speeds** (`UX.8`): the lowest presets (real time, a minute a second) move almost nothing
+2. [#130](https://github.com/dwhagar/evolutionSimulator/issues/130) **Slow and impossible speeds** (`UX.13`): the lowest presets (real time, a minute a second) move almost nothing
    with an hourly tick, and the fastest cannot be reached. Default: keep all presets, glide between ticks,
    show achieved speed, and add "as fast as possible".
-3. [#133](https://github.com/dwhagar/evolutionSimulator/issues/133) **What to see of the brain** (`UX.9`): the network drawing with live values, or only bars. Default: both,
+3. [#133](https://github.com/dwhagar/evolutionSimulator/issues/133) **What to see of the brain** (`UX.15`): the network drawing with live values, or only bars. Default: both,
    bars first.
-4. [#131](https://github.com/dwhagar/evolutionSimulator/issues/131) **Where runs are kept and how much space** (`UX.12`). Default: `%LOCALAPPDATA%\evolutionSimulator\runs`, keep
+4. [#131](https://github.com/dwhagar/evolutionSimulator/issues/131) **Where runs are kept and how much space** (`UX.10`). Default: `%LOCALAPPDATA%\evolutionSimulator\runs`, keep
    all, warn at 5 GB.
-5. [#132](https://github.com/dwhagar/evolutionSimulator/issues/132) **How the program is handed over** (`UX.13`): a zip to unzip or an installer; whether to pay for signing.
+5. [#132](https://github.com/dwhagar/evolutionSimulator/issues/132) **How the program is handed over** (`UX.19`): a zip to unzip or an installer; whether to pay for signing.
    Default: zip first, unsigned.
 6. [#134](https://github.com/dwhagar/evolutionSimulator/issues/134) **Extras:** compare two runs, video export, a family tree view, watching a headless run live, several runs at once.
    Default: not now, ask again after the first window works.
@@ -472,5 +470,5 @@ Filed as issues, each with a default so nothing waits. The earlier four are
 
 The speeds and frame times are measured in a Linux sandbox with no graphics card, one core, Python 3.13, and
 PySide6 6.12 in offscreen mode. Windows machines will differ (usually faster for drawing). Nothing here has been
-built or run on Windows. The package size is an estimate until `UX.13` builds one. Neither the
+built or run on Windows. The package size is an estimate until `UX.19` builds one. Neither the
 web alternative nor the OpenGL path was built, only reasoned about.
