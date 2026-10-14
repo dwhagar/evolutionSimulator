@@ -10,8 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from PySide6.QtCore import QEvent
-from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QAction, QKeySequence, QStandardItem, QStandardItemModel
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -45,34 +45,45 @@ class WorldPanel(QWidget):
     def __init__(self, context: ViewerContext, canvas: WorldCanvas | None = None) -> None:
         super().__init__()
         self.context = context
-        self.canvas = canvas if canvas is not None else WorldCanvas()
-        self.mode_box = QComboBox()
-        for mode in palette.MODES:
-            self.mode_box.addItem(mode.label, mode.id)
-        self.mode_box.currentIndexChanged.connect(self._on_mode)
-        self.layer_boxes: dict[str, QCheckBox] = {}
-        self.fit_button = QPushButton("Fit")
-        self.fit_button.setToolTip("Show the whole world (or double-click it)")
-        self.fit_button.clicked.connect(self.canvas.fit_view)
-        self.shot_button = QPushButton("Screenshot…")
-        self.shot_button.clicked.connect(self.save_screenshot)
-
+        # Every widget gets its parent when it is made, so no Python wrapper is left believing it
+        # owns something the panel also owns (freed twice, the heap is corrupted).
+        self.canvas = canvas if canvas is not None else WorldCanvas(parent=self)
+        self.canvas.setParent(self)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(4, 4, 4, 4)
         bar = QHBoxLayout()
-        bar.addWidget(QLabel("Colour by"))
+        layout.addLayout(bar)
+        layout.addWidget(self.canvas, 1)
+
+        bar.addWidget(QLabel("Colour by", self))
+        self.mode_box = QComboBox(self)
+        # Built by hand and kept, not read back with ``model().item(row)``: PySide6 hands that
+        # item to Python as an owner, and freeing it twice corrupts the heap.
+        self.mode_model = QStandardItemModel(self.mode_box)
+        self.mode_items: dict[str, QStandardItem] = {}
+        for mode in palette.MODES:
+            item = QStandardItem(mode.label)
+            item.setData(mode.id, Qt.ItemDataRole.UserRole)
+            self.mode_model.appendRow(item)
+            self.mode_items[mode.id] = item
+        self.mode_box.setModel(self.mode_model)
+        self.mode_box.currentIndexChanged.connect(self._on_mode)
         bar.addWidget(self.mode_box)
+        self.layer_boxes: dict[str, QCheckBox] = {}
         for name, label, shown in LAYERS:
-            box = QCheckBox(label)
+            box = QCheckBox(label, self)
             box.setChecked(shown)
             box.toggled.connect(lambda on, name=name: self.canvas.set_option(name, on))
             self.layer_boxes[name] = box
             bar.addWidget(box)
         bar.addStretch(1)
+        self.fit_button = QPushButton("Fit", self)
+        self.fit_button.setToolTip("Show the whole world (or double-click it)")
+        self.fit_button.clicked.connect(self.canvas.fit_view)
         bar.addWidget(self.fit_button)
+        self.shot_button = QPushButton("Screenshot…", self)
+        self.shot_button.clicked.connect(self.save_screenshot)
         bar.addWidget(self.shot_button)
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(4, 4, 4, 4)
-        layout.addLayout(bar)
-        layout.addWidget(self.canvas, 1)
 
         self.follow_action = self._make_follow_action()
         self.canvas.animal_clicked.connect(self._on_click)
@@ -133,15 +144,11 @@ class WorldPanel(QWidget):
         self._refresh_drawing(frame.status)
         self.canvas.set_frame(frame, self.context.controller.plants)
         available = {mode.id for mode in self.canvas.available_modes()}
-        model = self.mode_box.model()
-        for row in range(self.mode_box.count()):
-            item = model.item(row)
-            mode_id = self.mode_box.itemData(row)
+        for mode_id, item in self.mode_items.items():
             item.setEnabled(mode_id in available)
-            if mode_id == "family" and mode_id not in available:
-                item.setToolTip("Needs the family colour key in the frame (UX.30)")
-        if self.canvas.colour_mode not in available:
-            self.mode_box.setCurrentIndex(self.mode_box.findData(palette.DEFAULT_MODE))
+            item.setToolTip("" if mode_id in available else "This frame has no family key")
+        if self.mode_box.currentData() != self.canvas.colour_mode:  # the canvas fell back
+            self.mode_box.setCurrentIndex(self.mode_box.findData(self.canvas.colour_mode))
 
     def _on_status(self, status: Status) -> None:
         self._refresh_drawing(status)

@@ -178,8 +178,9 @@ class WorldCanvas(QWidget):
         if self._animals is None:
             return None
         mode = palette.MODES_BY_ID[self.colour_mode]
-        if not mode.available(self._animals.columns):
-            mode = palette.MODES_BY_ID[palette.DEFAULT_MODE]
+        if not mode.available(self._animals.columns):  # this frame cannot colour by it
+            self.colour_mode = palette.DEFAULT_MODE
+            mode = palette.MODES_BY_ID[self.colour_mode]
         return mode.colours(self._animals)
 
     def set_drawing(self, drawing: bool) -> None:

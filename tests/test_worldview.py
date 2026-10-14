@@ -97,15 +97,40 @@ def test_the_ramps_change_in_lightness_so_they_survive_colour_blindness(mode, co
     assert lights == ordered and len(set(lights)) == len(lights)
 
 
-def test_the_family_mode_waits_for_its_column():
+def test_the_family_mode_needs_the_two_family_numbers_in_the_frame():
     family = palette.MODES_BY_ID["family"]
-    assert not family.available(ANIMAL_COLUMNS) and family.available((*ANIMAL_COLUMNS, "family"))
+    assert family.available(ANIMAL_COLUMNS)
+    assert not family.available(ANIMAL_COLUMNS[:8])  # a frame from before UX.30
     assert [m.id for m in palette.MODES if m.available(ANIMAL_COLUMNS)] == [
         "diet",
         "sex",
         "energy",
         "age",
+        "family",
     ]
+
+
+def test_relatives_get_alike_colours_and_strangers_do_not():
+    layer = Layer(
+        pack_animals(
+            [
+                animal(1, family_a=0.10, family_b=0.50),
+                animal(2, family_a=0.11, family_b=0.51),
+                animal(3, family_a=0.90, family_b=0.05),
+            ]
+        )
+    )
+    colours = palette.MODES_BY_ID["family"].colours(layer).astype(int)
+    assert abs(colours[0] - colours[1]).sum() < 40
+    assert abs(colours[0] - colours[2]).sum() > 150
+    assert luminance(colours[0]) != luminance(colours[2])
+
+
+def test_the_family_colours_cope_with_one_family_and_with_no_animals():
+    same = Layer(pack_animals([animal(1, family_a=0.3), animal(2, family_a=0.3)]))
+    colours = palette.MODES_BY_ID["family"].colours(same)
+    assert colours.shape == (2, 3) and (colours[0] == colours[1]).all()
+    assert palette.MODES_BY_ID["family"].colours(Layer(pack_animals([]))).shape == (0, 3)
 
 
 def test_the_ground_goes_from_night_to_day():

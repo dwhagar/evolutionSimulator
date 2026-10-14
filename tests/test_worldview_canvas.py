@@ -110,8 +110,8 @@ def test_the_colour_mode_changes_the_colour(canvas):
     assert canvas.set_colour_mode("diet") and near(
         pixel(canvas, *CENTRE), palette.DIET_STOPS[-1], 25
     )
-    assert not canvas.set_colour_mode("family") and not canvas.set_colour_mode("nonsense")
-    assert canvas.colour_mode == "diet"
+    assert canvas.set_colour_mode("family") and canvas.colour_mode == "family"
+    assert not canvas.set_colour_mode("nonsense") and canvas.colour_mode == "family"
 
 
 def test_a_sleeping_animal_is_dimmed_and_a_pregnant_one_has_a_dot(canvas):
@@ -332,25 +332,28 @@ def test_the_toolbar_changes_the_colour_mode_and_the_layers(panel):
     assert not panel.canvas.show_plants
 
 
-def test_the_family_mode_is_listed_but_greyed_out_until_the_frame_has_the_column(panel):
-    box = panel.mode_box
-    row = box.findData("family")
-    assert row >= 0 and not box.model().item(row).isEnabled()
-    assert box.model().item(box.findData("diet")).isEnabled()
-
+def old_frame():
+    """A frame from before UX.30: eight animal columns, no family numbers."""
     block = Block(
-        (*ANIMAL_COLUMNS, "family"),
+        ANIMAL_COLUMNS[:8],
         array("I", [1, 2]).tobytes(),
-        array(
-            "f", [*[1, 1, 0, 1, 0.5, 1, 0.2, 0.5, 0.25], *[2, 2, 0, 1, 0.5, 1, 0.2, 0.5, 0.75]]
-        ).tobytes(),
+        array("f", [*[1, 1, 0, 1, 0.5, 1, 0.2, 0.5], *[2, 2, 0, 1, 0.5, 1, 0.2, 0.5]]).tobytes(),
         bytes(2),
     )
-    frame = replace(make_frame([animal(1), animal(2)]), animals=block)
+    return replace(make_frame([animal(1), animal(2)]), animals=block)
+
+
+def test_the_family_mode_is_greyed_out_for_a_frame_without_the_family_numbers(panel):
+    box = panel.mode_box
+    assert panel.mode_items["family"].isEnabled()
+    panel.canvas.set_colour_mode("family")
+    frame = old_frame()
     panel.canvas.set_frame(frame, None)
     panel._on_frame(frame)
-    assert box.model().item(row).isEnabled()
-    assert panel.canvas.set_colour_mode("family")
+    assert not panel.mode_items["family"].isEnabled()
+    assert box.currentData() == "diet" and panel.canvas.colour_mode == "diet"
+    assert not panel.canvas.set_colour_mode("family")
+    assert panel.canvas.grab().width() > 0  # and it still draws
 
 
 def test_the_screenshot_button_saves_a_png_where_asked(panel, tmp_path, monkeypatch):

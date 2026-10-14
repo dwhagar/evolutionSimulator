@@ -7,8 +7,8 @@ ramp (diet) runs from blue to vermillion through a pale middle, the Okabe-Ito pa
 for red-green colour blindness. Nothing means anything by colour alone: sex also changes the shape
 (females have a notch at the back), sleep dims and rings the animal, pregnancy puts a dot on it.
 
-``MODES`` is the menu. A mode that needs a column the frame does not carry yet (the family colour,
-UX.30) is listed but reported unavailable until it does.
+``MODES`` is the menu. A mode that needs columns the frame does not carry (the family colour needs the
+two family numbers of UX.30) is listed but reported unavailable.
 """
 
 from __future__ import annotations
@@ -53,13 +53,24 @@ def _sex(layer: Layer) -> Colours:
     return np.where(female[:, None], np.uint8(FEMALE), np.uint8(MALE)).astype(np.uint8)
 
 
+def _unit(values: np.ndarray) -> np.ndarray:
+    """``values`` stretched over 0 to 1 by the range found in the frame (all 0 when it has none),
+    which is how the frame's family key is meant to be read (``lineage.family_key``)."""
+    if len(values) == 0:
+        return values.astype(np.float64)
+    low, high = float(values.min()), float(values.max())
+    if high - low < 1e-9:
+        return np.zeros(len(values))
+    return (values.astype(np.float64) - low) / (high - low)
+
+
 def _family(layer: Layer) -> Colours:
-    """A hue for each animal from its family key (0 to 1), so relatives look alike."""
-    keys = layer.col("family")
-    return np.array(
-        [[round(c * 255) for c in colorsys.hsv_to_rgb(float(k) % 1.0, 0.7, 0.95)] for k in keys],
-        dtype=np.uint8,
-    ).reshape(-1, 3)
+    """Relatives get alike colours: the first family number sets the hue, the second the lightness
+    (so two lineages of the same hue still differ, also without colour vision)."""
+    hue = 0.9 * _unit(layer.col("family_a"))  # stops short of a full turn, so the ends differ
+    value = 0.6 + 0.4 * _unit(layer.col("family_b"))
+    rgb = [colorsys.hsv_to_rgb(float(h), 0.7, float(v)) for h, v in zip(hue, value, strict=True)]
+    return np.rint(np.asarray(rgb, dtype=np.float64).reshape(-1, 3) * 255).astype(np.uint8)
 
 
 @dataclass(frozen=True)
@@ -67,11 +78,11 @@ class ColourMode:
     id: str
     label: str
     colours: Callable[[Layer], Colours]
-    needs: str | None = None
-    """A column the frame must carry for this mode to work."""
+    needs: tuple[str, ...] = ()
+    """The columns the frame must carry for this mode to work."""
 
     def available(self, columns: tuple[str, ...]) -> bool:
-        return self.needs is None or self.needs in columns
+        return all(name in columns for name in self.needs)
 
 
 MODES: tuple[ColourMode, ...] = (
@@ -79,7 +90,7 @@ MODES: tuple[ColourMode, ...] = (
     ColourMode("sex", "Sex", _sex),
     ColourMode("energy", "Energy", _column("energy_ratio", ENERGY_STOPS)),
     ColourMode("age", "Age", _column("age_ratio", AGE_STOPS)),
-    ColourMode("family", "Family", _family, needs="family"),
+    ColourMode("family", "Family", _family, needs=("family_a", "family_b")),
 )
 MODES_BY_ID = {mode.id: mode for mode in MODES}
 DEFAULT_MODE = "diet"

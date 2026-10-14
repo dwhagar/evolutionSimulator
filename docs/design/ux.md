@@ -657,10 +657,10 @@ no Qt, so they are tested without a window.
   animals and 3,000 plants take about 20 ms a paint with the plants cached, 45 ms when they are repainted.
 - **Colour modes** (`palette.MODES`, the menu in the toolbar): diet (blue plant eaters to vermillion meat
   eaters, the default), sex, energy, age and family. The colours are Okabe-Ito blue and reddish purple and
-  ramps that change in lightness, so they survive the common colour blindness. Family needs a `family`
-  column (0 to 1, relatives close together) in the animal block: the mode is listed but greyed out until
-  a frame carries it, which is the hook for UX.30 (add the column to `ANIMAL_COLUMNS` and bump
-  `FRAME_FORMAT`; nothing else changes here).
+  ramps that change in lightness, so they survive the common colour blindness. Family reads UX.30's two
+  family numbers (`family_a`, `family_b`), stretched over the range found in the frame: the first sets the
+  hue, the second the lightness, so relatives look alike. A frame without those columns (an old one)
+  greys the mode out and the view falls back to diet.
 - **One tick behind.** The canvas keeps the previous pose and shows each animal a fraction of the way from
   it to the newest frame, over the real time that step takes (simulated time between the two frames over
   the speed the session is managing, so a computer that falls behind slides more slowly, not in jumps).

@@ -26,15 +26,11 @@ def qapp():
     """The one ``QApplication`` of a test run, on Qt's offscreen platform (no display needed).
     Tests that use it skip when the ``gui`` extra (or a library it needs) is not installed."""
     widgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
-    QtCore = pytest.importorskip("PySide6.QtCore", exc_type=ImportError)
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
     app = widgets.QApplication.instance() or widgets.QApplication(["tests"])
     yield app
-    # Windows still alive here are freed now, while the application exists: freed at interpreter
-    # exit instead (they sit in reference cycles), they take the process down with them.
+    # Windows still alive here sit in reference cycles; free them while the application exists,
+    # or the interpreter crashes when it frees them at exit.
     app.closeAllWindows()
-    for widget in app.topLevelWidgets():
-        widget.deleteLater()
-    app.sendPostedEvents(None, QtCore.QEvent.Type.DeferredDelete)
     app.processEvents()
     gc.collect()
