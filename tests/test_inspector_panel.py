@@ -119,12 +119,13 @@ def press(window, key):
 # --- the panel --------------------------------------------------------------------
 
 
-def test_the_panel_has_the_three_tabs_and_starts_empty(window):
+def test_the_panel_has_its_tabs_and_starts_empty(window):
     panel = window.panels["inspector"]
     assert [panel.tabs.tabText(i) for i in range(panel.tabs.count())] == [
         "Body",
         "Genes",
         "Family",
+        "Brain",
     ]
     assert panel.stack.currentWidget() is panel.empty
     assert panel.detail is None

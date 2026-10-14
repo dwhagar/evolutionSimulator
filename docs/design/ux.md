@@ -725,8 +725,42 @@ no Qt, so they are tested without a window.
 - **Building widgets.** Every widget is given its parent when it is made and a layout is set on its
   owner before it is filled (the PySide6 double free found in UX.12). Rows that must change are made once
   (`IdLinks` has a fixed pool of buttons) or the container is replaced as a whole.
-- **Not built.** The Brain tab and the sense overlays (UX.15); a list to pick a creature from; the
-  "stand out" mark for traits (genes only).
+- **Not built.** A list to pick a creature from; the "stand out" mark for traits (genes only). (The
+  Brain tab and the sense overlays are UX.15, below.)
+
+### As built: the brain and senses view (`UX.15`)
+
+Following the default of [#133](https://github.com/dwhagar/evolutionSimulator/issues/133) (UX.27): both
+the bars and the drawn network, bars first. `viewer/inspector/tab_brain.py` is the one new tab module
+(`TAB`, order 40, after Family); nothing shared is edited for it.
+
+- **`brainview.py`** (no Qt): `input_rows` and `output_rows` (labelled `BarRow`s), `grouped` (the inputs
+  listed under Body, Plant, Prey, Threat, Mate, Young, Touch, Hearing, Surroundings and Time and light,
+  from each channel's body or world source, target and senses in `sense_channels.py`, so a new input
+  lands in a group by itself), `network_model` (the connections that are on, as edges) and
+  `sense_geometry`.
+- **Bars.** "What it decided": the six outputs as the animal then did them (the wander fallback
+  included; when it replaced the network's turn or speed, the network's own value is an orange tick),
+  the turn from its middle, a dotted line at 0.5 on the action outputs where "do it" starts. "What it
+  senses": the inputs in each group, from the last brain run, `-` until it has run. A tooltip says what
+  each means and its range.
+- **Network.** Inputs, the hidden neurons that are switched on (the genome slot is in the tooltip) and
+  the outputs. A line is a connection that is not off (weight 0 is the dead zone): width and opacity grow
+  with |weight| against the biggest one, blue pushes up and is solid, orange pushes down and is dashed
+  (colour is never the only cue). A circle is filled by its value now (hollow before the brain has run);
+  an input with no connection has a faded label. The wiring is in `detail.network` and needs no run.
+- **Sense overlays.** The tab has Vision, Hearing, Smell and Touch checkboxes (the first three on by
+  default). `worldview/overlays.py` holds the `OverlayHub` that joins the tab to the canvas
+  (`hub_for(controller)`: the tab sets the geometry, the canvas, given the hub by `WorldPanel`, paints it
+  between the corpses and the animals around the selected animal's gliding position, and repaints on its
+  `changed` signal). Vision is a wedge as wide as the field of view with a solid edge, hearing a dashed
+  circle, smell a dotted circle and touch a thin ring, each labelled. The ranges are worked out from the
+  traits as the animal does (acuity lengthens the eye; low vitality shortens eye and ear, using the default
+  rules' floor, so a world with other `sense_floor` rules draws them slightly off). A detail with no
+  sense traits (the stand-in simulation) draws nothing.
+- **Tests.** `tests/test_brain_tab.py`: the data, the wedge pointing the way the animal faces, the hub,
+  the tab waiting for and then showing a run, a dead creature, the checkboxes, the canvas painting the
+  overlay, and the stand-in simulation.
 
 ## Speed and what the window shows
 
