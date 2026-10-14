@@ -48,12 +48,12 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
    speed output as the movement ratio), turns, moves and, if the brain says "eat" and a plant is
    within reach, grazes it.
 3. Animals whose brain says "seek mating" and that can mate (off cooldown, not pregnant) pair off in id
-   order, each with the willing animal of the other sex within `mating_reach` (3 units) whose genome is
+   order, each with the willing animal of the other sex within `mating_reach` (3 units, `TraitRules.world`) whose genome is
    closest (see [Mate choice](#mate-choice)). `AnimalTraits.mate` charges the mating effort and, if it
    takes (chance from both fertilities), makes the bearer pregnant with a litter whose genomes
    (`DNA.reproduce`, default crossover) are fixed now. Then, in id order, each bearer whose gestation
    is up gives birth with `AnimalTraits.give_birth`: both parents pay for the litter and the young
-   appear within `birth_scatter` of the bearer, as far as the animal cap allows. If a parent cannot
+   appear within `birth_scatter` (`TraitRules.world`) of the bearer, as far as the animal cap allows. If a parent cannot
    pay, nobody is charged and she keeps carrying them.
 4. Plants grow in id order; a ready plant drops up to `seed_capacity` seeds within its dispersal radius
    and pays each one its `seed_provision` of its own full size. Seeds are mutated clones of the parent
@@ -64,7 +64,7 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 
 Aging (plants too), energy burn, healing, the mating cooldown and the pregnancy run per **reference tick** (an hour of
 simulated time) and are scaled by `World.dt = seconds_per_tick / 3600`. So are movement (`dt` times the
-per-reference-tick distance), turning, the energy spent moving, a bite of a plant (`graze_amount * dt`) and the
+per-reference-tick distance), turning, the energy spent moving, a bite of a plant (`graze_amount * dt`, `TraitRules.world`) and the
 poison in it, a plant's growth and upkeep, and a sleeper's energy regain (`WORLD.7`). Every rate in the code is
 per reference tick, whatever the tick: a one-second tick (`TimeScale(seconds_per_tick=1)`) is correct but slow,
 an animal then moves 1/3600 of its per-hour distance in a tick. The default tick is one hour, which is what the
@@ -185,7 +185,7 @@ hourly tick). The world starts at noon. `World.daylight`, `World.is_night` and `
 - **An alarm wakes a sleeper** (`SENSE.7`). A sleeper whose (sleeping) hearing reaches an alarm
   caller, inside the caller's call radius and at call strength `SleepRules.alarm_wakes_above` (0.2)
   or more, is `disturbed`: it wakes and stays up until the next day. Calls only happen when
-  `WorldConfig.calls_enabled` is on (see [Senses](#senses-are-swappable)).
+  `calls_enabled` (`TraitRules.world`) is on (see [Senses](#senses-are-swappable)).
 - **Falling asleep** clears the animal's cached brain decision and its wander turn
   (`AnimalTraits.reset_behaviour`), so it wakes with a fresh start.
 - **The hook for learning (`BRAIN.24`).** `World.add_sleep_listener(listener)` registers an object
@@ -279,7 +279,7 @@ neighbours, the world finds and classifies the neighbours.
 - **What can be heard and smelled.** Loudness is 0.1 for a still or sleeping animal and rises to 1
   at full speed. A plant makes no sound; its scent is its biomass over 100, capped at 1. Animals
   have full scent. A faint plant is therefore found by smell only close up.
-- **Calls.** With `WorldConfig.calls_enabled` (on by default since `BRAIN.10`), an awake animal
+- **Calls.** With `calls_enabled` (`TraitRules.world`) (on by default since `BRAIN.10`), an awake animal
   whose last decision called, and that has a call radius (the encoder gene) and more energy than
   the call costs, pays `call_energy_cost` for each call and is heard this tick (`World.calls`) by
   animals whose hearing reaches it. A call costs about seven times the basal rate, so a brain that
@@ -326,10 +326,10 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
 - **Acting on the brain** (`BRAIN.10`). Turn and speed move the animal. "Eat or attack" above 0.5
   eats the plant the animal overlaps, or, if it overlaps none, bites the nearest animal it touches
   that it counts as prey (`classify`: a meat eater at most 0.8 times its mass; code in
-  `world/combat.py`, constants in `AttackRules` on `WorldConfig`). A bite does
+  `world/combat.py`, constants in `AttackRules`, `TraitRules.attack`). A bite does
   `damage` (30) × carnivore efficiency × √(attacker mass / prey mass) × `dt` (damage is per reference tick, like grazing) and wakes a sleeper. What a kill is worth is
   the corpse it leaves (next item).
-- **Corpses** (`WORLD.12`, `world/corpses.py`, `CorpseRules` on `WorldConfig`). Every animal that
+- **Corpses** (`WORLD.12`, `world/corpses.py`, `CorpseRules`, `TraitRules.corpses`). Every animal that
   dies, by a bite or by starving, leaves a `Corpse` where it fell, with `meat_share` (half) of its
   maximum energy as meat. The meat rots (half-life 72 reference ticks, so three days at the hourly
   tick) and the corpse goes when under 1 is left. An animal that can digest meat and whose brain

@@ -7,7 +7,14 @@ import pytest
 from world_support import ANIMAL_BASE, PLANT_BASE, animal_dna, plant_dna, world_config
 
 from evolution_simulator import sense_genes as sg
-from evolution_simulator.config import DEFAULT_RULES, SensingRules, TraitRules
+from evolution_simulator.config import (
+    DEFAULT_RULES,
+    AttackRules,
+    CorpseRules,
+    SensingRules,
+    TraitRules,
+    WorldRules,
+)
 from evolution_simulator.traits import AnimalTraits, PlantTraits
 from evolution_simulator.world import TimeScale, Vec, World, WorldConfig
 
@@ -88,10 +95,15 @@ def test_every_organism_rule_is_read_by_the_formulas():
     ):
         source += (root / name).read_text()
     unused = []
+    # Read through a method of the section (``CorpseRules.meat``, which the world calls and
+    # ``test_corpses`` pins), so the field's name is not in the sources.
+    through_methods = {"corpses.meat_share"}
     for section in dataclasses.fields(TraitRules):
         for item in dataclasses.fields(getattr(DEFAULT_RULES, section.name)):
-            if item.name not in source and section.name not in ("time", "sensing", "day_cycle"):
-                unused.append(f"{section.name}.{item.name}")
+            name = f"{section.name}.{item.name}"
+            exempt = name in through_methods or section.name in ("time", "sensing", "day_cycle")
+            if item.name not in source and not exempt:
+                unused.append(name)
     assert unused == []
 
 
@@ -195,3 +207,29 @@ def test_the_sensing_rules_are_part_of_the_trait_rules():
     config = WorldConfig(traits=rules)
     assert config.sensing.weak_smell == 0.25
     assert WorldConfig().sensing == DEFAULT_RULES.sensing == SensingRules()
+
+
+def test_the_bite_corpse_and_world_settings_are_part_of_the_trait_rules():
+    rules = with_rules(
+        attack=AttackRules(damage=12.0),
+        corpses=CorpseRules(bite=9.0),
+        world=WorldRules(
+            graze_amount=2.0, mating_reach=4.0, birth_scatter=0.5, calls_enabled=False
+        ),
+    )
+    config = WorldConfig(traits=rules)
+    assert config.attack.damage == 12.0 and config.corpses.bite == 9.0
+    assert (config.graze_amount, config.mating_reach, config.birth_scatter) == (2.0, 4.0, 0.5)
+    assert config.calls_enabled is False
+    defaults = WorldConfig()
+    assert defaults.attack == AttackRules() == DEFAULT_RULES.attack
+    assert defaults.corpses == CorpseRules() == DEFAULT_RULES.corpses
+    assert defaults.traits.world == WorldRules() and defaults.calls_enabled is True
+
+
+@pytest.mark.parametrize("name", ["graze_amount", "mating_reach", "birth_scatter"])
+def test_the_world_rules_are_checked(name):
+    with pytest.raises(ValueError, match=name):
+        WorldRules(**{name: -1.0})
+    with pytest.raises(ValueError, match=name):
+        WorldRules(**{name: float("nan")})
