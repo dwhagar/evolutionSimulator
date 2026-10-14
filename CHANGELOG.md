@@ -7,6 +7,8 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `DNA.14`: Design note on traits that read clusters of genes (`docs/design/gene-clusters.md`); owner questions 7 and 8 added to [#69](https://github.com/dwhagar/evolutionSimulator/issues/69); the build is `DNA.15`. [#80](https://github.com/dwhagar/evolutionSimulator/pull/80)
+- `WORLD.8`: Plants limit each other's soil and light, so a plant population settles below the cap. [#79](https://github.com/dwhagar/evolutionSimulator/pull/79)
 - `REPRO.7`: Reproduction genes design revised to the owner's answers (`docs/design/reproduction-genes.md`): drive, cooldown, fertility (litter and gestation), parenting, a recovery gene, plant longevity, absolute durations; the build is `REPRO.8`. [#77](https://github.com/dwhagar/evolutionSimulator/pull/77)
 - `REPRO.4`: Animals prefer the mate with the closest genome. [#76](https://github.com/dwhagar/evolutionSimulator/pull/76)
 - `REPRO.5`, `TRAIT.6`: Reproduction genes `caregiving`, `repro_interval` and `repro_drive` replace `fertility` (animal layout version 3), births are paid by both parents or not at all (`give_birth`), and more repair makes births dearer and the interval longer, with an upkeep cost that grows with the square. The world takes child energy and seed biomass from the parents. [#74](https://github.com/dwhagar/evolutionSimulator/pull/74)
