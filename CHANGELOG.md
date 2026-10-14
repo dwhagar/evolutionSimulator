@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.30`: Family colour numbers for every animal (two values from the genome, close for relatives) in the frame, so the world view can colour by family (frame format 2). [#171](https://github.com/dwhagar/evolutionSimulator/pull/171)
 - `UX.16`: A charts panel in the viewer: population, births and deaths by cause, condition, trait and gene series, and gene distributions over time with a slider, drawn with pyqtgraph from the recorded history. [#170](https://github.com/dwhagar/evolutionSimulator/pull/170)
 - `WORLD.11`: Plants can reach full size and seed again: soil limits count only neighbours, and founder plants that could not pay their own upkeep are redrawn, so plant populations now settle at hundreds to thousands instead of dying out. Founder animals still do not breed (`WORLD.15`). [#167](https://github.com/dwhagar/evolutionSimulator/pull/167)
 - `UX.13`: Time and speed controls in the viewer: play, pause, step, step a day, speed presets and a custom speed, the speed asked for next to the speed achieved, elapsed time and day or night, and keyboard shortcuts. [#165](https://github.com/dwhagar/evolutionSimulator/pull/165)
