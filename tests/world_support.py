@@ -51,13 +51,32 @@ TEST_RULES = DEFAULT_RULES
 """The trait rules of worlds made by ``hourly_world``; a fixture can swap them (``conftest``)."""
 
 
+def world_config(**kwargs) -> WorldConfig:
+    """A ``WorldConfig`` that also takes the settings that now live in the trait rules
+    (``TRAIT.10``): ``day_cycle``, ``learning``, ``sleep``, ``plants`` (the plant limits) and
+    ``time_scale``, so tests can name them the way they always did."""
+    rules = {
+        new: kwargs.pop(old)
+        for old, new in (
+            ("day_cycle", "day_cycle"),
+            ("learning", "learning"),
+            ("sleep", "sleep"),
+            ("plants", "plant_limits"),
+        )
+        if old in kwargs
+    }
+    time_scale = kwargs.pop("time_scale", None)
+    config = WorldConfig(**kwargs).with_rules(**rules)
+    return config if time_scale is None else config.with_time_scale(time_scale)
+
+
 def hourly_world(seed: int = 0, **config) -> World:
     """A world whose tick is an hour and that has no night, so reproduction tests see rates as
     written and nobody sleeps."""
     config.setdefault("time_scale", HOURLY)
     config.setdefault("day_cycle", None)
     config.setdefault("traits", TEST_RULES)
-    return World(WorldConfig(seed=seed, **config))
+    return World(world_config(seed=seed, **config))
 
 
 LOVING = {"speed": -2.0, "mate": 2.0}

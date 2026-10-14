@@ -15,6 +15,10 @@ dependencies = []
 
 [project.optional-dependencies]
 dev = ["pytest>=8", "ruff>=0.6"]
+gui = ["PySide6>=6.6", "numpy>=1.26", "pyqtgraph>=0.13"]
+
+[project.gui-scripts]
+evolution-simulator-gui = "evolution_simulator.viewer.app:main"
 
 [tool.hatch.version]
 source = "code"
@@ -30,3 +34,8 @@ testpaths = ["tests"]
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.format]
+# Ruff also formats the Python code blocks inside Markdown; the design notes keep their sketches
+# as written, so `ruff format .` leaves Markdown alone (INFRA.5).
+exclude = ["*.md"]

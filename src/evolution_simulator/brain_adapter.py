@@ -121,6 +121,21 @@ class BrainDecision:
 
 
 @dataclass(frozen=True)
+class BrainTrace:
+    """What the brain saw and thought the last time it ran, for the inspector (UX.6).
+
+    ``inputs`` are in ``INPUT_NAMES`` order, ``hidden`` is one value per hidden neuron, ``proposal``
+    is the network's own six outputs and ``action`` those after curiosity noise (``OUTPUT_NAMES``
+    order). The wander fallback's replacement turn and speed are in the animal's decision, not here.
+    """
+
+    inputs: tuple[float, ...]
+    hidden: tuple[float, ...]
+    proposal: tuple[float, ...]
+    action: tuple[float, ...]
+
+
+@dataclass(frozen=True)
 class WanderPolicy:
     """When a creature counts as unable to decide, and how it wanders instead.
 

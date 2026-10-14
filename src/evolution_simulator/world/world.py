@@ -32,19 +32,29 @@ from __future__ import annotations
 import hashlib
 import math
 import random
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass, field, replace
 
-from evolution_simulator.config import DEFAULT_RULES, SensingRules, TraitRules
+from evolution_simulator.config import (
+    DEFAULT_RULES,
+    DayCycle,
+    LearningRules,
+    PlantRules,
+    SensingRules,
+    SleepRules,
+    TraitRules,
+)
+from evolution_simulator.deaths import DeathCause
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import founder_animal_dna, founder_plant_dna
-from evolution_simulator.learning import LearningRules, NightlyLearning
+from evolution_simulator.learning import NightlyLearning
 from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
 from evolution_simulator.world.corpses import Corpse, CorpseRules
-from evolution_simulator.world.daycycle import DayCycle
+from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import (
@@ -54,53 +64,26 @@ from evolution_simulator.world.senses import (
     classify,
     wrap_angle,
 )
-from evolution_simulator.world.sleep import SleepListener, SleepRules
+from evolution_simulator.world.sleep import SleepListener
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.vector import Vec
+from evolution_simulator.world.views import (
+    AnimalDetail,
+    AnimalView,
+    CorpseView,
+    PlantView,
+    animal_detail,
+    animal_view,
+    corpse_view,
+    plant_view,
+    trait_columns,
+)
 
 INDEX_CELL_SIZE: float = max(SIGHT_REACH[1], HEARING_RANGE[1], SMELL_RANGE[1])
+"""Grid cell for neighbour searches: the longest sense range any animal can have (100 units)."""
 FOUNDER_PLANT_TRIES: int = 50
 """Draws ``populate`` makes to find a founder plant that can pay its way before it takes the last."""
-"""Grid cell for neighbour searches: the longest sense range any animal can have (100 units)."""
-
-
-@dataclass(frozen=True)
-class PlantRules:
-    """How neighbouring plants limit each other's growth (WORLD.8).
-
-    **Soil.** Within ``neighbourhood`` units of a plant, its neighbours (not the plant itself) hold
-    some biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the
-    plant keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice
-    starvation, at or above capacity). This is a logistic limit, and what keeps a population from
-    running to the cap however fast the plants grow. It is the same for every plant on purpose: if
-    root reach set the neighbourhood, evolution would shrink roots to dodge it. A plant's own
-    biomass is left out so a lone plant of any size can grow to full size and seed (``WORLD.11``):
-    counted in, a default plant (80 biomass) stalled at about 22 and no big plant ever seeded.
-
-    **Light.** Each heavier neighbour whose canopy covers the plant adds ``1 - distance / canopy
-    radius`` to its shade load, and the plant keeps ``1 / (1 + shade_strength * load)`` of the
-    light, so tall plants shade seedlings.
-
-    The effects are refreshed for one in every ``refresh_interval`` plants each tick, because
-    plants do not move and the loads change slowly.
-    """
-
-    neighbourhood: float = 25.0
-    capacity: float = 0.015
-    """Biomass per unit of ground that the soil can feed."""
-    shade_strength: float = 1.0
-    refresh_interval: int = 10
-
-    def __post_init__(self) -> None:
-        if not (math.isfinite(self.neighbourhood) and self.neighbourhood > 0.0):
-            raise ValueError(f"neighbourhood must be positive, got {self.neighbourhood}.")
-        if not (math.isfinite(self.capacity) and self.capacity > 0.0):
-            raise ValueError(f"capacity must be positive, got {self.capacity}.")
-        if not (math.isfinite(self.shade_strength) and self.shade_strength >= 0.0):
-            raise ValueError(f"shade_strength must be zero or more, got {self.shade_strength}.")
-        if self.refresh_interval < 1:
-            raise ValueError("refresh_interval must be at least 1.")
 
 
 @dataclass(frozen=True)
@@ -108,7 +91,6 @@ class WorldConfig:
     """Everything that defines a run besides the organisms put into it."""
 
     bounds: Bounds = field(default_factory=Bounds)
-    time_scale: TimeScale = field(default_factory=TimeScale)
     seed: int = 0
     graze_amount: float = 5.0
     """Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer
@@ -117,9 +99,6 @@ class WorldConfig:
     """Two animals mate only if their centres are this close or closer."""
     birth_scatter: float = 1.0
     """A litter appears within this distance of its mother."""
-    day_cycle: DayCycle | None = field(default_factory=DayCycle)
-    """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
-    sleep: SleepRules = field(default_factory=SleepRules)
     attack: AttackRules = field(default_factory=AttackRules)
     """Bites (``BRAIN.10``)."""
     corpses: CorpseRules = field(default_factory=CorpseRules)
@@ -129,10 +108,6 @@ class WorldConfig:
     A call is made only by an animal with a call radius (the encoder gene) that can afford it,
     so a brain that calls on every tick starves itself; seeded founders do not call at all and
     calling has to be evolved. Turn it off to study a silent world."""
-    learning: LearningRules | None = field(default_factory=LearningRules)
-    """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
-    ``None`` turns it off."""
-    plants: PlantRules = field(default_factory=PlantRules)
     traits: TraitRules = DEFAULT_RULES
     """The tuning constants of the organisms' formulas (``TRAIT.3``): body, behaviour, brain costs,
     reproduction, recovery, plants and sense costs."""
@@ -144,6 +119,50 @@ class WorldConfig:
     def sensing(self) -> SensingRules:
         """The constants of the sensing step: light and sleep factors, weak smell, noise."""
         return self.traits.sensing
+
+    @property
+    def time_scale(self) -> TimeScale:
+        """The tick length and speed of the run: ``traits.time`` as a ``TimeScale``."""
+        time = self.traits.time
+        return TimeScale(seconds_per_tick=time.seconds_per_tick, speed=time.speed)
+
+    @property
+    def day_cycle(self) -> DayCycle | None:
+        """Light and night over simulated time; ``None`` means permanent full daylight and no
+        sleep. Part of the trait rules."""
+        return self.traits.day_cycle
+
+    @property
+    def plants(self) -> PlantRules:
+        """How crowded soil and shade limit plant growth. Part of the trait rules."""
+        return self.traits.plant_limits
+
+    @property
+    def sleep(self) -> SleepRules:
+        """Who sleeps at night and what sleep does (``WORLD.5``). Part of the trait rules."""
+        return self.traits.sleep
+
+    @property
+    def learning(self) -> LearningRules | None:
+        """Learning during life (``BRAIN.24``): animals log their day and learn when they fall
+        asleep; ``None`` turns it off. Part of the trait rules (``TRAIT.10``)."""
+        return self.traits.learning
+
+    def with_rules(self, **sections: object) -> WorldConfig:
+        """This config with some sections of its trait rules replaced, e.g.
+        ``config.with_rules(learning=None)``. Sections that already equal the given value are
+        left alone, so a change that changes nothing returns the same config."""
+        changes = {k: v for k, v in sections.items() if getattr(self.traits, k) != v}
+        if not changes:
+            return self
+        return replace(self, traits=replace(self.traits, **changes))
+
+    def with_time_scale(self, time_scale: TimeScale) -> WorldConfig:
+        """This config with the tick length and speed of ``time_scale``."""
+        time = replace(
+            self.traits.time, seconds_per_tick=time_scale.seconds_per_tick, speed=time_scale.speed
+        )
+        return self.with_rules(time=time)
 
     def __post_init__(self) -> None:
         for name in ("graze_amount", "mating_reach", "birth_scatter"):
@@ -192,6 +211,10 @@ class World:
         self.max_body: float = 0.0
         """Largest body radius of any animal added so far."""
         self._sleep_listeners: list[SleepListener] = []
+        self._event_listeners: list[EventListener] = []
+        self._step_listeners: list[Callable[[StepReport], None]] = []
+        self._stepping: bool = False
+        self._traced: int | None = None
         self.calls: dict[int, tuple[float, float]] = {}
         """Animals calling this tick, by id: (alarm call radius, mating call radius), 0 for none."""
         if self.config.learning is not None:
@@ -264,6 +287,87 @@ class World:
     def add_sleep_listener(self, listener: SleepListener) -> None:
         """Be told, in id order, when an animal falls asleep or wakes (the hook for BRAIN.24)."""
         self._sleep_listeners.append(listener)
+
+    def add_event_listener(self, listener: EventListener) -> None:
+        """Be told about every birth, death and mating as it happens (``world/events.py``). Events
+        are built only while at least one listener is added."""
+        self._event_listeners.append(listener)
+
+    def remove_event_listener(self, listener: EventListener) -> None:
+        self._event_listeners.remove(listener)
+
+    def add_step_listener(self, listener: Callable[[StepReport], None]) -> None:
+        """Be called with each tick's ``StepReport`` once the step has finished (the statistics
+        recorder uses it). Nothing is called, and nothing built, while there is no listener."""
+        self._step_listeners.append(listener)
+
+    def remove_step_listener(self, listener: Callable[[StepReport], None]) -> None:
+        self._step_listeners.remove(listener)
+
+    def _emit(self, event: WorldEvent) -> None:
+        for listener in self._event_listeners:
+            listener(event)
+
+    @property
+    def _event_tick(self) -> int:
+        """The tick events carry: the one the running step will finish as."""
+        return self.tick + 1 if self._stepping else self.tick
+
+    # -------------------------------------------------------------------------
+    # Read-only views, for the session and the viewers (UX.6)
+    # -------------------------------------------------------------------------
+
+    @property
+    def plant_count(self) -> int:
+        return len(self._plants)
+
+    def animal_views(self) -> list[AnimalView]:
+        """A value for every living animal, in id order."""
+        dt = self.dt
+        return [animal_view(a, dt) for a in self.animals]
+
+    def plant_views(self) -> list[PlantView]:
+        return [plant_view(p) for p in self.plants]
+
+    def trait_columns(self, kind: str) -> dict[str, list[float]]:
+        """Every living ``"animal"`` or ``"plant"``'s traits and genes, one list per name (see
+        ``views.trait_columns``), for the statistics recorder."""
+        if kind == "animal":
+            return trait_columns(self.animals)
+        if kind == "plant":
+            return trait_columns(self.plants)
+        raise ValueError(f"Unknown kind {kind!r}: expected 'animal' or 'plant'.")
+
+    def corpse_views(self) -> list[CorpseView]:
+        return [corpse_view(c) for c in self.corpses]
+
+    def animal_detail(self, animal_id: int) -> AnimalDetail | None:
+        """The inspector's picture of one living animal, or ``None`` if there is none by that id."""
+        animal = self._animals.get(animal_id)
+        return None if animal is None else animal_detail(self, animal)
+
+    def children_of(self, animal_id: int) -> tuple[int, ...]:
+        """The ids of the living animals that name ``animal_id`` as a parent, oldest first."""
+        return tuple(a.id for a in self.animals if animal_id in a.parents)
+
+    def trace_brain(self, animal_id: int | None) -> bool:
+        """Keep the brain's last inputs, hidden values and outputs for this animal (and stop for
+        the one traced before); ``None`` stops tracing. They appear in ``animal_detail`` once its
+        brain next runs. Tracing only copies numbers the brain already computed: it changes
+        nothing about the run. Returns whether there is such an animal to trace."""
+        previous = self._animals.get(self._traced) if self._traced is not None else None
+        if previous is not None:
+            previous.traits.trace_brain = False
+            previous.traits.brain_trace = None
+        self._traced = None
+        if animal_id is None:
+            return True
+        animal = self._animals.get(animal_id)
+        if animal is None:
+            return False
+        animal.traits.trace_brain = True
+        self._traced = animal_id
+        return True
 
     @property
     def animals(self) -> list[Animal]:
@@ -352,11 +456,16 @@ class World:
     def _insert_animal(
         self, traits: AnimalTraits, place: Vec, facing: float, parents: tuple[int, ...]
     ) -> Animal:
-        traits.learning_rules = self.config.learning
         animal = Animal(self._new_id(), traits, place, facing, parents)
         self._animals[animal.id] = animal
         self._animal_index.insert(animal.id, animal.position, animal.radius)
         self.max_body = max(self.max_body, animal.radius)
+        if self._event_listeners:
+            self._emit(
+                Born(
+                    self._event_tick, "animal", animal.id, place.coords[0], place.coords[1], parents
+                )
+            )
         return animal
 
     def add_plant(
@@ -373,6 +482,10 @@ class World:
         self._plants[plant.id] = plant
         self._plant_index.insert(plant.id, plant.position, plant.radius)
         self.max_canopy = max(self.max_canopy, plant.radius)
+        if self._event_listeners:
+            self._emit(
+                Born(self._event_tick, "plant", plant.id, place.coords[0], place.coords[1], parents)
+            )
         return plant
 
     def populate(self, animals: int = 0, plants: int = 0, seeded: bool = True) -> None:
@@ -413,6 +526,16 @@ class World:
 
     def step(self) -> StepReport:
         """Advance one tick."""
+        self._stepping = True
+        try:
+            report = self._step()
+        finally:
+            self._stepping = False
+        for listener in list(self._step_listeners):
+            listener(report)
+        return report
+
+    def _step(self) -> StepReport:
         animals = self.animals
         plants = self.plants
         self._refresh_animal_index()
@@ -653,6 +776,8 @@ class World:
             return True  # it tasted the poison and refused
         eaten, toxicity = best.traits.graze(self.config.graze_amount * dt)
         animal.traits.feed(eaten, is_meat=False, toxicity=toxicity, dt=dt)
+        if self._event_listeners:
+            self._emit(Ate(self._event_tick, animal.id, "plant", best.id, eaten))
         return True
 
     def _attack(self, animal: Animal, dt: float) -> None:
@@ -677,9 +802,11 @@ class World:
             return
         traits = animal.traits
         target.traits.apply_damage(
-            rules.bite(traits.effective_carn_eff, traits.mass, target.traits.mass) * dt
+            rules.bite(traits.effective_carn_eff, traits.mass, target.traits.mass) * dt,
+            DeathCause.PREDATION,
         )
         target.disturbed = True
+        target.killed_by = animal.id
 
     def _scavenge(self, animal: Animal, dt: float) -> bool:
         """Eat from the nearest corpse the animal touches, if it can digest meat. Returns whether
@@ -696,6 +823,8 @@ class World:
         taken = min(corpse.meat, self.config.corpses.bite * dt)
         corpse.meat -= taken
         animal.traits.feed(taken, is_meat=True, dt=dt)
+        if self._event_listeners:
+            self._emit(Ate(self._event_tick, animal.id, "corpse", corpse.id, taken))
         return True
 
     def _leave_corpses(self) -> None:
@@ -755,6 +884,10 @@ class World:
             if result is MatingResult.CONCEIVED:
                 mother.partner = father.id
                 conceived += 1
+            if result is not MatingResult.REFUSED and self._event_listeners:
+                self._emit(
+                    Mated(self._event_tick, father.id, mother.id, result is MatingResult.CONCEIVED)
+                )
         return conceived
 
     def _deliver(self, animals: list[Animal]) -> int:
@@ -811,14 +944,30 @@ class World:
             raise NotImplementedError("Scattering is 2D for now.")
         return self.bounds.clamp(centre + offset)
 
-    @staticmethod
-    def _remove_dead(organisms: dict, index: SpatialIndex) -> int:
-        dead = [i for i, o in organisms.items() if not o.is_alive]
+    def _remove_dead(self, organisms: dict, index: SpatialIndex) -> int:
+        dead = sorted(i for i, o in organisms.items() if not o.is_alive)
         for organism_id in dead:
-            del organisms[organism_id]
+            organism = organisms.pop(organism_id)
             if organism_id in index:
                 index.remove(organism_id)
+            if self._event_listeners:
+                self._emit_death(organism)
         return len(dead)
+
+    def _emit_death(self, organism: Animal | Plant) -> None:
+        traits = organism.traits
+        cause = traits.death_cause or DeathCause.DAMAGE
+        killer = (
+            organism.killed_by
+            if isinstance(organism, Animal) and cause is DeathCause.PREDATION
+            else None
+        )
+        x, y = organism.position.coords[:2]
+        self._emit(
+            Died(
+                self._event_tick, organism.kind, organism.id, x, y, cause, killer, traits.age_ticks
+            )
+        )
 
     # -------------------------------------------------------------------------
     # Checking repeatability

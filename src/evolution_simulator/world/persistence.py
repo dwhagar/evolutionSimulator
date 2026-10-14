@@ -49,6 +49,7 @@ from typing import Any
 from evolution_simulator import __version__
 from evolution_simulator.brain_adapter import BrainDecision, WanderPolicy
 from evolution_simulator.config import SensingRules
+from evolution_simulator.deaths import DeathCause
 from evolution_simulator.diploid import DiploidDNA
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import LAYOUTS, dna_from_dict
@@ -63,11 +64,50 @@ from evolution_simulator.world.world import World, WorldConfig
 
 FORMAT = "evolution-simulator-world"
 """The document type, so a file of something else is refused with a clear message."""
-FORMAT_VERSION = 1
+FORMAT_VERSION = 4
 """The layout of the document. Bump it when the layout changes and add a migration if old saves can
 still be read."""
 
-_MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {}
+
+def _learning_into_the_trait_rules(data: dict[str, Any]) -> dict[str, Any]:
+    """Version 1 to 2 (``TRAIT.10``): ``config.learning`` became ``config.traits.learning``."""
+    config = data["world"]["config"]
+    if "learning" in config:
+        config.setdefault("traits", {})["learning"] = config.pop("learning")
+    return data
+
+
+def _sleep_into_the_trait_rules(data: dict[str, Any]) -> dict[str, Any]:
+    """Version 2 to 3 (``TRAIT.10``): ``config.sleep`` became ``config.traits.sleep``."""
+    config = data["world"]["config"]
+    if "sleep" in config:
+        config.setdefault("traits", {})["sleep"] = config.pop("sleep")
+    return data
+
+
+def _day_time_and_plants_into_the_trait_rules(data: dict[str, Any]) -> dict[str, Any]:
+    """Version 3 to 4 (``TRAIT.10``): ``config.day_cycle``, ``config.plants`` and
+    ``config.time_scale`` became ``config.traits.day_cycle``, ``.plant_limits`` and the
+    ``seconds_per_tick`` and ``speed`` of ``config.traits.time``."""
+    config = data["world"]["config"]
+    traits = config.setdefault("traits", {})
+    if "day_cycle" in config:
+        traits["day_cycle"] = config.pop("day_cycle")
+    if "plants" in config:
+        traits["plant_limits"] = config.pop("plants")
+    if "time_scale" in config:
+        scale = config.pop("time_scale")
+        traits.setdefault("time", {}).update(
+            seconds_per_tick=scale["seconds_per_tick"], speed=scale["speed"]
+        )
+    return data
+
+
+_MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
+    1: _learning_into_the_trait_rules,
+    2: _sleep_into_the_trait_rules,
+    3: _day_time_and_plants_into_the_trait_rules,
+}
 """``{n: f}``: ``f`` takes a document of version ``n`` and returns it as version ``n + 1``."""
 
 
@@ -222,6 +262,22 @@ def _vec(data: Sequence[float]) -> Vec:
     return Vec(tuple(data))
 
 
+def _death_cause_to_data(traits: AnimalTraits | PlantTraits) -> str | None:
+    return None if traits.death_cause is None else traits.death_cause.value
+
+
+def _death_cause_from_data(data: Mapping[str, Any]) -> DeathCause | None:
+    """The cause of death saved with an organism that is dead but not yet removed (saves from
+    before ``UX.6`` have none)."""
+    value = data.get("death_cause")
+    if value is None:
+        return None
+    try:
+        return DeathCause(value)
+    except ValueError:
+        raise SaveFormatError(f"Unknown cause of death {value!r}.") from None
+
+
 def _animal_traits_to_data(traits: AnimalTraits, animal_ids: Mapping[int, int]) -> dict[str, Any]:
     """``animal_ids`` maps ``id(traits)`` of each animal in the world to its id, so a pregnancy can
     name the father."""
@@ -232,6 +288,7 @@ def _animal_traits_to_data(traits: AnimalTraits, animal_ids: Mapping[int, int]) 
         "decision": _encode(traits._decision),
         "wander_turn": traits.wanderer._turn,
         "wander_policy": _encode(traits.wanderer.policy),
+        "death_cause": _death_cause_to_data(traits),
         "brain_learned": traits.brain is not traits.innate_brain,
         "pregnancy": None,
         "learner": None,
@@ -302,6 +359,7 @@ def _restore_animal_traits(
     traits.learning_rules = world.config.learning
     for name in _ANIMAL_FIELDS:
         setattr(traits, name, _field_like(getattr(traits, name), data["state"][name], name))
+    traits.death_cause = _death_cause_from_data(data)
     traits._decision = _decode(BrainDecision | None, data["decision"])
     traits.wanderer.policy = _decode(WanderPolicy, data["wander_policy"])
     traits.wanderer._turn = _decode(float | None, data["wander_turn"])
@@ -346,6 +404,7 @@ def _animal_to_data(animal: Animal, animal_ids: Mapping[int, int]) -> dict[str, 
         "disturbed": animal.disturbed,
         "awake_time": animal.awake_time,
         "partner": animal.partner,
+        "killed_by": animal.killed_by,
         "last_decision": _encode(animal.last_decision),
         "traits": _animal_traits_to_data(animal.traits, animal_ids),
     }
@@ -362,6 +421,7 @@ def _plant_to_data(plant: Plant) -> dict[str, Any]:
         "traits": {
             "dna": _genome_to_data(traits.dna),
             "state": {name: getattr(traits, name) for name in _PLANT_FIELDS},
+            "death_cause": _death_cause_to_data(traits),
         },
     }
 
@@ -399,6 +459,24 @@ def _senses_from_data(data: Mapping[str, Any], given: Senses | None) -> Senses:
             f"The world used its own senses ({data.get('type')!r}); pass them as senses=."
         )
     return WorldSenses(_decode(SensingRules | None, data["rules"]), _decode(bool, data["noisy"]))
+
+
+def config_to_dict(config: WorldConfig) -> dict[str, Any]:
+    """A ``WorldConfig`` as a JSON-ready dict (the form a save and a run's manifest hold)."""
+    return _encode(config)
+
+
+def config_from_dict(data: Mapping[str, Any]) -> WorldConfig:
+    """The ``WorldConfig`` ``config_to_dict`` wrote; a setting the save lacks takes its default and
+    one the rules no longer have is refused (``SaveFormatError``)."""
+    try:
+        return _decode(WorldConfig, dict(data))
+    except SaveFormatError:
+        raise
+    except (KeyError, TypeError, ValueError) as error:
+        raise SaveFormatError(
+            f"The saved settings are damaged or incomplete: {error!r}."
+        ) from error
 
 
 def world_to_dict(world: World) -> dict[str, Any]:
@@ -504,6 +582,7 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
         for name in _PLANT_FIELDS:
             saved = plant_data["traits"]["state"][name]
             setattr(traits, name, _field_like(getattr(traits, name), saved, name))
+        traits.death_cause = _death_cause_from_data(plant_data["traits"])
         plant = Plant(
             _decode(int, plant_data["id"]),
             traits,
@@ -539,6 +618,7 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
         animal.disturbed = _decode(bool, animal_data["disturbed"])
         animal.awake_time = _decode(float, animal_data["awake_time"])
         animal.partner = _decode(int | None, animal_data["partner"])
+        animal.killed_by = _decode(int | None, animal_data.get("killed_by"))
         animal.last_decision = _decode(BrainDecision | None, animal_data["last_decision"])
         world._animals[animal.id] = animal
         world._animal_index.insert(animal.id, animal.position, animal.radius)
@@ -595,6 +675,8 @@ __all__ = [
     "FORMAT",
     "FORMAT_VERSION",
     "SaveFormatError",
+    "config_from_dict",
+    "config_to_dict",
     "load_world",
     "save_world",
     "world_from_dict",

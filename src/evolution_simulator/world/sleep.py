@@ -5,7 +5,7 @@ mate. It burns less energy and regains some, which is the owner's reason for sle
 brain is untouched while it sleeps; the nightly weight update (BRAIN.24) attaches through
 ``World.add_sleep_listener`` and runs when an animal falls asleep or wakes.
 
-The numbers are starting values to calibrate (SENSE.13, TRAIT.3), and two open owner questions
+The rules (``SleepRules``, now ``TraitRules.sleep`` in ``config.py``) are starting values to calibrate (SENSE.13, TRAIT.3), and two open owner questions
 shape them: whether sleepers are vulnerable (issue 57, default partly: sleeping animals stay in the
 world and are sensed like any other, and their own senses work at reduced strength through the
 sensing rules) and whether a creature can skip sleep when starving (this default says yes).
@@ -13,33 +13,13 @@ sensing rules) and whether a creature can skip sleep when starving (this default
 
 from __future__ import annotations
 
-import math
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
+
+from evolution_simulator.config import SleepRules
 
 if TYPE_CHECKING:
     from evolution_simulator.world.organisms import Animal
     from evolution_simulator.world.world import World
-
-
-@dataclass(frozen=True)
-class SleepRules:
-    starving_below: float = 0.15
-    """An animal with less than this fraction of its energy store stays awake to find food."""
-    metabolism_factor: float = 0.4
-    """Fraction of its basal metabolism an animal burns while asleep."""
-    energy_regain: float = 0.002
-    """Fraction of its energy store an animal regains each reference tick (hour) of sleep, at
-    average ``recovery``, on top of burning less."""
-    alarm_wakes_above: float = 0.2
-    """An alarm call heard at least this strongly (1 at the caller, 0 at the edge of its radius)
-    wakes a sleeper, and it stays awake until the next day (SENSE.7)."""
-
-    def __post_init__(self) -> None:
-        for name in ("starving_below", "metabolism_factor", "energy_regain", "alarm_wakes_above"):
-            value = getattr(self, name)
-            if not (math.isfinite(value) and 0.0 <= value <= 1.0):
-                raise ValueError(f"{name} must be between 0 and 1, got {value}.")
 
 
 class SleepListener(Protocol):
@@ -48,3 +28,6 @@ class SleepListener(Protocol):
     def fell_asleep(self, world: World, animal: Animal) -> None: ...
 
     def woke(self, world: World, animal: Animal) -> None: ...
+
+
+__all__ = ["SleepListener", "SleepRules"]

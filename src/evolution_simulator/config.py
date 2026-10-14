@@ -10,14 +10,18 @@ arrives. ``DEFAULT_RULES`` is what everything uses unless it is given another.
 * An ``AnimalTraits`` or ``PlantTraits`` takes ``rules=`` and keeps it, so two runs with different
   rules can sit side by side and a test can change one number: ``replace(rules.life, wear_base=0.05)``
   and ``replace(DEFAULT_RULES, life=...)`` give a new tree without touching the default.
-* ``WorldConfig.traits`` holds the rules for a run, next to the other settings of the world
-  (``sensing``, ``learning``, ``sleep``, ``day_cycle``, ``time_scale``).
+* ``WorldConfig.traits`` holds the rules for a run. The settings of the world that used to sit
+  beside it are moving into the tree (``TRAIT.10``): ``learning``, ``sleep``, ``day_cycle``, the
+  tick length and speed (``time``) and the plants' soil and shade limits (``plant_limits``) are all
+  there now. ``WorldConfig`` reads
+  them from the tree, so a run has one source of tuning constants.
 * What is **not** here: the ranges of the traits (how far a gene stretches a trait, such as
   ``SIGHT_REACH`` or ``COOLDOWN_DAYS_RANGE``), which are the trait table's data (``trait_defs.py``);
   the fixed structure of a formula (half of a care fraction per parent, a half-life's one half); and
-  the settings that already have their own rules object (``LearningRules``, ``SleepRules``,
-  ``DayCycle``, ``TimeScale``). ``SensingRules`` (the sensing step's light, sleep, smell and noise
-  numbers) lives here as ``TraitRules.sensing``; ``WorldConfig.sensing`` reads it from there.
+  the settings that still have their own rules object (``DayCycle``, ``TimeScale``).
+  ``SensingRules`` (the sensing step's light, sleep, smell and noise numbers) lives here as
+  ``TraitRules.sensing`` and ``LearningRules`` as ``TraitRules.learning``, ``SleepRules`` as ``TraitRules.sleep``; ``WorldConfig.sensing``, ``.learning``
+  and ``.sleep`` read them from there.
 
 Each field's meaning is next to it. Time is in **reference ticks** (an hour of simulated time) and
 rates are per reference tick; the world multiplies them by its ``dt`` (``TimeRules``).
@@ -37,6 +41,17 @@ class TimeRules:
     """Simulated seconds in one reference tick. The world's ``dt`` is its tick length over this."""
     ticks_per_day: float = 24.0
     """Reference ticks in a simulated day."""
+    seconds_per_tick: float = 3600.0
+    """Simulated seconds in one tick of this run (``TRAIT.10``; was ``TimeScale``). A tick of the
+    reference length gives the world a ``dt`` of 1."""
+    speed: float = 1.0
+    """Simulated seconds that pass for each real second; how fast a viewer asks the run to go."""
+
+    def __post_init__(self) -> None:
+        for name in ("reference_tick_seconds", "ticks_per_day", "seconds_per_tick", "speed"):
+            value = getattr(self, name)
+            if not math.isfinite(value) or value <= 0.0:
+                raise ValueError(f"{name} must be a positive finite number, got {value}.")
 
 
 @dataclass(frozen=True)
@@ -343,6 +358,151 @@ class SensingRules:
 
 
 @dataclass(frozen=True)
+class LearningRules:
+    """Learning during life (``BRAIN.24``): the log, the reward and the size of a night's change.
+
+    ``TraitRules.learning`` holds them for a run; ``None`` there turns learning off.
+    """
+
+    log_size: int = 64
+    """Decisions kept in the day log; the oldest are dropped when it is full."""
+    reward_window: float = 10.0
+    """Reference ticks (hours) after a decision over which its outcome is counted; the learner
+    turns it into ticks with the world's ``dt`` (at least one), so the length of a tick does not
+    change what an animal learns from (``WORLD.16``)."""
+    energy_weight: float = 1.0
+    """Reward per unit of energy-store fraction gained (a fall counts against)."""
+    health_weight: float = 2.0
+    """Penalty per unit of damage-capacity fraction lost."""
+    mating_weight: float = 1.0
+    """Reward for each mating achieved."""
+    safety_weight: float = 0.5
+    """Reward per unit that the threat input falls after a threat was sensed."""
+    night_cap: float = 0.5
+    """The most any one number may change in one night (an eighth of a weight's range)."""
+    fade: float = 0.0
+    """Share of the learned offsets lost each night (forgetting); off by default."""
+    max_offset: float = 2.0
+    """The most a number's total learned change may reach, so repeated nights cannot run away."""
+
+    def __post_init__(self) -> None:
+        if self.log_size < 1:
+            raise ValueError("log_size must be at least 1.")
+        if not (math.isfinite(self.reward_window) and self.reward_window > 0.0):
+            raise ValueError(f"reward_window must be above zero, got {self.reward_window}.")
+        for name in ("energy_weight", "health_weight", "mating_weight", "safety_weight"):
+            if not math.isfinite(getattr(self, name)):
+                raise ValueError(f"{name} must be a finite number.")
+        for name in ("night_cap", "max_offset"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(f"{name} must be zero or more, got {value}.")
+        if not 0.0 <= self.fade <= 1.0:
+            raise ValueError(f"fade must be between 0 and 1, got {self.fade}.")
+
+
+@dataclass(frozen=True)
+class SleepRules:
+    """Sleep (``WORLD.5``): who stays awake, what a sleeper burns and regains, what wakes it.
+
+    ``TraitRules.sleep`` holds them for a run (``TRAIT.10``).
+    """
+
+    starving_below: float = 0.15
+    """An animal with less than this fraction of its energy store stays awake to find food."""
+    metabolism_factor: float = 0.4
+    """Fraction of its basal metabolism an animal burns while asleep."""
+    energy_regain: float = 0.002
+    """Fraction of its energy store an animal regains each reference tick (hour) of sleep, at
+    average ``recovery``, on top of burning less."""
+    alarm_wakes_above: float = 0.2
+    """An alarm call heard at least this strongly (1 at the caller, 0 at the edge of its radius)
+    wakes a sleeper, and it stays awake until the next day (SENSE.7)."""
+
+    def __post_init__(self) -> None:
+        for name in ("starving_below", "metabolism_factor", "energy_regain", "alarm_wakes_above"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and 0.0 <= value <= 1.0):
+                raise ValueError(f"{name} must be between 0 and 1, got {value}.")
+
+
+@dataclass(frozen=True)
+class DayCycle:
+    """One day of light and dark (``WORLD.5``, ``TraitRules.day_cycle``); the module docstring of
+    ``world/daycycle.py`` describes the curve."""
+
+    length_seconds: float = 24.0 * 3600.0
+    start_phase: float = 0.5
+    night_below: float = 0.3
+
+    def __post_init__(self) -> None:
+        if not (math.isfinite(self.length_seconds) and self.length_seconds > 0.0):
+            raise ValueError(f"length_seconds must be positive, got {self.length_seconds}.")
+        if not (math.isfinite(self.start_phase) and 0.0 <= self.start_phase < 1.0):
+            raise ValueError(f"start_phase must be from 0 up to 1, got {self.start_phase}.")
+        if not 0.0 <= self.night_below <= 1.0:
+            raise ValueError(f"night_below must be between 0 and 1, got {self.night_below}.")
+
+    def phase(self, simulated_seconds: float) -> float:
+        """Fraction of the day gone, from 0 up to 1 (0 is midnight, 0.5 noon)."""
+        return (self.start_phase + simulated_seconds / self.length_seconds) % 1.0
+
+    def daylight(self, simulated_seconds: float) -> float:
+        """Light from 0 (midnight) to 1 (noon)."""
+        return 0.5 - 0.5 * math.cos(math.tau * self.phase(simulated_seconds))
+
+    def is_night(self, simulated_seconds: float) -> bool:
+        return self.daylight(simulated_seconds) < self.night_below
+
+    def day_number(self, simulated_seconds: float) -> int:
+        """Whole midnights passed since the start, counting from 0."""
+        return math.floor(self.start_phase + simulated_seconds / self.length_seconds)
+
+    @property
+    def night_fraction(self) -> float:
+        """The share of each day that counts as night."""
+        return math.acos(1.0 - 2.0 * self.night_below) / math.pi
+
+
+@dataclass(frozen=True)
+class PlantRules:
+    """How neighbouring plants limit each other's growth (WORLD.8, ``TraitRules.plant_limits``).
+
+    **Soil.** Within ``neighbourhood`` units of a plant, its neighbours (not the plant itself) hold
+    some biomass per unit of ground. Once that reaches ``capacity`` the soil can feed no more: the
+    plant keeps ``1 - density / capacity`` of its soil access (nothing, and so in practice
+    starvation, at or above capacity). This is a logistic limit, and what keeps a population from
+    running to the cap however fast the plants grow. It is the same for every plant on purpose: if
+    root reach set the neighbourhood, evolution would shrink roots to dodge it. A plant's own
+    biomass is left out so a lone plant of any size can grow to full size and seed (``WORLD.11``):
+    counted in, a default plant (80 biomass) stalled at about 22 and no big plant ever seeded.
+
+    **Light.** Each heavier neighbour whose canopy covers the plant adds ``1 - distance / canopy
+    radius`` to its shade load, and the plant keeps ``1 / (1 + shade_strength * load)`` of the
+    light, so tall plants shade seedlings.
+
+    The effects are refreshed for one in every ``refresh_interval`` plants each tick, because
+    plants do not move and the loads change slowly.
+    """
+
+    neighbourhood: float = 25.0
+    capacity: float = 0.015
+    """Biomass per unit of ground that the soil can feed."""
+    shade_strength: float = 1.0
+    refresh_interval: int = 10
+
+    def __post_init__(self) -> None:
+        if not (math.isfinite(self.neighbourhood) and self.neighbourhood > 0.0):
+            raise ValueError(f"neighbourhood must be positive, got {self.neighbourhood}.")
+        if not (math.isfinite(self.capacity) and self.capacity > 0.0):
+            raise ValueError(f"capacity must be positive, got {self.capacity}.")
+        if not (math.isfinite(self.shade_strength) and self.shade_strength >= 0.0):
+            raise ValueError(f"shade_strength must be zero or more, got {self.shade_strength}.")
+        if self.refresh_interval < 1:
+            raise ValueError("refresh_interval must be at least 1.")
+
+
+@dataclass(frozen=True)
 class TraitRules:
     """All the organism constants of a run."""
 
@@ -356,6 +516,14 @@ class TraitRules:
     plant: PlantTraitRules = field(default_factory=PlantTraitRules)
     organs: OrganRules = field(default_factory=OrganRules)
     sensing: SensingRules = field(default_factory=SensingRules)
+    day_cycle: DayCycle | None = field(default_factory=DayCycle)
+    """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
+    plant_limits: PlantRules = field(default_factory=PlantRules)
+    """How crowded soil and shade limit plant growth (``WORLD.8``)."""
+    sleep: SleepRules = field(default_factory=SleepRules)
+    """Who sleeps at night and what sleep does (``WORLD.5``, ``TRAIT.10``)."""
+    learning: LearningRules | None = field(default_factory=LearningRules)
+    """Learning during life (``BRAIN.24``, ``TRAIT.10``); ``None`` turns it off."""
 
 
 DEFAULT_RULES = TraitRules()

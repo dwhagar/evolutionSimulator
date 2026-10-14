@@ -4,7 +4,7 @@ import dataclasses
 from dataclasses import replace
 
 import pytest
-from world_support import ANIMAL_BASE, PLANT_BASE, animal_dna, hourly_world, plant_dna
+from world_support import ANIMAL_BASE, PLANT_BASE, animal_dna, plant_dna, world_config
 
 from evolution_simulator import sense_genes as sg
 from evolution_simulator.config import DEFAULT_RULES, SensingRules, TraitRules
@@ -73,17 +73,24 @@ def test_the_rules_are_frozen_hashable_and_compare_by_value():
 
 def test_every_organism_rule_is_read_by_the_formulas():
     # A rule nobody reads is a constant left behind: each field of the organism sections is read
-    # by traits.py, sense_genes.py or the world's senses (the sensing section is exercised by the sensing tests).
+    # by the trait code, the learning step or the world (the sensing and day-cycle sections have their own tests).
     import pathlib
 
     source = ""
     root = pathlib.Path(__file__).resolve().parents[1] / "src" / "evolution_simulator"
-    for name in ("traits.py", "sense_genes.py", "world/senses.py"):
+    for name in (
+        "traits.py",
+        "sense_genes.py",
+        "learning.py",
+        "world/senses.py",
+        "world/world.py",
+        "world/daycycle.py",
+    ):
         source += (root / name).read_text()
     unused = []
     for section in dataclasses.fields(TraitRules):
         for item in dataclasses.fields(getattr(DEFAULT_RULES, section.name)):
-            if item.name not in source and section.name not in ("time", "sensing"):
+            if item.name not in source and section.name not in ("time", "sensing", "day_cycle"):
                 unused.append(f"{section.name}.{item.name}")
     assert unused == []
 
@@ -170,7 +177,7 @@ def test_a_plant_reads_the_plant_rules():
 
 def test_the_world_hands_its_rules_to_every_organism_it_makes():
     rules = with_rules(body=replace(DEFAULT_RULES.body, basal_scale=0.3))
-    world = hourly_world(traits=rules)
+    world = World(WorldConfig(traits=rules))
     animal = world.add_animal(animal_dna(), Vec.of(500, 500))
     plant = world.add_plant(plant_dna(), Vec.of(520, 500))
     assert animal.traits.rules is rules and plant.traits.rules is rules
@@ -178,9 +185,9 @@ def test_the_world_hands_its_rules_to_every_organism_it_makes():
 
 def test_the_world_clock_comes_from_the_time_rules():
     slow = with_rules(time=replace(DEFAULT_RULES.time, reference_tick_seconds=7200.0))
-    world = World(WorldConfig(time_scale=TimeScale(seconds_per_tick=3600.0), traits=slow))
+    world = World(world_config(time_scale=TimeScale(seconds_per_tick=3600.0), traits=slow))
     assert world.dt == 0.5
-    assert World(WorldConfig(time_scale=TimeScale(seconds_per_tick=3600.0))).dt == 1.0
+    assert World(world_config(time_scale=TimeScale(seconds_per_tick=3600.0))).dt == 1.0
 
 
 def test_the_sensing_rules_are_part_of_the_trait_rules():

@@ -178,6 +178,180 @@ missing or implicit today, and are the content of the first builds (`UX.6` to `U
 | History | Nothing records the population over time | A statistics recorder driven by the day counter |
 | Names for display | Gene ids and brain input and output names exist (`INPUT_NAMES`, `OUTPUT_NAMES`, the layout's gene ids and clusters) | A small catalogue of display names and units, so the inspector does not print `base_fear_weight` |
 
+### As built: the session (`UX.6`)
+
+`evolution_simulator.session` is the contract the screens and the process host build on. It has no
+dependencies (a test checks that no core module names Qt or numpy).
+
+- **Core gaps filled.** `World.animal_views()`, `plant_views()`, `corpse_views()` and
+  `animal_detail(id)` return immutable values from `world/views.py` (read these, never an organism's
+  traits). `World.add_event_listener()` delivers `Born`, `Died` (with a `DeathCause` and the
+  killer's id for a bite) and `Mated` events from `world/events.py`; they are built only while
+  someone listens, and listening changes nothing about a run. `World.trace_brain(id)` keeps the
+  inputs, hidden values and outputs of that animal's last brain run (`AnimalDetail.brain`, filled
+  in once its brain has run since).
+- **Added for the inspector and the brain view (`UX.29`).** `Ate` joins `Born`, `Died` and `Mated`
+  (`world/events.py`): `Ate(tick, eater, food, target, amount)`, one per bite of a plant or a corpse
+  that the animal did not refuse (a kill is the victim's `Died` with the killer; the meal from its
+  corpse is an `Ate`). `AnimalDetail.network` is a `BrainNetwork` (`brain.py`): hidden biases, the
+  weight from each input to each hidden neuron, the weight from each hidden neuron to each output,
+  output biases, gain, which genome slots the neurons came from (`slots`, out of `slot_count`) and
+  which outputs are signed; a weight inside the dead zone reads 0, so draw a connection where it is
+  not 0; learned changes are included. It is read from the brain, not from a run, so it is always
+  there and selecting never forces a brain run; only `AnimalDetail.brain` (the live inputs, hidden
+  values and outputs) waits for the next run. `AnimalDetail.children` is the ids of the living
+  animals that name it as a parent (`World.children_of(id)`, a scan of the animals; a dead child is
+  not listed). `evolution_simulator.catalogue` has `describe_gene(id)` and `describe_trait(name)`:
+  a display name, a unit and a one-line meaning for every gene of both layouts and every trait of both
+  tables; a test fails if a gene or trait is added without one. None of it is state: listening and
+  reading a detail leave `state_digest` alone (tested).
+- **Session.** `Session(simulation)` takes `handle(command)` (`Play`, `Pause`, `Step(n)`,
+  `SetSpeed(preset | seconds per second | "max")`, `Select(id)`, `Deselect`; a bad one raises
+  `CommandError`) and `update()`, which runs the ticks real time owes (inside a work budget; the rest
+  are dropped and counted) and returns an `Update` with a `Frame` when one is due and the selected
+  animal's `AnimalDetail`. `subscribe(callback)` hears the world's events and `StatusChanged`.
+  It takes a clock, so tests are exact, and starts paused.
+- **Frame.** Three packed `Block`s (animals, corpses, plants): a `uint32` id array, a `float32`
+  matrix and a flag byte per row, with the column names in the block, so a viewer reads them with
+  `numpy.frombuffer`. About 11 KB for 300 animals; 74 KB when the 3,000 plants ride along, which
+  they do only every half second and when the session settles (paused, steps done), so a paused
+  world is exact. `FRAME_FORMAT` versions the layout. The family colour key of the first sketch is
+  not in the frame yet (it needs a cheap genome distance; it is UX.12's to ask for).
+- **FakeSimulation** has the same face as `World` for the session and the screens, with a scripted
+  population curve and events; the session tests run every case against both.
+
+### As built: the statistics recorder (`UX.8`)
+
+`evolution_simulator.history` (no dependencies) keeps the history the charts and the run history read.
+
+- **Use.** `Recorder(world)` listens to the world's events and to the end of every step
+  (`World.add_step_listener`, new), and once a simulated period has passed (a day, `RecorderRules`)
+  takes a `Sample`: levels (animals, plants, corpses, mean energy, health, age, diet and the shares
+  asleep, pregnant and ready to mate, mean plant biomass), flows (`births.<kind>`, `deaths.<kind>` and
+  `deaths.<kind>.<cause>`; founders put in by hand are not births), a `Stat` (count, mean, standard
+  deviation, minimum, maximum) for every trait and single-value gene of the animals and plants
+  (`animal.trait.mass`, `animal.gene.size`, from `World.trait_columns`),
+  the age at death, and in the first sample and every thirtieth after it a 20-bin histogram per gene.
+  A source without `add_step_listener` or `trait_columns` (the `FakeSimulation`) still works: call
+  `recorder.observe()` after each step, and the trait statistics are simply absent.
+- **Bounded.** Four ring buffers (tiers): 90 days, 52 weeks, 60 months, 128 years, 330 samples at
+  most. What falls off the end of a tier is merged into the next, and the last tier merges its two
+  oldest samples when full, so nothing is thrown away and memory never grows. Merging is exact for what
+  is kept: a merged `Stat` is the statistic of all the individuals together, flows add up, levels are
+  averaged by the periods each covers, histograms add. A coarser sample is built from the finer ones, so
+  its `span` (periods covered) varies around the nominal length; every sample says its `day` (period it
+  ends at) and `span`.
+- **What the viewer reads.** `recorder.history()` returns an immutable `HistorySamples`: `tiers`,
+  `samples()` (all, oldest first), `series(name)` (days and values, flows per period so tiers share one
+  scale), `stat_series(name)`, `histogram_at(name, day)` for scrubbing, `names()` and `stat_names()`.
+- **Does not touch the run.** It only reads; the world builds events and calls step listeners only
+  while someone listens, and a test checks that a run has the same `state_digest` with and without a
+  recorder.
+- **Saved.** `HistorySamples.to_dict()` / `from_dict()` and `recorder.to_dict()` / `Recorder.restore(world, data)`
+  (the latter also keeps the counters since the last sample, so a restored world and recorder carry on
+  exactly as an uninterrupted pair; tested with `save_world`). `save_history(path)` writes JSON, gzip by
+  suffix. The run store (`UX.10`, below) puts this file beside the world checkpoints.
+
+### As built: the run store (`UX.10`)
+
+`evolution_simulator.runs` (no dependencies, no window code):
+
+```
+<runs folder>/<run id>/            id = <UTC date-time>-<name slug>
+    run.json                       manifest: format, name, seed, program version, created/updated,
+                                   config (readable), summary for the run list
+    history.json.gz                the recorded history as of the latest checkpoint (for charts)
+    checkpoints/checkpoint-<tick>/ meta.json, world.json.gz, history.json.gz (the recorder's state)
+```
+
+- **The folder.** `RunStore(root, rules, clock)`; `default_runs_root()` gives the per-user default
+  (`%LOCALAPPDATA%\evolutionSimulator\runs` on Windows, `~/Library/Application Support/...` on macOS,
+  `$XDG_DATA_HOME` or `~/.local/share/...` elsewhere). Everything takes the folder as an argument, so
+  tests and the headless command use any other, and the clock is injectable.
+- **Index and listing.** `run.json` is the history index: `store.list_runs()` reads only manifests and
+  returns `RunSummary` rows (newest first) with seed, versions, simulated age, last animals and plants,
+  checkpoint count and a 60-point population series for a small chart. Unreadable folders are skipped.
+- **Checkpoints.** `run.checkpoint(world, recorder)` writes a hidden folder and renames it into place, so a
+  crash leaves the previous checkpoint whole. Each checkpoint holds the world and the recorder's state
+  taken together, so resuming from any of them is consistent. `store.create(world, recorder=...)` writes
+  the first one at once.
+- **Autosave.** `run.autosave(world, recorder)` listens to every step and checkpoints once
+  `checkpoint_every_days` simulated days (default 10) **and** `min_wall_seconds` real seconds (default
+  60) have passed. `saver.finish()` writes a last one. Retention (`RunStoreRules`): the newest
+  `keep_newest` (3) plus the first checkpoint of every simulated year (`year_days`, 365.25), so the start
+  always stays. These numbers are rules fields.
+- **Resume.** `run.resume()` returns `Resumed(world, recorder, checkpoint)` from the newest checkpoint that
+  reads (older ones if it is damaged), or a named one. A test runs a world straight through and, in
+  parallel, the same world checkpointed, resumed and continued, and requires the same `state_digest` and
+  the same history.
+- **Space (`UX.25`).** Runs are never deleted unless asked (`store.delete(id)`); `store.space_warning()` returns
+  a sentence once the folder holds more than `warn_bytes` (5 GB).
+
+### As built: the shell (`UX.11`)
+
+`evolution_simulator.viewer` is the PySide6 window, behind the `gui` extra (`pip install
+"evolution-simulator[gui]"`: PySide6, numpy, pyqtgraph). The core never imports it (the isolation test
+skips this package and still checks that `viewer.backend` and `viewer.app` load without Qt).
+`evolution-simulator-gui` or `python -m evolution_simulator.viewer` opens it, on `FakeSimulation` by
+default and the real world with `--world` (in this process, until UX.7 and UX.17 exist).
+
+- **Backend.** The window talks to a `Backend` (`send(command)`, `poll() -> Batch`, `status`) and never
+  to a `Session`. `LocalBackend` runs a `Session` in the same process; UX.7's client fits the same two
+  methods.
+- **Controller.** `ViewerController` polls the backend every 16 ms and emits `frame_received`,
+  `detail_received`, `status_changed`, `event_received`, `command_failed` and `backend_failed`. It keeps
+  the latest `frame`, `detail`, `status` and `plants` (a frame that carries no plants leaves the last
+  ones in `controller.plants`). A panel only connects to signals; it starts from the latest values when
+  it is built late.
+- **Panels.** Each module in `viewer/panels/` whose name does not start with `_` exposes `PANEL`, a
+  `PanelSpec` (id, title, area `center|left|right|top|bottom`, a `factory(context)` and an order), or a
+  tuple of them. The window finds them by itself, so a screen is its own file and nothing shared is
+  edited. The shell ships placeholders in `world.py` (centre), `controls.py` (top), `inspector.py` and
+  `charts.py` (right, stacked): UX.12 to UX.16 replace the module with the same name and keep its
+  `PANEL.id` and `area`; UX.17 adds a module. A module that fails to import, or a factory that raises,
+  is logged and replaced by a message in its slot instead of stopping the window.
+- **Context.** `factory(context)` gets a `ViewerContext`: `context.controller`, `context.send(command)`,
+  `context.show_message(text)` for the status bar, and `context.actions`, the window's actions by name
+  (`play_pause`, `step`, `speed_<preset>`, `speed_max`, `quit`, `reset_layout`, `about`). A button
+  should share an action rather than make a second one, so the shortcuts (Space, Right) and the checked
+  speed stay in one place; UX.13 owns the rest of the keys.
+- **Window.** Menus File, Run, View (a toggle for each dock, and Reset layout) and Help; a status bar with
+  the run label, the clock, day or night, tick, counts and speed asked and got. Geometry and dock state
+  are saved on close with `QSettings` and restored on start (`--settings FILE` keeps them in an `.ini`
+  instead); `LAYOUT_VERSION` in `viewer/window.py` is bumped when the default docks change so an old
+  saved layout is dropped.
+- **Tests.** `tests/conftest.py` has a `qapp` fixture on Qt's offscreen platform; tests that use it
+  skip when PySide6 (or a library it needs on Linux, such as `libEGL`) is missing. A new screen's test
+  builds the panel with `MainWindow(controller, specs=[...])` over a `LocalBackend(Session(FakeSimulation(...),
+  clock=...))` and calls `controller.poll()` to deliver frames without a timer.
+
+### As built: the process host and `SimClient` (`UX.7`)
+
+- **`Host`** (`session/host.py`) is a `Session` plus the rules of talking to a viewer, with no transport:
+  `receive(message)` and `step()` (returns the messages to send). It runs inside the simulation process
+  (`run_host`, the target of the spawned process) and inside the viewer's own process
+  (`InProcessClient`), so both behave the same and the logic is tested without a process.
+- **Back-pressure.** Frames, details and event batches count as in flight until the viewer sends
+  `Ack(received)`; with `HostRules.max_in_flight` (4) unacknowledged, no frame is built
+  (`Session.update(frames=False)`) and event batches wait. A dead animal's last detail is always sent.
+  `HostInfo` (about once a second) reports frames sent and dropped. Events are capped at
+  `max_events_per_second` and buffered at most `max_buffered_events`; what is left out is counted in
+  `EventBatch.dropped`.
+- **Messages** (`session/messages.py`, plain frozen values): viewer to simulation `Command`s plus
+  `Ack`, `SetFrameRate(hz)` (0 stops frames), `RequestPlants`, `Shutdown`; simulation to viewer
+  `Ready(frame)`, `Frame`, `AnimalDetail`, `EventBatch`, `CommandRejected`, `HostInfo`, `Crashed(report)`,
+  `Stopped`. A refused command comes back as `CommandRejected`, never as an exception in the viewer.
+- **`SimClient`** has `send(request)`, `poll() -> Inbox`, `close()` and `crashed`. `poll` is the
+  acknowledgement and never blocks; frames that piled up are folded into the newest, keeping the plants
+  of the last frame that had them. `ProcessClient(recipe)` spawns the process (`multiprocessing`
+  `spawn`; a frozen `.exe` must call `multiprocessing.freeze_support()` first in `__main__`),
+  `InProcessClient(simulation_or_recipe)` runs the host from `poll`, and `fake_client(animals=...)` is an
+  `InProcessClient` on a `FakeSimulation`.
+- **Recipes.** A spawned process is handed a picklable callable that builds the simulation there:
+  `WorldSpec(config, animals, plants)` and `FakeSpec(...)`.
+- **Failures.** An exception while building or running becomes `Crashed(traceback)` and exit code 1; a
+  process killed from outside is noticed when the pipe ends ("ended without a word", with the exit code).
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these
