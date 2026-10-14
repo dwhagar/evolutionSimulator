@@ -4,12 +4,12 @@ import pytest
 from world_support import animal_dna, plant_dna
 
 from evolution_simulator.world import (
-    BasicSenses,
     DayCycle,
     SleepRules,
     Vec,
     World,
     WorldConfig,
+    WorldSenses,
 )
 
 HERE = Vec.of(500, 500)
@@ -198,7 +198,7 @@ def test_plants_get_the_daylight_as_sunlight():
 
 
 def test_animals_see_less_at_night():
-    senses = BasicSenses()
+    senses = WorldSenses()
     wide = {"sight_range": "3333", "sight_fov": "3333"}  # 33 units, all round
     seen = []
     for start in (0.5, 0.0):  # noon, midnight

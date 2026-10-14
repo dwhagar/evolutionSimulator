@@ -57,6 +57,18 @@ PRECISION_ORDER: tuple[str, ...] = tuple(k for k in SENSE_KINDS if k != "touch")
 _CROWDING_SENSES: tuple[str, ...] = senses_reporting("crowding")
 
 
+def _plan_for(target: str) -> tuple[str, str, tuple[str, ...]]:
+    rows = {c.role: c.name for c in channels_for_target(target)}
+    closeness_row = rows["closeness"]
+    reporters = tuple(k for k in PRECISION_ORDER if k in senses_reporting(closeness_row))
+    return rows["bearing"], closeness_row, reporters
+
+
+_TARGET_PLAN: dict[str, tuple[str, str, tuple[str, ...]]] = {t: _plan_for(t) for t in TARGETS}
+"""Per class: the names of its direction and closeness inputs and the senses that may report it,
+most precise first. Fixed by the channel table, so worked out once."""
+
+
 @dataclass(frozen=True)
 class SensingRules:
     """The constants of the sensing step: starting values from the design note, for calibration
@@ -230,6 +242,25 @@ class _Seen:
     """Radians, positive to the creature's left, between -pi and pi."""
 
 
+def effective_reach(
+    organs: SenseOrgans,
+    conditions: SensingConditions | None = None,
+    rules: SensingRules | None = None,
+) -> dict[str, float]:
+    """What each organ can still do right now: its range scaled by the light (vision) and the
+    sleep factor (every organ while asleep). An organ with no range left is switched off (0)."""
+    conditions = conditions if conditions is not None else SensingConditions()
+    rules = rules if rules is not None else SensingRules()
+    light = rules.light_factor(conditions.daylight)
+    reach: dict[str, float] = {}
+    for kind in SENSE_KINDS:
+        scale = rules.sleep_factor(kind) if conditions.asleep else 1.0
+        if kind == "vision":
+            scale *= light
+        reach[kind] = organs.range_of(kind) * scale
+    return reach
+
+
 def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
@@ -258,24 +289,18 @@ def sense(
     conditions = conditions if conditions is not None else SensingConditions()
     rules = rules if rules is not None else SensingRules()
 
-    # What each organ can still do right now.
-    light = rules.light_factor(conditions.daylight)
-    reach: dict[str, float] = {}
-    for kind in SENSE_KINDS:
-        scale = rules.sleep_factor(kind) if conditions.asleep else 1.0
-        if kind == "vision":
-            scale *= light
-        reach[kind] = organs.range_of(kind) * scale
+    reach = effective_reach(organs, conditions, rules)
     half_fov = math.radians(organs.vision_fov_degrees) / 2.0
 
-    # Each neighbour as a vector in the creature's own frame.
-    forward = Vec.from_angle(heading)
-    left = Vec.of(-forward.y, forward.x)
+    # Each neighbour in the creature's own frame (forward, left), worked out on plain numbers
+    # because this runs for every neighbour of every animal every tick.
+    fx, fy = math.cos(heading), math.sin(heading)
+    px, py = position.coords
     seen: list[_Seen] = []
     for n in neighbours:
-        offset = n.position - position
-        centre = offset.length()
-        bearing = math.atan2(offset.dot(left), offset.dot(forward)) if centre > 0.0 else 0.0
+        dx, dy = n.position.coords[0] - px, n.position.coords[1] - py
+        centre = math.hypot(dx, dy)
+        bearing = math.atan2(dy * fx - dx * fy, dx * fx + dy * fy) if centre > 0.0 else 0.0
         seen.append(_Seen(n, max(0.0, centre - radius - n.radius), bearing))
 
     def range_for(sense_kind: str, role: str) -> float:
@@ -310,9 +335,7 @@ def sense(
 
     reported: dict[str, float] = {}
     for target in TARGETS:
-        rows = {c.role: c.name for c in channels_for_target(target)}
-        direction_row, closeness_row = rows["bearing"], rows["closeness"]
-        reporters = tuple(k for k in PRECISION_ORDER if k in senses_reporting(closeness_row))
+        direction_row, closeness_row, reporters = _TARGET_PLAN[target]
         class_range = max((range_for(k, target) for k in reporters), default=0.0)
         best: tuple[float, int, _Seen] | None = None
         for s in seen:

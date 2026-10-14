@@ -31,7 +31,7 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
 | `daycycle.py` | `DayCycle`: daylight, night and day number as a function of simulated time | WORLD.5 |
 | `sleep.py` | `SleepRules` and the `SleepListener` hook | WORLD.5 |
 | `organisms.py` | `Animal` and `Plant`: traits plus a place (and heading for animals) | WORLD.2 |
-| `senses.py` | the `Senses` interface and `BasicSenses`, a stand-in until `SENSE.1` | WORLD.2 |
+| `senses.py` | the `Senses` interface and `WorldSenses`: neighbour search and classifier feeding the sensing step | SENSE.12 |
 | `mating.py` | `may_mate`, `mate_rank`, `choose_mate`: who may mate and who is preferred | REPRO.4 |
 | `world.py` | `World`, `WorldConfig`, `StepReport` and the step loop | WORLD.2 |
 
@@ -105,14 +105,20 @@ world starts at noon. `World.daylight`, `World.is_night` and `World.day` read it
 
 - **Plants** get the daylight as their sunlight factor each tick, so they grow by day and only
   burn reserves at night (the traits code floors sunlight at 0.05).
-- **Animals** see less in the dark: `BasicSenses` multiplies sight range by
+- **Animals** see less in the dark: the sensing step multiplies sight range by
   `SensingRules.light_factor` (0.25 + 0.75 x daylight, the default for issue
-  [#41](https://github.com/dwhagar/evolutionSimulator/issues/41)).
+  [#41](https://github.com/dwhagar/evolutionSimulator/issues/41)). A sleeper's organs work at the
+  `SensingRules` sleep factors (blind, half hearing and smell, full touch).
 - **Sleep.** At night every animal with at least 15% of its energy store falls asleep (a hungrier
   one stays awake to feed, the default for "can a creature skip sleep"). A sleeper does not sense,
   think, move, eat or mate. It still ages. It burns 40% of its basal metabolism and regains 0.2% of
   its energy store per tick, a net gain of roughly a fifth of the store over a night. It wakes when
-  the night ends. These are starting values in `SleepRules`.
+  the night ends, or earlier if an alarm call wakes it (below). These are starting values in
+  `SleepRules`.
+- **An alarm wakes a sleeper** (`SENSE.7`). A sleeper whose (sleeping) hearing reaches an alarm
+  caller, inside the caller's call radius and at call strength `SleepRules.alarm_wakes_above` (0.2)
+  or more, is `disturbed`: it wakes and stays up until the next day. Calls only happen when
+  `WorldConfig.calls_enabled` is on (see [Senses](#senses-are-swappable)).
 - **Falling asleep** clears the animal's cached brain decision and its wander turn
   (`AnimalTraits.reset_behaviour`), so it wakes with a fresh start.
 - **The hook for learning (`BRAIN.24`).** `World.add_sleep_listener(listener)` registers an object
@@ -155,10 +161,33 @@ will move all of this, so the capacity should be calibrated again once animals s
 
 The loop calls `world.senses.perceive(world, animal)` and expects the brain's `Percepts`
 ([brain_adapter.py](../../src/evolution_simulator/brain_adapter.py)). Pass any object with that method
-to `World(config, senses=...)` when `SENSE.1` lands. `BasicSenses` is the stand-in: sight within the
-animal's range and field of view, touch (if the touch gene is above 0.1) and crowding. A lighter
-animal (under 0.8 of its mass) is prey, a heavier one (over 1.25 times) a threat, and anything else
-the nearest possible mate. Calls are not heard yet, so those inputs stay 0.
+to `World(config, senses=...)`. The default is `WorldSenses` (`SENSE.12`), the world's half of the
+pure sensing step in [sensing.py](../../src/evolution_simulator/sensing.py): the step knows organs and
+neighbours, the world finds and classifies the neighbours.
+
+- **Search.** Animals within the animal's longest effective sense reach (plus body sizes), by the
+  grid. For plants only the two that matter are handed on: the nearest one the animal detects and the
+  nearest one within touch, because the step reports the nearest plant only and touch only needs to
+  know that something is there. The grid cell is the longest range any sense can have (100), so a
+  search looks at the nine cells around the animal. Distances are between surfaces (centre distance
+  less both radii, a plant's radius being its canopy).
+- **Classes.** A plant is a plant. An animal at most 0.8 of the viewer's mass is prey if the viewer
+  can digest meat (effective carnivore efficiency above 0.1); one at least 1.25 times its mass is a
+  threat if that animal can digest meat; one of about its own size is a possible mate; any other
+  animal is `other`, sensed and counted in crowding but nothing else.
+- **What can be heard and smelled.** Loudness is 0.1 for a still or sleeping animal and rises to 1
+  at full speed. A plant makes no sound; its scent is its biomass over 100, capped at 1. Animals
+  have full scent. A faint plant is therefore found by smell only close up.
+- **Calls.** With `WorldConfig.calls_enabled` (off by default), an awake animal whose last decision
+  called, and that has a call radius and the energy, pays `call_energy_cost` for each call and is
+  heard this tick (`World.calls`) by animals whose hearing reaches it. Off by default because a
+  call costs about seven times the basal rate and random founder brains call on most ticks, which
+  killed them before they could do anything else; `BRAIN.9` and `BRAIN.10` decide the real rule.
+- **Touch** sees the world's edge as well as other bodies (`World.edge_distance`).
+- **Not yet.** The neighbour's mass (`SENSE.9`) is not passed on because `Neighbour` has no field
+  for it; it is filled in when `SENSE.9` adds one.
+
+The sensing step is imported inside `perceive` because `sensing` itself imports from this package.
 
 ## Mate choice
 
@@ -196,6 +225,12 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   the senses 30%, the brain and input building 35% (`sense_channels.build_inputs` and its
   clamps are the biggest single piece), plant growth 8%. The fast presets still cannot be met at
   this size.
+  `SENSE.12` made it slower again: about 69 ms per tick at 300 animals and 3000 plants (7 ms at 60
+  and 300), because three senses are now searched and reported instead of one, over a wider
+  reach. Of that, the plant search (`plants_within`) is about a fifth and the sensing step about two
+  fifths of the senses. Pruning the plants to two and moving the step's neighbour frame to plain
+  floats already got back about half of the first measurement; more would come from not searching
+  at all for senses an animal does not have, or from caching per cell. A follow-up for `WORLD.9`.
 
 ## Follow-ups
 

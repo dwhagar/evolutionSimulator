@@ -8,7 +8,7 @@ whom, REPRO.4), ``senses`` (swappable) and ``world`` (WORLD.2).
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.organisms import Animal, Plant
-from evolution_simulator.world.senses import BasicSenses, Senses
+from evolution_simulator.world.senses import Senses, WorldSenses
 from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.timescale import (
     SPEED_PRESETS,
@@ -22,7 +22,6 @@ from evolution_simulator.world.world import PlantRules, StepReport, World, World
 __all__ = [
     "SPEED_PRESETS",
     "Animal",
-    "BasicSenses",
     "Bounds",
     "DayCycle",
     "Pacer",
@@ -36,5 +35,6 @@ __all__ = [
     "Vec",
     "World",
     "WorldConfig",
+    "WorldSenses",
     "format_duration",
 ]
