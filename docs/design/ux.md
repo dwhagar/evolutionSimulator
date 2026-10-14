@@ -649,6 +649,22 @@ settings form, a line that says what is wrong (Start is disabled until nothing i
   (last checkpoint), swaps the world, starts a new `Recorder` (the next `HistoryBatch` is a full, empty
   history) and, if it was in a run, creates one named `NewRun.name` in the same store with its own
   `RunNotice`; a refused `NewRun` leaves the world and keeps its autosave.
+- **Preset files and Copy with new seed (UX.35).** *Save to file...* writes the boxes with
+  `RunSetup.to_json()` (animals, plants, seeded, the whole config tree, the seed); *Load from file...*
+  reads one with `RunSetup.from_json`, checks the counts against the caps, and keeps it among the user's
+  presets under the file's name (' (file)' added when a built-in has that name), so it is still there next
+  time. A file that is not a setup (not JSON, none of the setup's parts, a field of the wrong type, counts
+  over the cap) changes nothing and the status bar says why; a field missing from an older file keeps its
+  default and an unknown one is ignored (the `configdata` codec). The Saved runs panel's *Copy with new
+  seed* reads the run's settings from its manifest, draws a random seed other than the run's, and calls
+  the setup screen's `start_run_from` (`ViewerContext.services`, a name-keyed dict panels use to offer each
+  other a function, looked up when used because panel order is not fixed). That fills the boxes and starts
+  the run through the same `start()` as the button, so it saves or detaches the run on screen, asks about
+  an unsaved world and saves the new run from tick 0. The copy is named `<name>, seed N` (or after its seed
+  when the old run was unnamed). A run does not write down its starting counts or whether its founders were
+  seeded; the counts are read from its tick-0 checkpoint, else its first history sample (neither is
+  guaranteed once old checkpoints are pruned and the history is coarsened), and the seeded choice and, when
+  they cannot be found, the counts are the setup screen's.
 - **Found on the way.** `LocalBackend` subscribed `self._events.append` and then rebound `self._events`
   in each poll, so every event after the first poll went into a list nobody read. It subscribes a method
   now (`_heard`) and a test polls twice.
