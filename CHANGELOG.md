@@ -7,6 +7,8 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `DOCS.5`: Document on how DNA and traits interact (`docs/design/dna-traits-interaction.md`). [#32](https://github.com/dwhagar/evolutionSimulator/pull/32)
+- `TRAIT.4`, `DNA.10`: Traits as data. A genome layout (`GenomeLayout`, `GeneSpec`) lists the genes by ID, with a name and version that saved genomes check on load; trait definitions (`TraitDef`, `TraitSet`) say how each trait reads genes. DNA is now one generic class and no longer knows trait names. [#31](https://github.com/dwhagar/evolutionSimulator/pull/31)
 - `BRAIN.1`: Design note on a small feedforward neural network brain for animals (`docs/design/brain.md`): 17 inputs, 8 hidden neurons, 6 outputs, weights stored in the DNA, with six owner decisions filed as issues ([#23](https://github.com/dwhagar/evolutionSimulator/issues/23) to [#28](https://github.com/dwhagar/evolutionSimulator/issues/28), `BRAIN.3` to `BRAIN.8`). [#29](https://github.com/dwhagar/evolutionSimulator/pull/29)
 
 ### Changed

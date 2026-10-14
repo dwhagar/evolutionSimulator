@@ -16,12 +16,14 @@ on how the two interact.
 
 Done:
 - DNA and traits objects, `DNA.1` and `TRAIT.1` ([#18](https://github.com/dwhagar/evolutionSimulator/pull/18)).
+- Traits as data, with DNA reading genes by ID, `TRAIT.4` and `DNA.10` ([#31](https://github.com/dwhagar/evolutionSimulator/pull/31)).
+- The interaction document, `DOCS.5` ([#32](https://github.com/dwhagar/evolutionSimulator/pull/32)).
 
 Still needed:
-- The interaction document, `DOCS.5`.
 - The owner's answers on crossover `DNA.5` ([#14](https://github.com/dwhagar/evolutionSimulator/issues/14)), mutation size `DNA.6` ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)), longevity cost
   `TRAIT.2` ([#16](https://github.com/dwhagar/evolutionSimulator/issues/16)), `fertility` `REPRO.2` ([#17](https://github.com/dwhagar/evolutionSimulator/issues/17)) and the world model `WORLD.1` ([#10](https://github.com/dwhagar/evolutionSimulator/issues/10)).
-- The follow-ups those answers unblock: `DNA.7`, `DNA.8`, `TRAIT.3`, `TRAIT.5`; and `TRAIT.4` (traits as data).
+- The follow-ups those answers unblock, which Foundations 1 has prototyped in [#20](https://github.com/dwhagar/evolutionSimulator/pull/20) (closed unmerged,
+  to be reapplied on the new API): `DNA.7`, `DNA.8`, `TRAIT.5`; and `TRAIT.3` (one constants config).
 
 0.1 is finished when every item above is done. Ploidy `DNA.3` ([#3](https://github.com/dwhagar/evolutionSimulator/issues/3)), genome detail `DNA.2` ([#2](https://github.com/dwhagar/evolutionSimulator/issues/2))
 and variable-length genomes `DNA.4` ([#5](https://github.com/dwhagar/evolutionSimulator/issues/5)) are open design questions that do not block it.
