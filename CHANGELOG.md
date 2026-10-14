@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `SENSE.12`: The world now senses through the real sensing step (`WorldSenses`): neighbour search and classifier with each animal's real organs, daylight and the world edge, and loud alarm calls waking sleepers. Calls are off by default until the call rule exists. [#97](https://github.com/dwhagar/evolutionSimulator/pull/97)
 - `SENSE.15`: Design note on the sense genes (`docs/design/sense-genes.md`): a field of vision as a half-angle, a `sight_acuity` gene with a hard trade-off, predator and prey defaults, and what the world must provide for each sense; owner questions [#88](https://github.com/dwhagar/evolutionSimulator/issues/88) to [#92](https://github.com/dwhagar/evolutionSimulator/issues/92) (`SENSE.17` to `SENSE.21`); the builds are `SENSE.16` and `WORLD.12`. [#95](https://github.com/dwhagar/evolutionSimulator/pull/95)
 - `BRAIN.24`: Learning during life: curiosity noise, a day log with a delayed reward, and a nightly update of the output layer on falling asleep, kept as offsets on the creature and not inherited. [#93](https://github.com/dwhagar/evolutionSimulator/pull/93)
 - `BRAIN.23`, `SENSE.9`: The evolving brain shape: a gated 16-slot brain with a dead zone, operating genes (`brain_gain`, `reaction_time`, `curiosity`, `learning_rate`), and the three new inputs (pain, daylight, relative size), at animal layout version 4. [#85](https://github.com/dwhagar/evolutionSimulator/pull/85)
