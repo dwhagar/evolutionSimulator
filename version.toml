@@ -5,5 +5,5 @@
 # commit that starts the new release line) when a milestone or goal is set.
 # See docs/versioning.md.
 major = 0
-minor = 0
-base = "c21303d4719ec29316186d67afb516b9806af0f5"
+minor = 1
+base = "990077894e0fd761ef18bdd71c81b25201871c0a"
