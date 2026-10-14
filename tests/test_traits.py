@@ -2,30 +2,40 @@ import random
 
 import pytest
 
-from evolution_simulator.dna import AnimalDNA, BaseDNA, Gene, Locus, PlantDNA
+from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
+from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import AnimalTraits, BaseTraits, PlantTraits
 
-LOW_ANIMAL = AnimalDNA("0" * 65)
-HIGH_ANIMAL = AnimalDNA("3" * 65)
-LOW_PLANT = PlantDNA("0" * 24)
-HIGH_PLANT = PlantDNA("3" * 24)
+
+def animal_dna(sequence: str) -> DNA:
+    return DNA(ANIMAL_LAYOUT, sequence)
 
 
-def animal_with(**genes: str) -> AnimalDNA:
+def plant_dna(sequence: str) -> DNA:
+    return DNA(PLANT_LAYOUT, sequence)
+
+
+LOW_ANIMAL = animal_dna("0" * 65)
+HIGH_ANIMAL = animal_dna("3" * 65)
+LOW_PLANT = plant_dna("0" * 24)
+HIGH_PLANT = plant_dna("3" * 24)
+
+
+def animal_with(**genes: str) -> DNA:
     """All-zero animal DNA with the named genes set to the given digit strings."""
-    digits = ["0"] * 65
+    digits = ["0"] * ANIMAL_LAYOUT.length
     for name, text in genes.items():
-        gene = getattr(AnimalDNA, name)
+        gene = ANIMAL_LAYOUT.gene(name)
         digits[gene.start : gene.end] = text
-    return AnimalDNA("".join(digits))
+    return animal_dna("".join(digits))
 
 
-def plant_with(**genes: str) -> PlantDNA:
+def plant_with(**genes: str) -> DNA:
     digits = ["0"] * 24
     for name, text in genes.items():
-        gene = getattr(PlantDNA, name)
+        gene = PLANT_LAYOUT.gene(name)
         digits[gene.start : gene.end] = text
-    return PlantDNA("".join(digits))
+    return plant_dna("".join(digits))
 
 
 # --- construction -----------------------------------------------------------
@@ -36,6 +46,14 @@ def test_type_checks():
         AnimalTraits(LOW_PLANT)
     with pytest.raises(TypeError):
         PlantTraits(LOW_ANIMAL)
+
+
+def test_phenotype_is_exposed_by_trait_name():
+    traits = AnimalTraits(HIGH_ANIMAL)
+    assert traits.phenotype["mass"] == pytest.approx(4.0)
+    assert traits.phenotype["size"] == 1.0
+    assert traits.phenotype["sex_strategy"] == 3
+    assert PlantTraits(HIGH_PLANT).phenotype["seed_count"] == 8
 
 
 def test_animal_phenotype_ranges_at_extremes():
@@ -286,7 +304,7 @@ def test_stimuli_are_clamped():
 
 def test_animal_simulation_is_deterministic():
     def run() -> tuple[float, int, bool]:
-        traits = AnimalTraits(AnimalDNA.random(random.Random(5)))
+        traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(5)))
         for i in range(200):
             traits.set_environmental_stimuli(i % 5 == 0, local_density=(i % 10) / 10)
             traits.feed(15.0, is_meat=bool(i % 2))
@@ -298,7 +316,7 @@ def test_animal_simulation_is_deterministic():
 
 def test_random_animals_always_have_valid_state():
     for seed in range(100):
-        traits = AnimalTraits(AnimalDNA.random(random.Random(seed)))
+        traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(seed)))
         for i in range(50):
             traits.set_environmental_stimuli(i % 3 == 0, 1.0 + (i % 3), (i % 10) / 10)
             traits.update_metabolism_and_aging((i % 4) / 3)
@@ -367,11 +385,8 @@ def test_seed_cost_takes_35_percent_of_biomass():
 
 
 def test_base_traits_hooks_are_noops_and_damage_kills():
-    class Tiny(BaseDNA):
-        a = Gene(2)
-        b = Locus()
-
-    traits = BaseTraits(Tiny("012"))
+    tiny = GenomeLayout("tiny", 1, [GeneSpec("a", 2), GeneSpec("b", 1)])
+    traits = BaseTraits(DNA(tiny, "012"), {})
     traits.current_health = 10.0
     assert traits.apply_damage(4.0) == 6.0
     assert traits.is_alive

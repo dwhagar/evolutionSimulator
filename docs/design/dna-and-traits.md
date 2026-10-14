@@ -7,8 +7,10 @@ Written 2026-10-14 by the Foundations 1 thread.
 
 | Module | Contents |
 | --- | --- |
-| `dna.py` | `BaseDNA`, `AnimalDNA` (65 digits), `PlantDNA` (24 digits), the `Gene` and `Locus` descriptors |
-| `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits` |
+| `dna.py` | `DNA` (immutable genome), `GenomeLayout` and `GeneSpec` (the gene table); knows gene IDs only |
+| `layouts.py` | `ANIMAL_LAYOUT` (65 digits) and `PLANT_LAYOUT` (24 digits) as plain data, and `dna_from_dict` |
+| `trait_defs.py` | `TraitDef` and `TraitSet`: what each trait reads from DNA, its range, scale and mutation step; `ANIMAL_TRAITS`, `PLANT_TRAITS` |
+| `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits`: runtime organism state and the formulas built on the traits |
 
 The model is the owner's prototype (archived in [`docs/archive/prototype`](../archive/prototype/README.md)),
 not the defaults suggested by the research notes ([DNA and reproduction](../research/dna-and-reproduction.md), including its review of the prototype, and the traits note in PR #12). The prototype answers several of the
@@ -19,14 +21,18 @@ open questions in issues #2 to #11 by example; those answers are used here and l
 
 - A genome is an **immutable** tuple of base-4 digits (0 to 3). Haploid, fixed length.
 - A **gene** is a run of consecutive digits read as a big-endian base-4 number and scaled to a float
-  from 0.0 to 1.0. A **locus** is one digit read as a raw category (used for `sex_strategy`).
-- The layout is declared once, in the class body, with `Gene()` / `Locus()` descriptors. Declaration
-  order fixes the digit positions and the sum of widths is the genome length, so adding a gene means
-  adding one line. Positions match the prototype digit for digit.
-- Reading a gene is plain attribute access: `dna.size`, `dna.sex_strategy`.
-- Genomes compare and hash by value, have `distance(other)` (fraction of digits that differ, for
-  speciation and mate checks), and round-trip through `to_dict()` / `BaseDNA.from_dict()` (JSON friendly)
-  or `str()` / `from_string()`.
+  from 0.0 to 1.0 (`dna.value(gene_id)`). A single-digit gene can instead be read as a raw category
+  (`dna.digit(gene_id)`, used for `sex_strategy`).
+- The shape of a genome is a **`GenomeLayout`**: an ordered table of `GeneSpec(id, length)` rows. Order fixes
+  the digit positions and the sum of lengths is the genome length, so adding a gene means adding one row.
+  Positions match the prototype digit for digit. Each layout has a name and a `version` to bump whenever
+  the table changes shape.
+- **DNA does not know trait names.** It exposes genes by ID (`value`, `digit`, `raw`, `slice_of`) and the
+  decode API (`get_slice`, `decode_int`, `decode_normalized`), nothing else. The prototype's `dna.size`
+  style properties are gone; what a gene is *for* is declared in `trait_defs.py`.
+- Genomes compare and hash by value (layout and digits), have `distance(other)` (fraction of digits that
+  differ, for speciation and mate checks), and round-trip through `to_dict()` (layout name, version,
+  digits) and `dna_from_dict()`, which refuses a saved genome whose layout version no longer matches.
 
 ### Operations
 
@@ -42,7 +48,7 @@ All take an injected `random.Random` and return a new genome; a parent is never 
 | `reproduce(partner, rng, rate, crossover=None)` | Single entry point: no partner clones, a partner crosses over, then mutates. `crossover=` swaps in any of the strategies above. |
 
 The prototype's `+` operator is gone because it cannot take an RNG or a rate. Mixing two species
-(`AnimalDNA` with `PlantDNA`) raises `TypeError`.
+(different layouts) raises `TypeError`.
 
 The mutation rate is **per digit**, as the DNA research note recommends, so the expected number of
 changes per child scales with genome length: about 0.65 for an animal and 0.24 for a plant at the
@@ -50,8 +56,14 @@ default.
 
 ## Traits
 
-`AnimalTraits(dna)` and `PlantTraits(dna)` read the genes once to fix the phenotype (mass, speed,
-sense ranges, upkeep, seed count and so on), then carry runtime state (energy, health, vitality, age,
+Trait definitions are data (`trait_defs.py`): each `TraitDef` names the genes it reads, its range, scale
+(linear or log), kind (continuous, integer, category) and a mutation step. A `TraitSet` per species
+expresses a genome into a dictionary of primary values. The formulas that combine them (speed damped by
+size, upkeep, and so on) stay as code in `traits.py`. See
+[dna-traits-interaction.md](dna-traits-interaction.md).
+
+`AnimalTraits(dna)` and `PlantTraits(dna)` express the genome once to fix the phenotype (mass, speed,
+sense ranges, upkeep, seed count and so on, kept in `traits.phenotype`), then carry runtime state (energy, health, vitality, age,
 drive flags) that the simulation advances with `update_metabolism_and_aging()` /
 `update_growth_and_metabolism()`, `feed()`, `graze()`, `apply_damage()` and the stimulus setters.
 
@@ -67,10 +79,11 @@ Behaviour is unchanged except where noted:
 1. **Randomness is injected.** The prototype used the global `random`, so runs could not be seeded. DNA
    operations take a `random.Random`, and `AnimalTraits.inspect_food(toxicity, rng)` takes one too.
 2. **DNA is immutable.** `mutate()` in place became `mutated()` returning a new genome.
-3. **Layout is data.** Gene positions come from descriptors instead of `GENE_*` tuples plus one property
-   per gene. `BaseDNA.random(rng)` replaces the constructor's implicit random fill, and the sequence is
-   now required to construct.
-4. **Extras:** `distance`, value equality and hash, `to_dict` / `from_dict`, `crossover_one_point`,
+3. **Layout and traits are data.** Gene positions come from a `GenomeLayout` table instead of `GENE_*`
+   tuples plus one property per gene, and the gene-to-trait ranges that were scattered through the
+   formulas (`10 + 50 * sight_range`) are rows in a `TraitSet`. `DNA.random(layout, rng)` replaces the
+   constructor's implicit random fill, and the sequence is now required to construct.
+4. **Extras:** `distance`, value equality and hash, `to_dict` / `dna_from_dict`, `crossover_one_point`,
    `crossover_by_gene`, and a single `reproduce` entry point.
 5. **Python 3.12 typing** (`X | None`, built-in generics) and ruff clean.
 
@@ -81,11 +94,11 @@ way and is easy to change.
 
 | Issue | Research default | Built | How to change |
 | --- | --- | --- | --- |
-| #2 genome detail | Gene-level | Base-4 digit sequence with genes as slices (closest to the "sequence" level) | Genes are descriptors, so another encoding changes `decode_*` only |
-| #3 ploidy | Diploid, haploid option | Haploid | A diploid genome would hold two `BaseDNA` and add gamete and fertilise steps; traits read through the descriptors and would not change |
+| #2 genome detail | Gene-level | Base-4 digit sequence with genes as slices (closest to the "sequence" level) | Traits read genes only through `value` / `digit`, so another encoding changes `decode_*` only |
+| #3 ploidy | Diploid, haploid option | Haploid | A diploid genome would hold two `DNA` and add gamete and fertilise steps; traits read through `TraitDef.express` and would not change |
 | #4 reproduction | Both modes, no sexes | Both modes, plus a `sex_strategy` digit that shifts temperament and mating cost | The digit is read in one place in `AnimalTraits.__init__` and `consume_mating_cost` |
 | #5 length | Fixed | Fixed | Gene IDs are not reserved yet; layout position is the identity |
-| #6 trait set | Fixed | Fixed (16 animal genes, 6 plant genes) | Add a `Gene()` line and use it in traits |
+| #6 trait set | Fixed | Fixed (16 animal genes, 6 plant genes) | Add a `GeneSpec` row to the layout and a `TraitDef` row that reads it |
 | #8 diet | Plants only | Herbivore and carnivore efficiency genes, so predation is in | |
 | #9 behaviour | No behaviour genes | `aggression` and `fear` are genes feeding a fixed fight-or-flight rule | |
 
