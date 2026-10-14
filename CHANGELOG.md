@@ -7,6 +7,8 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `REPRO.6`: Design note on the reproduction genes (caregiving, reproduction interval, reproductive drive) and the longevity trade-off (`docs/design/reproduction-genes.md`); owner questions 7 to 11 added to [#36](https://github.com/dwhagar/evolutionSimulator/issues/36). The build is `REPRO.5` and `TRAIT.6`. [#49](https://github.com/dwhagar/evolutionSimulator/pull/49)
+- `BRAIN.11`: Decision interval: the brain runs every n-th `think` (`decision_interval`, default 1) and its energy cost per tick is divided by n. [#50](https://github.com/dwhagar/evolutionSimulator/pull/50)
 - `DNA.7`: Crossover now defaults to `DNA.crossover_linked`: a few cut points that follow whole genes and brain neurons, with `gene_fidelity` and `mean_cuts` settings. [#48](https://github.com/dwhagar/evolutionSimulator/pull/48)
 - `BRAIN.14`: Behaviour genes (aggression, fear) bend what the brain perceives through a `Temperament` in the brain adapter. [#47](https://github.com/dwhagar/evolutionSimulator/pull/47)
 - `SENSE.1`: Design note on senses and how they feed the brain (`docs/design/senses.md`); owner questions filed as [#40](https://github.com/dwhagar/evolutionSimulator/issues/40) to [#45](https://github.com/dwhagar/evolutionSimulator/issues/45). [#46](https://github.com/dwhagar/evolutionSimulator/pull/46)
