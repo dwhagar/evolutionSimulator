@@ -129,7 +129,7 @@ every step. The harness is not in the repo.
 [#17](https://github.com/dwhagar/evolutionSimulator/issues/17) and
 [#36](https://github.com/dwhagar/evolutionSimulator/issues/36). The animal layout is version 5: 76 body digits
 (five 3-digit reproduction genes, `parenting`, `repro_cooldown`, `repro_drive`, `fertility` and `recovery`) and the
-396-digit brain, 472 in all.
+396-digit brain, 472 in all. (`SENSE.16` then added `sight_acuity` after `sight_fov`: animal layout version 6.)
 
 | Gene | Trait | Range | What it does |
 | --- | --- | --- | --- |

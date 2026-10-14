@@ -157,8 +157,9 @@ The animal traits already contain the raw material. All of the following is read
 
 | Gene | Range it maps to | Where it is used |
 | --- | --- | --- |
-| `sight_range` (cost gene) and `sight_reach` | 10 to 60 units | `effective_sight_range = sight_reach * (1 - 0.45 * sight_fov)` |
-| `sight_fov` and `fov_degrees` | 40 to 360 degrees | A wider field shortens the effective range by up to 45% |
+| `sight_range` (cost gene) and `sight_reach` | 0 to 60 units | `effective_sight_range = sight_reach * (0.6 + 0.8 * acuity)` (`SENSE.16`; was `* (1 - 0.45 * sight_fov)`) |
+| `sight_fov` and `fov_half_degrees` | 15 to 180 degrees either side, log scale | The field of vision; `fov_degrees` is twice it. A wide field caps the acuity the eye can use |
+| `sight_acuity` and `acuity` | 0 to 1 | `acuity = min(sight_acuity, 1 - sight_fov)`; lengthens the reach, shrinks the errors, adds to the eye's cost (`SENSE.16`, [sense-genes.md](sense-genes.md)) |
 | `hearing` and `hearing_range` | 15 to 85 units | `current_hearing_range` |
 | `smell` and `smell_range` | 20 to 100 units | `smell_range` |
 | `touch` and `tactile_factor` | 1.1 to 2.6 times body radius | `tactile_range`; reflex `flag_tactile_evade` when `touch` is above 0.1 |

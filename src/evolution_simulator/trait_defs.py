@@ -19,7 +19,7 @@ from enum import Enum
 from evolution_simulator.dna import Genome, GenomeLayout, position_bias_for_step
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.sense_genes import (
-    FOV_DEGREES,
+    FOV_HALF_DEGREES,
     HEARING_RANGE,
     SIGHT_REACH,
     SMELL_RANGE,
@@ -211,6 +211,7 @@ ANIMAL_TRAITS = TraitSet(
         _level("somatic_maint", "Repair: slows wear, costs upkeep."),
         _level("sight_range"),
         _level("sight_fov"),
+        _level("sight_acuity"),
         _level("hearing"),
         _level("smell"),
         _level("touch"),
@@ -226,9 +227,15 @@ ANIMAL_TRAITS = TraitSet(
         # Ranged traits.
         TraitDef("mass", ("size",), 1.0, 4.0, description="Body mass in simulation units."),
         TraitDef(
-            "sight_reach", ("sight_range",), *SIGHT_REACH, description="Before FOV narrowing."
+            "sight_reach", ("sight_range",), *SIGHT_REACH, description="Before acuity lengthens it."
         ),
-        TraitDef("fov_degrees", ("sight_fov",), *FOV_DEGREES),
+        TraitDef(
+            "fov_half_degrees",
+            ("sight_fov",),
+            *FOV_HALF_DEGREES,
+            scale=Scale.LOG,
+            description="Field of vision either side of the direction of movement.",
+        ),
         TraitDef("hearing_range", ("hearing",), *HEARING_RANGE),
         TraitDef("smell_range", ("smell",), *SMELL_RANGE),
         TraitDef("tactile_factor", ("touch",), *TACTILE_FACTOR, description="Times body radius."),

@@ -30,7 +30,7 @@ def rng(seed: int = 1) -> random.Random:
 
 
 def test_layout_lengths_match_prototype():
-    assert ANIMAL_LAYOUT.length == 1000  # 92 body digits plus a 908-digit brain
+    assert ANIMAL_LAYOUT.length == 1004  # 96 body digits plus a 908-digit brain
     assert PLANT_LAYOUT.length == 30
     assert TINY.length == 5
 
@@ -51,16 +51,16 @@ def test_animal_gene_positions_match_prototype():
 
     assert span(ANIMAL_LAYOUT, "speed") == (0, 4)
     assert span(ANIMAL_LAYOUT, "size") == (8, 12)
-    assert span(ANIMAL_LAYOUT, "parenting") == (56, 59)
-    assert span(ANIMAL_LAYOUT, "repro_cooldown") == (59, 62)
-    assert span(ANIMAL_LAYOUT, "repro_drive") == (62, 65)
-    assert span(ANIMAL_LAYOUT, "fertility") == (65, 68)
-    assert span(ANIMAL_LAYOUT, "recovery") == (68, 71)
-    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (71, 75)
-    assert span(ANIMAL_LAYOUT, "sex_strategy") == (75, 76)
-    assert span(ANIMAL_LAYOUT, "brain_gain") == (76, 80)  # the operating genes follow the body
-    assert span(ANIMAL_LAYOUT, "learning_rate") == (88, 92)
-    assert span(ANIMAL_LAYOUT, "brain") == (92, 1000)
+    assert span(ANIMAL_LAYOUT, "parenting") == (60, 63)
+    assert span(ANIMAL_LAYOUT, "repro_cooldown") == (63, 66)
+    assert span(ANIMAL_LAYOUT, "repro_drive") == (66, 69)
+    assert span(ANIMAL_LAYOUT, "fertility") == (69, 72)
+    assert span(ANIMAL_LAYOUT, "recovery") == (72, 75)
+    assert span(ANIMAL_LAYOUT, "encoder_fidelity") == (75, 79)
+    assert span(ANIMAL_LAYOUT, "sex_strategy") == (79, 80)
+    assert span(ANIMAL_LAYOUT, "brain_gain") == (80, 84)  # the operating genes follow the body
+    assert span(ANIMAL_LAYOUT, "learning_rate") == (92, 96)
+    assert span(ANIMAL_LAYOUT, "brain") == (96, 1004)
     assert span(PLANT_LAYOUT, "root_reach") == (20, 24)
 
 
@@ -114,7 +114,7 @@ def test_random_is_seeded_and_valid():
     a = DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a == DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a != DNA.random(ANIMAL_LAYOUT, rng(8))
-    assert a.length == len(a) == 1000
+    assert a.length == len(a) == 1004
     assert a.layout is ANIMAL_LAYOUT
     assert set(a.sequence) <= {0, 1, 2, 3}
 

@@ -28,6 +28,7 @@ OLD_BODY = ("0123" * 18)[:70]
 BODY = (
     OLD_BODY[:65] + "000000" + OLD_BODY[65:]
 )  # fertility and recovery at zero, the rest as before
+BODY = BODY[:24] + "0000" + BODY[24:]  # sight_acuity (SENSE.16) at zero, after sight_fov
 OPERATING = (
     "0" * 16
 )  # brain_gain, reaction_time, curiosity, learning_rate: gain 0.5, think every tick

@@ -196,6 +196,11 @@ neighbours, the world finds and classifies the neighbours.
 - **Size and light.** Each animal neighbour carries its mass and the step gets the viewer's mass,
   for the relative-size input (`SENSE.9`); the daylight input is the world's daylight.
 
+`WorldSenses(noisy=False)` is the zero-noise setting: every report is exact and the world's random
+stream is not used. First generations get their eyes from `layouts.seed_sense_genes` (`SENSE.16`): the
+sense genes start near the middle and the field of vision is tilted by diet, narrow and sharp for meat
+eaters and wide and soft for plant eaters.
+
 The sensing step is imported inside `perceive` because `sensing` itself imports from this package.
 
 ## Mate choice
