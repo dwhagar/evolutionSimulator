@@ -5,15 +5,15 @@ import pytest
 from evolution_simulator.dna import AnimalDNA, BaseDNA, Gene, Locus, PlantDNA
 from evolution_simulator.traits import AnimalTraits, BaseTraits, PlantTraits
 
-LOW_ANIMAL = AnimalDNA("0" * 65)
-HIGH_ANIMAL = AnimalDNA("3" * 65)
+LOW_ANIMAL = AnimalDNA("0" * AnimalDNA.STANDARD_LENGTH)
+HIGH_ANIMAL = AnimalDNA("3" * AnimalDNA.STANDARD_LENGTH)
 LOW_PLANT = PlantDNA("0" * 24)
 HIGH_PLANT = PlantDNA("3" * 24)
 
 
 def animal_with(**genes: str) -> AnimalDNA:
     """All-zero animal DNA with the named genes set to the given digit strings."""
-    digits = ["0"] * 65
+    digits = ["0"] * AnimalDNA.STANDARD_LENGTH
     for name, text in genes.items():
         gene = getattr(AnimalDNA, name)
         digits[gene.start : gene.end] = text
@@ -377,3 +377,62 @@ def test_base_traits_hooks_are_noops_and_damage_kills():
     assert traits.is_alive
     assert traits.apply_damage(100.0) == 0.0
     assert not traits.is_alive
+
+
+# --- construction state and pinned numbers ----------------------------------
+
+# Fixed genomes so these numbers only change when a formula or the layout does.
+PINNED_ANIMAL = AnimalDNA("3302332321121021200230232133200030321201111300230220212303212")
+PINNED_PLANT = PlantDNA("330233232112102120023023")
+
+
+def test_animal_is_ready_to_act_at_birth():
+    traits = AnimalTraits(PINNED_ANIMAL)
+    assert traits.flag_wants_mate  # well fed, no cooldown, no threat
+    assert not traits.flag_wants_food
+    assert traits.vitality == 1.0
+
+
+def test_plant_vitality_matches_health_at_birth():
+    traits = PlantTraits(PINNED_PLANT)
+    assert traits.vitality == pytest.approx(0.5)
+
+
+def test_mating_cost_cannot_push_energy_below_zero():
+    traits = AnimalTraits(PINNED_ANIMAL)
+    traits.current_energy = 1.0
+    traits.consume_mating_cost()
+    assert traits.current_energy == 0.0
+
+
+def test_pinned_animal_phenotype():
+    t = AnimalTraits(PINNED_ANIMAL)
+    assert t.mass == pytest.approx(2.764705882)
+    assert t.max_energy == pytest.approx(217.647058824)
+    assert t.max_damage_capacity == pytest.approx(158.823529412)
+    assert t.base_max_speed == pytest.approx(5.232)
+    assert t.base_turn_rate == pytest.approx(0.228787879)
+    assert t.effective_sight_range == pytest.approx(22.776355247)
+    assert t.fov_degrees == pytest.approx(294.745098039)
+    assert t.hearing_range == pytest.approx(58.647058824)
+    assert t.smell_range == pytest.approx(60.156862745)
+    assert t.body_radius == pytest.approx(0.699381521)
+    assert t.tactile_range == pytest.approx(1.616805516)
+    assert t.basal_metabolism == pytest.approx(0.563216253)
+    assert t.call_radius == pytest.approx(13.411764706)
+    assert t.call_energy_cost == pytest.approx(2.841176471)
+    assert t.sex_type == 2
+    assert t.base_aggression == pytest.approx(0.156862745)
+    assert t.base_fear_weight == pytest.approx(0.607843137)
+
+
+def test_pinned_plant_phenotype():
+    t = PlantTraits(PINNED_PLANT)
+    assert t.max_biomass == pytest.approx(190.823529412)
+    assert t.canopy_radius == pytest.approx(11.490196078)
+    assert t.root_radius == pytest.approx(12.552941176)
+    assert t.dispersal_radius == pytest.approx(27.176470588)
+    assert t.seed_count == 4
+    assert t.chemical_defense_tax == pytest.approx(0.022557794)
+    assert t.base_growth_rate == pytest.approx(0.987450980)
+    assert t.basal_metabolism == pytest.approx(0.217915686)

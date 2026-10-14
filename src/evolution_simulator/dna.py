@@ -11,14 +11,14 @@ Operations return new DNA and never change the parent.
 from __future__ import annotations
 
 import random
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Sequence
 from typing import Any, ClassVar, Self, overload
 
 BASES: tuple[int, ...] = (0, 1, 2, 3)
 BASE_COUNT: int = len(BASES)
 
-DEFAULT_MUTATION_RATE: float = 0.01
-"""Chance that any one digit changes per reproduction (per digit, not per organism)."""
+DEFAULT_DIGIT_RATE: float = 0.01
+"""Per-digit mutation chance used to derive each species' default mutations per genome."""
 
 
 class Gene:
@@ -81,6 +81,10 @@ class BaseDNA:
 
     GENES: ClassVar[tuple[Gene, ...]] = ()
     STANDARD_LENGTH: ClassVar[int] = 0
+    DEFAULT_MUTATIONS: ClassVar[float] = 0.0
+    """Expected number of changed digits per child unless a caller says otherwise."""
+    LAYOUT_VERSION: ClassVar[int] = 1
+    """Bump when genes are added, removed, resized or reordered: saved genomes stop matching."""
 
     __slots__ = ("_sequence",)
 
@@ -95,6 +99,7 @@ class BaseDNA:
             position += gene.width
         cls.GENES = genes
         cls.STANDARD_LENGTH = position
+        cls.DEFAULT_MUTATIONS = DEFAULT_DIGIT_RATE * position
 
     def __init__(self, sequence: Iterable[int] | str) -> None:
         if self.STANDARD_LENGTH <= 0:
@@ -171,15 +176,24 @@ class BaseDNA:
     # Serialisation
     # -------------------------------------------------------------------------
 
-    def to_dict(self) -> dict[str, str]:
+    def to_dict(self) -> dict[str, Any]:
         """JSON-friendly form; restore with ``BaseDNA.from_dict``."""
-        return {"type": type(self).__name__, "sequence": str(self)}
+        return {
+            "type": type(self).__name__,
+            "layout_version": self.LAYOUT_VERSION,
+            "sequence": str(self),
+        }
 
     @staticmethod
-    def from_dict(data: dict[str, str]) -> BaseDNA:
+    def from_dict(data: dict[str, Any]) -> BaseDNA:
         kind = data["type"]
         for subclass in _all_subclasses(BaseDNA):
             if subclass.__name__ == kind and subclass.STANDARD_LENGTH > 0:
+                if data.get("layout_version") != subclass.LAYOUT_VERSION:
+                    raise ValueError(
+                        f"{kind} layout version {data.get('layout_version')!r} does not match "
+                        f"the current layout version {subclass.LAYOUT_VERSION}."
+                    )
                 return subclass(data["sequence"])
         raise ValueError(f"Unknown DNA type: {kind!r}")
 
@@ -187,16 +201,37 @@ class BaseDNA:
     # Genetic operations
     # -------------------------------------------------------------------------
 
-    def mutated(self, rng: random.Random, mutation_rate: float = DEFAULT_MUTATION_RATE) -> Self:
-        """Point mutation: each digit changes with probability ``mutation_rate``.
+    def mutated(
+        self,
+        rng: random.Random,
+        mutations_per_genome: float | None = None,
+        position_weights: Sequence[float] | None = None,
+    ) -> Self:
+        """Point mutation, set as the expected number of changed digits per genome.
 
-        A changed digit moves to one of the other three digits with equal chance. Returns a new
-        genome; this one is unchanged.
+        With uniform weights each digit changes with probability ``mutations_per_genome / length``
+        (capped at 1), so the setting keeps its meaning when genome sizes differ. A changed digit
+        moves to one of the other three digits with equal chance. ``position_weights`` (one
+        non-negative number per digit) skews where changes land while keeping the expected total.
+        Returns a new genome; this one is unchanged.
         """
-        _check_rate(mutation_rate)
+        expected = self.DEFAULT_MUTATIONS if mutations_per_genome is None else mutations_per_genome
+        if expected < 0:
+            raise ValueError(f"Mutations per genome must not be negative, got {expected}.")
+        if position_weights is None:
+            probabilities = [min(1.0, expected / self.length)] * self.length
+        else:
+            if len(position_weights) != self.length:
+                raise ValueError(
+                    f"Expected {self.length} position weights, got {len(position_weights)}."
+                )
+            total = sum(position_weights)
+            if min(position_weights) < 0 or total <= 0:
+                raise ValueError("Position weights must be non-negative with a positive sum.")
+            probabilities = [min(1.0, expected * w / total) for w in position_weights]
         digits = list(self._sequence)
         for i, digit in enumerate(digits):
-            if rng.random() < mutation_rate:
+            if rng.random() < probabilities[i]:
                 digits[i] = (digit + rng.choice((1, 2, 3))) % BASE_COUNT
         return type(self)(digits)
 
@@ -229,30 +264,63 @@ class BaseDNA:
             digits.extend(source[gene.start : gene.end])
         return type(self)(digits)
 
+    def crossover_linked(
+        self, partner: BaseDNA, rng: random.Random, mean_cuts: float = 1.0
+    ) -> Self:
+        """Meiosis-style crossover: cuts fall between genes, never inside one.
+
+        Cut points are a Poisson process along the genome with ``mean_cuts`` expected cuts, and
+        the starting parent is chosen at random. Neighbouring genes tend to travel together
+        (linkage); ``mean_cuts=0`` copies one whole parent.
+        """
+        self._require_compatible(partner)
+        if mean_cuts < 0:
+            raise ValueError(f"Mean cuts must not be negative, got {mean_cuts}.")
+        genes = len(self.GENES)
+        cuts: set[int] = set()
+        if mean_cuts > 0:
+            t = rng.expovariate(mean_cuts)
+            while t < 1.0:
+                cuts.add(int(t * genes))
+                t += rng.expovariate(mean_cuts)
+        cuts.discard(0)
+        source, other = (self, partner) if rng.random() < 0.5 else (partner, self)
+        digits: list[int] = []
+        for index, gene in enumerate(self.GENES):
+            if index in cuts:
+                source, other = other, source
+            digits.extend(source._sequence[gene.start : gene.end])
+        return type(self)(digits)
+
     def clone_with_mutation(
-        self, rng: random.Random, mutation_rate: float = DEFAULT_MUTATION_RATE
+        self,
+        rng: random.Random,
+        mutations_per_genome: float | None = None,
+        position_weights: Sequence[float] | None = None,
     ) -> Self:
         """Asexual reproduction: a copy of this genome subject only to point mutation."""
-        return self.mutated(rng, mutation_rate)
+        return self.mutated(rng, mutations_per_genome, position_weights)
 
     def reproduce(
         self,
         partner: BaseDNA | None,
         rng: random.Random,
-        mutation_rate: float = DEFAULT_MUTATION_RATE,
+        mutations_per_genome: float | None = None,
+        position_weights: Sequence[float] | None = None,
         crossover: Crossover | None = None,
     ) -> Self:
         """Single reproduction entry point.
 
-        With no partner this clones and mutates. With a partner it crosses over (uniform per-digit
-        unless ``crossover`` supplies another strategy) and then mutates.
+        With no partner this clones and mutates. With a partner it crosses over (``crossover_linked``
+        unless ``crossover`` supplies another strategy) and then mutates the child. Mutation is
+        applied to the child only; parents are never modified.
         """
         if partner is None:
-            return self.clone_with_mutation(rng, mutation_rate)
-        strategy = crossover if crossover is not None else type(self).crossover
+            return self.clone_with_mutation(rng, mutations_per_genome, position_weights)
+        strategy = crossover if crossover is not None else type(self).crossover_linked
         child = strategy(self, partner, rng)
         assert isinstance(child, type(self))
-        return child.mutated(rng, mutation_rate)
+        return child.mutated(rng, mutations_per_genome, position_weights)
 
     # -------------------------------------------------------------------------
     # Decoding
@@ -310,16 +378,18 @@ def _all_subclasses(cls: type[BaseDNA]) -> list[type[BaseDNA]]:
 
 
 # =============================================================================
-# Animal DNA (65 quaternary digits)
+# Animal DNA (61 quaternary digits)
 # =============================================================================
 
 
 class AnimalDNA(BaseDNA):
     """Physical, five-sense, metabolic and behavioural genes for mobile organisms.
 
-    Gene order (and so digit positions) matches the original prototype: 16 four-digit genes
-    followed by one sex-strategy digit, 65 digits in all.
+    Gene order matches the original prototype, except that its unused ``fertility`` gene is gone
+    (issue #17): 15 four-digit genes followed by one sex-strategy digit, 61 digits in all.
     """
+
+    LAYOUT_VERSION = 2
 
     speed = Gene()
     agility = Gene()
@@ -337,7 +407,6 @@ class AnimalDNA(BaseDNA):
     carnivore_eff = Gene()
     aggression = Gene()
     fear = Gene()
-    fertility = Gene()
     encoder_fidelity = Gene()
 
     sex_strategy = Locus()

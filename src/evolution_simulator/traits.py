@@ -176,6 +176,7 @@ class AnimalTraits(BaseTraits):
         self.signal_to_emit: int | None = None
 
         self._refresh_vitality_dependents()
+        self._update_needs_and_drives()
 
     def _refresh_vitality_dependents(self) -> None:
         v = self.vitality
@@ -349,7 +350,7 @@ class AnimalTraits(BaseTraits):
 
     def consume_mating_cost(self) -> None:
         cost_multiplier = 0.25 if self.sex_type in (0, 1) else 0.45
-        self.current_energy -= self.max_energy * cost_multiplier
+        self.current_energy = max(0.0, self.current_energy - self.max_energy * cost_multiplier)
         self.mating_cooldown = 100 if self.sex_type in (2, 3) else 40
         self._update_needs_and_drives()
 
@@ -419,6 +420,9 @@ class PlantTraits(BaseTraits):
 
         # Behavioral/Lifecycle flag
         self.flag_ready_to_seed: bool = False
+
+        self._refresh_vitality_dependents()
+        self._update_needs_and_drives()
 
     def _refresh_vitality_dependents(self) -> None:
         health_ratio = max(0.0, self.current_health / self.max_damage_capacity)

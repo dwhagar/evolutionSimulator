@@ -14,6 +14,9 @@ class TinyDNA(BaseDNA):
     kind = Locus()
 
 
+N = AnimalDNA.STANDARD_LENGTH
+
+
 def rng(seed: int = 1) -> random.Random:
     return random.Random(seed)
 
@@ -22,7 +25,7 @@ def rng(seed: int = 1) -> random.Random:
 
 
 def test_layout_lengths_match_prototype():
-    assert AnimalDNA.STANDARD_LENGTH == 65
+    assert AnimalDNA.STANDARD_LENGTH == 61
     assert PlantDNA.STANDARD_LENGTH == 24
     assert TinyDNA.STANDARD_LENGTH == 5
 
@@ -39,8 +42,8 @@ def test_genes_are_contiguous_and_cover_the_genome(cls):
 def test_animal_gene_positions_match_prototype():
     assert (AnimalDNA.speed.start, AnimalDNA.speed.end) == (0, 4)
     assert (AnimalDNA.size.start, AnimalDNA.size.end) == (8, 12)
-    assert (AnimalDNA.encoder_fidelity.start, AnimalDNA.encoder_fidelity.end) == (60, 64)
-    assert (AnimalDNA.sex_strategy.start, AnimalDNA.sex_strategy.end) == (64, 65)
+    assert (AnimalDNA.encoder_fidelity.start, AnimalDNA.encoder_fidelity.end) == (56, 60)
+    assert (AnimalDNA.sex_strategy.start, AnimalDNA.sex_strategy.end) == (60, 61)
     assert (PlantDNA.root_reach.start, PlantDNA.root_reach.end) == (20, 24)
 
 
@@ -76,7 +79,7 @@ def test_random_is_seeded_and_valid():
     a = AnimalDNA.random(rng(7))
     assert a == AnimalDNA.random(rng(7))
     assert a != AnimalDNA.random(rng(8))
-    assert a.length == len(a) == 65
+    assert a.length == len(a) == 61
     assert set(a.sequence) <= {0, 1, 2, 3}
 
 
@@ -174,6 +177,15 @@ def test_dict_round_trip_through_json():
     assert BaseDNA.from_dict(PlantDNA.random(rng(3)).to_dict()).length == 24
 
 
+def test_layout_version_is_saved_and_checked():
+    data = PlantDNA.random(rng(3)).to_dict()
+    assert data["layout_version"] == PlantDNA.LAYOUT_VERSION
+    with pytest.raises(ValueError):
+        BaseDNA.from_dict({**data, "layout_version": PlantDNA.LAYOUT_VERSION + 1})
+    with pytest.raises(ValueError):
+        BaseDNA.from_dict({"type": "PlantDNA", "sequence": "0" * 24})
+
+
 def test_from_dict_unknown_type():
     with pytest.raises(ValueError):
         BaseDNA.from_dict({"type": "NopeDNA", "sequence": "0"})
@@ -192,9 +204,9 @@ def test_zero_rate_is_identity():
     assert dna.clone_with_mutation(rng(2), 0.0) == dna
 
 
-def test_rate_one_changes_every_digit():
+def test_full_rate_changes_every_digit():
     dna = AnimalDNA.random(rng(1))
-    child = dna.mutated(rng(2), 1.0)
+    child = dna.mutated(rng(2), dna.length)
     assert all(a != b for a, b in zip(dna.sequence, child.sequence))
     assert dna.distance(child) == 1.0
 
@@ -202,7 +214,7 @@ def test_rate_one_changes_every_digit():
 def test_mutation_does_not_touch_parent_and_keeps_length():
     dna = AnimalDNA.random(rng(1))
     before = str(dna)
-    child = dna.mutated(rng(2), 0.5)
+    child = dna.mutated(rng(2), 20.0)
     assert str(dna) == before
     assert child.length == dna.length
     assert type(child) is AnimalDNA
@@ -210,17 +222,50 @@ def test_mutation_does_not_touch_parent_and_keeps_length():
 
 def test_mutation_is_deterministic_for_a_seed():
     dna = AnimalDNA.random(rng(1))
-    assert dna.mutated(rng(9), 0.2) == dna.mutated(rng(9), 0.2)
-    assert dna.mutated(rng(9), 0.2) != dna.mutated(rng(10), 0.2)
+    assert dna.mutated(rng(9), 8.0) == dna.mutated(rng(9), 8.0)
+    assert dna.mutated(rng(9), 8.0) != dna.mutated(rng(10), 8.0)
 
 
-def test_mutation_rate_matches_expectation():
+def test_mean_mutations_per_child_matches_the_setting():
     dna = AnimalDNA.random(rng(1))
     r = rng(5)
-    trials = 400
-    changed = sum(round(dna.mutated(r, 0.05).distance(dna) * dna.length) for _ in range(trials))
-    expected = trials * dna.length * 0.05
-    assert abs(changed - expected) < 0.15 * expected
+    trials = 600
+    for wanted in (0.5, 3.0):
+        changed = sum(
+            round(dna.mutated(r, wanted).distance(dna) * dna.length) for _ in range(trials)
+        )
+        assert abs(changed / trials - wanted) < 0.15 * wanted + 0.05
+
+
+def test_default_mutations_keep_the_prototype_per_digit_rate():
+    assert AnimalDNA.DEFAULT_MUTATIONS == pytest.approx(0.01 * 61)
+    assert PlantDNA.DEFAULT_MUTATIONS == pytest.approx(0.01 * 24)
+    dna = PlantDNA.random(rng(1))
+    r = rng(2)
+    trials = 2000
+    changed = sum(round(dna.mutated(r).distance(dna) * dna.length) for _ in range(trials))
+    assert abs(changed / trials - PlantDNA.DEFAULT_MUTATIONS) < 0.05
+
+
+def test_position_weights_steer_where_changes_land():
+    dna = TinyDNA("00000")
+    r = rng(3)
+    hits = [0] * 5
+    for _ in range(2000):
+        for i, digit in enumerate(dna.mutated(r, 1.0, [0, 0, 0, 1, 3]).sequence):
+            hits[i] += digit != 0
+    assert hits[:3] == [0, 0, 0]
+    # one expected change per child, split 1:3 between the last two digits
+    assert 400 < hits[3] < 600
+    assert 1400 < hits[4] < 1600
+    # uniform weights are the same as no weights
+    assert dna.mutated(rng(4), 2.0, [1] * 5) == dna.mutated(rng(4), 2.0)
+
+
+@pytest.mark.parametrize("weights", [[1, 1, 1], [0] * 5, [1, 1, 1, 1, -1]])
+def test_bad_position_weights_rejected(weights):
+    with pytest.raises(ValueError):
+        TinyDNA("00000").mutated(rng(), 1.0, weights)
 
 
 def test_changed_digits_land_on_the_other_three_digits_evenly():
@@ -228,26 +273,25 @@ def test_changed_digits_land_on_the_other_three_digits_evenly():
     r = rng(11)
     counts = {1: 0, 2: 0, 3: 0}
     for _ in range(3000):
-        for digit in dna.mutated(r, 1.0).sequence:
+        for digit in dna.mutated(r, 5.0).sequence:
             counts[digit] += 1
     total = sum(counts.values())
     assert all(abs(count / total - 1 / 3) < 0.03 for count in counts.values())
 
 
-@pytest.mark.parametrize("rate", [-0.1, 1.1])
-def test_invalid_rate_rejected(rate):
+def test_negative_mutations_rejected():
     with pytest.raises(ValueError):
-        TinyDNA("00000").mutated(rng(), rate)
+        TinyDNA("00000").mutated(rng(), -0.1)
 
 
 # --- crossover and reproduction ----------------------------------------------
 
 
 def test_uniform_crossover_digits_come_from_parents():
-    a, b = AnimalDNA("0" * 65), AnimalDNA("3" * 65)
+    a, b = AnimalDNA("0" * N), AnimalDNA("3" * N)
     child = a.crossover(b, rng(4))
     assert set(child.sequence) <= {0, 3}
-    assert set(child.sequence) == {0, 3}  # 65 coin flips: both parents contribute
+    assert set(child.sequence) == {0, 3}  # coin flips per digit: both parents contribute
 
 
 def test_crossover_of_identical_parents_is_that_genome():
@@ -255,6 +299,7 @@ def test_crossover_of_identical_parents_is_that_genome():
     assert a.crossover(a, rng(2)) == a
     assert a.crossover_one_point(a, rng(2)) == a
     assert a.crossover_by_gene(a, rng(2)) == a
+    assert a.crossover_linked(a, rng(2)) == a
 
 
 def test_crossover_is_deterministic_and_leaves_parents_alone():
@@ -265,13 +310,13 @@ def test_crossover_is_deterministic_and_leaves_parents_alone():
 
 
 def test_one_point_crossover_has_one_cut():
-    a, b = AnimalDNA("0" * 65), AnimalDNA("3" * 65)
+    a, b = AnimalDNA("0" * N), AnimalDNA("3" * N)
     for seed in range(20):
         child = a.crossover_one_point(b, rng(seed))
         cut = child.sequence.index(3)
         assert child.sequence[:cut] == (0,) * cut
-        assert child.sequence[cut:] == (3,) * (65 - cut)
-        assert 1 <= cut <= 64
+        assert child.sequence[cut:] == (3,) * (N - cut)
+        assert 1 <= cut <= N - 1
 
 
 def test_gene_crossover_keeps_genes_whole():
@@ -285,14 +330,67 @@ def test_gene_crossover_keeps_genes_whole():
 
 
 def test_gene_crossover_mixes_both_parents():
-    a, b = AnimalDNA("0" * 65), AnimalDNA("3" * 65)
+    a, b = AnimalDNA("0" * N), AnimalDNA("3" * N)
     child = a.crossover_by_gene(b, rng(6))
     assert set(child.sequence) == {0, 3}
 
 
+def test_linked_crossover_never_cuts_inside_a_gene():
+    a, b = AnimalDNA.random(rng(1)), AnimalDNA.random(rng(2))
+    for seed in range(100):
+        child = a.crossover_linked(b, rng(seed), mean_cuts=3.0)
+        for gene in AnimalDNA.GENES:
+            piece = child.get_slice(gene.start, gene.end)
+            assert piece in (a.get_slice(gene.start, gene.end), b.get_slice(gene.start, gene.end))
+
+
+def test_linked_crossover_mean_cut_count():
+    a, b = AnimalDNA("0" * N), AnimalDNA("3" * N)
+    r = rng(8)
+    trials = 1500
+    for mean_cuts in (1.0, 2.0):
+        switches = 0
+        for _ in range(trials):
+            child = a.crossover_linked(b, r, mean_cuts)
+            switches += sum(1 for x, y in zip(child.sequence, child.sequence[1:]) if x != y)
+        # Cuts landing on the same boundary cancel, so the mean sits slightly below the setting.
+        assert 0.8 * mean_cuts < switches / trials <= mean_cuts + 0.1
+
+
+def test_linked_crossover_with_no_cuts_copies_one_parent():
+    a, b = AnimalDNA.random(rng(1)), AnimalDNA.random(rng(2))
+    seen = {str(a.crossover_linked(b, rng(seed), mean_cuts=0.0)) for seed in range(30)}
+    assert seen == {str(a), str(b)}
+
+
+def test_linked_crossover_keeps_neighbouring_genes_together_more_than_per_gene():
+    a, b = AnimalDNA("0" * N), AnimalDNA("3" * N)
+    r = rng(2)
+
+    def switches(op) -> int:
+        total = 0
+        for _ in range(300):
+            child = op(a, b, r)
+            total += sum(1 for x, y in zip(child.sequence, child.sequence[1:]) if x != y)
+        return total
+
+    assert switches(AnimalDNA.crossover_linked) < switches(AnimalDNA.crossover_by_gene)
+
+
+def test_negative_cuts_rejected():
+    a = AnimalDNA.random(rng(1))
+    with pytest.raises(ValueError):
+        a.crossover_linked(a, rng(), mean_cuts=-1.0)
+
+
 def test_crossover_rejects_mismatched_species():
-    animal, plant = AnimalDNA("0" * 65), PlantDNA("0" * 24)
-    for op in (animal.crossover, animal.crossover_one_point, animal.crossover_by_gene):
+    animal, plant = AnimalDNA("0" * N), PlantDNA("0" * 24)
+    for op in (
+        animal.crossover,
+        animal.crossover_one_point,
+        animal.crossover_by_gene,
+        animal.crossover_linked,
+    ):
         with pytest.raises(TypeError):
             op(plant, rng())
     with pytest.raises(TypeError):
@@ -309,23 +407,26 @@ def test_one_point_needs_two_digits():
 
 def test_reproduce_without_partner_clones_with_mutation():
     dna = AnimalDNA.random(rng(1))
-    assert dna.reproduce(None, rng(2), mutation_rate=0.0) == dna
-    assert dna.reproduce(None, rng(2), 0.1) == dna.clone_with_mutation(rng(2), 0.1)
+    assert dna.reproduce(None, rng(2), mutations_per_genome=0.0) == dna
+    assert dna.reproduce(None, rng(2), 2.0) == dna.clone_with_mutation(rng(2), 2.0)
 
 
 def test_reproduce_with_partner_crosses_then_mutates():
     a, b = AnimalDNA.random(rng(1)), AnimalDNA.random(rng(2))
-    child = a.reproduce(b, rng(3), mutation_rate=0.0)
-    assert child == a.crossover(b, rng(3))
-    assert a.reproduce(b, rng(3), 0.2) == a.reproduce(b, rng(3), 0.2)
+    child = a.reproduce(b, rng(3), mutations_per_genome=0.0)
+    assert child == a.crossover_linked(b, rng(3))
+    assert a.reproduce(b, rng(3), 2.0) == a.reproduce(b, rng(3), 2.0)
     assert type(a.reproduce(b, rng(3))) is AnimalDNA
+    assert a.reproduce(b, rng(3), 0.0, crossover=AnimalDNA.crossover) == a.crossover(b, rng(3))
 
 
 def test_reproduce_accepts_other_crossover_strategies():
-    a, b = AnimalDNA("0" * 65), AnimalDNA("3" * 65)
-    child = a.reproduce(b, rng(3), mutation_rate=0.0, crossover=AnimalDNA.crossover_one_point)
+    a, b = AnimalDNA("0" * N), AnimalDNA("3" * N)
+    child = a.reproduce(
+        b, rng(3), mutations_per_genome=0.0, crossover=AnimalDNA.crossover_one_point
+    )
     assert child == a.crossover_one_point(b, rng(3))
-    child = a.reproduce(b, rng(3), mutation_rate=0.0, crossover=BaseDNA.crossover_by_gene)
+    child = a.reproduce(b, rng(3), mutations_per_genome=0.0, crossover=BaseDNA.crossover_by_gene)
     assert child == a.crossover_by_gene(b, rng(3))
 
 
