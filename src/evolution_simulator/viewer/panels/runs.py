@@ -90,15 +90,15 @@ class RunsPanel(QWidget):
         self.windows: list[RunHistoryWindow] = []
 
         layout = QVBoxLayout(self)
-        self.warning = QLabel()
+        self.warning = QLabel(self)
         self.warning.setWordWrap(True)
         self.warning.setStyleSheet("color: #c0392b; font-weight: bold;")
         self.warning.hide()
-        self.usage = QLabel()
+        self.usage = QLabel(self)
         layout.addWidget(self.warning)
         layout.addWidget(self.usage)
 
-        self.table = QTableWidget(0, len(COLUMNS))
+        self.table = QTableWidget(0, len(COLUMNS), self)
         self.table.setHorizontalHeaderLabels(list(COLUMNS))
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -111,16 +111,16 @@ class RunsPanel(QWidget):
         layout.addWidget(self.table, stretch=1)
 
         buttons = QHBoxLayout()
-        self.save_button = QPushButton("Save run now")
-        self.resume_button = QPushButton("Resume")
-        self.history_button = QPushButton("History")
-        self.copy_button = QPushButton("Copy with new seed")
+        self.save_button = QPushButton("Save run now", self)
+        self.resume_button = QPushButton("Resume", self)
+        self.history_button = QPushButton("History", self)
+        self.copy_button = QPushButton("Copy with new seed", self)
         self.copy_button.setToolTip(
             "Start a new run with this run's settings and a different seed."
         )
-        self.export_button = QPushButton("Export history (CSV)...")
-        self.delete_button = QPushButton("Delete")
-        self.refresh_button = QPushButton("Refresh")
+        self.export_button = QPushButton("Export history (CSV)...", self)
+        self.delete_button = QPushButton("Delete", self)
+        self.refresh_button = QPushButton("Refresh", self)
         self.save_button.clicked.connect(self.save_now)
         self.resume_button.clicked.connect(lambda: self.resume())
         self.history_button.clicked.connect(lambda: self.show_history())
@@ -434,9 +434,11 @@ def build(context: ViewerContext) -> RunsPanel:
 
     save = QAction("&Save run now", panel)
     save.setShortcut(QKeySequence(QKeySequence.StandardKey.Save))
+    save.setStatusTip("Write a checkpoint of this run now")
     save.triggered.connect(lambda: panel.save_now())
     show = QAction("Saved &runs...", panel)
     show.setShortcut(QKeySequence(QKeySequence.StandardKey.Open))
+    show.setStatusTip("List the saved runs, to resume or look at one")
     show.triggered.connect(panel.show_dock)
     context.actions["save_run"] = save
     context.actions["show_runs"] = show

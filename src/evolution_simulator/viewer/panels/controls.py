@@ -169,8 +169,8 @@ def clock_text(frame: Frame | None) -> str:
 # --- the panel ----------------------------------------------------------------------
 
 
-def _separator() -> QFrame:
-    line = QFrame()
+def _separator(parent: QWidget) -> QFrame:
+    line = QFrame(parent)
     line.setFrameShape(QFrame.Shape.VLine)
     line.setFrameShadow(QFrame.Shadow.Sunken)
     return line
@@ -182,6 +182,9 @@ class ControlsPanel(QWidget):
         self.context = context
         self.controller = context.controller
         self._attached = False
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(6, 2, 6, 2)
+        layout.setSpacing(2)
         actions = context.actions
         self._make_actions()
 
@@ -192,19 +195,19 @@ class ControlsPanel(QWidget):
         top.setSpacing(4)
         for name in ("play_pause", "step", "step_day"):
             top.addWidget(self._action_button(actions[name]))
-        top.addWidget(_separator())
+        top.addWidget(_separator(self))
         for speed in SPEED_ORDER:
             top.addWidget(self._speed_button(speed))
-        top.addWidget(_separator())
+        top.addWidget(_separator(self))
         self._build_custom(top)
         top.addStretch(1)
 
-        self.state = QLabel()
-        self.clock = QLabel()
-        self.asked = QLabel()
-        self.got = QLabel()
-        self.note = QLabel("The world is not drawn while fast-forwarding.")
-        self.no_draw = QToolButton()
+        self.state = QLabel(self)
+        self.clock = QLabel(self)
+        self.asked = QLabel(self)
+        self.got = QLabel(self)
+        self.note = QLabel("The world is not drawn while fast-forwarding.", self)
+        self.no_draw = QToolButton(self)
         self.no_draw.setDefaultAction(actions[NO_DRAW])
         self.no_draw.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         self.no_draw.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -216,9 +219,6 @@ class ControlsPanel(QWidget):
         bottom.addWidget(self.note)
         bottom.addWidget(self.no_draw)
 
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(6, 2, 6, 2)
-        layout.setSpacing(2)
         layout.addLayout(top)
         layout.addLayout(bottom)
 
@@ -240,6 +240,7 @@ class ControlsPanel(QWidget):
                 return
             action = QAction(text, self)
             action.setToolTip(tip)
+            action.setStatusTip(tip)
             action.setCheckable(checkable)
             keys = KEY_MAP.get(name)
             if keys:
@@ -266,7 +267,7 @@ class ControlsPanel(QWidget):
         )
 
     def _action_button(self, action: QAction) -> QToolButton:
-        button = QToolButton()
+        button = QToolButton(self)
         button.setDefaultAction(action)
         button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
         button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
@@ -274,7 +275,7 @@ class ControlsPanel(QWidget):
 
     def _speed_button(self, speed: str) -> QToolButton:
         action = self.context.actions[f"speed_{speed}"]
-        button = QToolButton()
+        button = QToolButton(self)
         button.setText(BUTTON_TEXT[speed])
         button.setToolTip(action.text().replace("&", ""))
         button.setCheckable(True)
@@ -285,16 +286,16 @@ class ControlsPanel(QWidget):
         return button
 
     def _build_custom(self, row: QHBoxLayout) -> None:
-        self.custom_value = QDoubleSpinBox()
+        self.custom_value = QDoubleSpinBox(self)
         self.custom_value.setRange(0.01, 100_000.0)
         self.custom_value.setDecimals(2)
         self.custom_value.setValue(1.0)
         self.custom_value.setToolTip("A speed of your own: this much simulated time a second")
-        self.custom_unit = QComboBox()
+        self.custom_unit = QComboBox(self)
         for name, seconds in CUSTOM_UNITS:
             self.custom_unit.addItem(name, seconds)
         self.custom_unit.setCurrentText("days")
-        self.custom_set = QToolButton()
+        self.custom_set = QToolButton(self)
         self.custom_set.setText("Set speed")
         self.custom_set.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.custom_set.clicked.connect(self.apply_custom_speed)

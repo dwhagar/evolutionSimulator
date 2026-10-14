@@ -806,6 +806,38 @@ the bars and the drawn network, bars first. `viewer/inspector/tab_brain.py` is t
   the tab waiting for and then showing a run, a dead creature, the checkboxes, the canvas painting the
   overlay, and the stand-in simulation.
 
+### As built: polish (`UX.21`)
+
+The shell and the shared widgets, with no change to what any screen does.
+
+- **Themes.** View > Theme: Follow the system (the default), Light and Dark (`viewer/theme.py`). Light and
+  dark put Qt's Fusion style with a fixed palette over the whole program; Follow the system goes back to
+  the style and palette the program started with, which Qt 6.5 and later keeps in step with the operating
+  system. The choice is kept in the settings (`appearance/theme`, outside `window`, so Reset layout does
+  not forget it). A widget that draws with palette colours repaints on a palette-change event (the charts
+  do, in `ChartPlot.apply_palette`); the world view paints its own ground, daylight and creature colours and
+  looks the same in every theme.
+- **Shortcuts and help.** Help > Keyboard shortcuts (`F1`) opens a window (`viewer/help.py`) built from
+  `KEY_MAP` and from every other action of the window that has a key (Quit, New run, Save run now, Saved runs),
+  read from the actions, plus a short list of mouse actions. `KEY_TEXT` words each `KEY_MAP` entry, and a
+  test fails when a key is added without words. The window is rebuilt each time it is opened, so it is
+  current when a panel was closed or added.
+- **About.** Help > About shows the version, the licence (CC0 1.0, linked), the source address and a
+  "Third-party notices" window (`viewer/about.py`). The version is the `VERSION` file next to the downloadable
+  build, `version.toml` plus the commits since its base (as `scripts/version.py` counts them) when run from a
+  source checkout, and the installed package's version otherwise. The notices are the `THIRD_PARTY_NOTICES.md`
+  shipped beside the build or kept in `packaging/`, or a short built-in list when neither is found.
+- **Messages and tooltips.** Every status message goes through `tidy_message` (a capital letter and a full
+  stop), whichever panel sends it. Each menu action has a status tip, the status bar's labels have tooltips,
+  and a test lists any menu action of the program's own without one.
+- **The parenting rule** (the PySide6 double free found in UX.12): give every widget its parent in the
+  constructor, add a layout to its owner before filling it, and never read an item back with
+  `combo.model().item(i)`. The charts, controls, setup, runs, run history and the config form were brought
+  into line, and `tests/test_viewer_polish.py` checks every module of the viewer by reading its source
+  (a widget that really is a window of its own says `# no-parent` on its line). Panels the window builds
+  cannot be given a parent by their factory; the window gives them one when it docks them.
+- **Removed.** `panels/_placeholder.py`, which no slot uses any more.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these
