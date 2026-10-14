@@ -7,7 +7,7 @@ a screen built on it sees the same session behaviour.
 import pickle
 
 import pytest
-from world_support import animal_dna
+from world_support import animal_dna, world_config
 
 from evolution_simulator.brain_adapter import INPUT_NAMES
 from evolution_simulator.session import (
@@ -138,7 +138,7 @@ def test_speeds_are_checked(sim):
 
 
 def test_the_session_starts_at_the_simulations_own_speed():
-    sim = World(WorldConfig(time_scale=TimeScale(speed=SPEED_PRESETS["day"])))
+    sim = World(world_config(time_scale=TimeScale(speed=SPEED_PRESETS["day"])))
     assert Session(sim).status.speed_preset == "day"
 
 
@@ -381,7 +381,7 @@ def test_the_trace_shows_in_the_detail_once_the_brain_has_run():
 
 
 def test_when_the_selected_animal_dies_its_last_detail_is_sent_marked_dead():
-    world = World(WorldConfig(seed=1, day_cycle=None))
+    world = World(world_config(seed=1, day_cycle=None))
     animal = world.add_animal(animal_dna(), Vec.of(500, 500), heading=0.0)
     session, clock = make(world)
     session.handle(Select(animal.id))
@@ -403,7 +403,7 @@ def test_when_the_selected_animal_dies_its_last_detail_is_sent_marked_dead():
 
 
 def test_subscribers_hear_world_events_and_status_changes():
-    world = World(WorldConfig(seed=1, day_cycle=None))
+    world = World(world_config(seed=1, day_cycle=None))
     animal = world.add_animal(animal_dna(), Vec.of(500, 500), heading=0.0)
     animal.traits.current_energy = 0.001
     session, _ = make(world)
