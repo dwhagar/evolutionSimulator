@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.18`: Saved runs in the viewer: save the current run, list saved runs with their size and a population line, resume, delete, export history as CSV, open a read-only history window with the charts and checkpoints, and a warning when runs take more than 5 GB. [#173](https://github.com/dwhagar/evolutionSimulator/pull/173)
 - `UX.19`: A Windows package: a PyInstaller folder build zipped by a workflow that is started by hand (CI stays weekly), with the Qt license notices and a README download section; built and self-tested on Linux, to be tried on Windows by the owner. [#175](https://github.com/dwhagar/evolutionSimulator/pull/175)
 - `UX.30`: Family colour numbers for every animal (two values from the genome, close for relatives) in the frame, so the world view can colour by family (frame format 2). [#171](https://github.com/dwhagar/evolutionSimulator/pull/171)
 - `UX.16`: A charts panel in the viewer: population, births and deaths by cause, condition, trait and gene series, and gene distributions over time with a slider, drawn with pyqtgraph from the recorded history. [#170](https://github.com/dwhagar/evolutionSimulator/pull/170)
