@@ -7,6 +7,13 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `WORLD.5`: Day-night cycle and sleep: daylight from simulated time, darker nights shrink vision, sleeping animals stop sensing, moving, eating and mating and burn less energy, with a sleep listener hook for nightly learning. [#70](https://github.com/dwhagar/evolutionSimulator/pull/70)
+- `SENSE.11`: Sense genes: ranges that reach zero (a sense can be lost), noise that falls with the gene, and a cost charged on the area covered. [#68](https://github.com/dwhagar/evolutionSimulator/pull/68)
+- `WORLD.9`: The sensing and brain pass runs about 2.7 times faster. [#67](https://github.com/dwhagar/evolutionSimulator/pull/67)
+- `SENSE.10`: The sensing step as a pure function (`sense()`), with its constants in `SensingRules`. [#65](https://github.com/dwhagar/evolutionSimulator/pull/65)
+- `BRAIN.21`: One threshold (`Brain(dead_zone=...)`) for the brain's energy cost and its decisions. [#72](https://github.com/dwhagar/evolutionSimulator/pull/72)
+- `TRAIT.5`: Start-of-life state set at construction and a mating-cost guard against negative energy. [#66](https://github.com/dwhagar/evolutionSimulator/pull/66)
+- `SENSE.8`: Sense-channel registry: one table of brain inputs that generates `INPUT_NAMES`, `Percepts` and `build_inputs`. [#61](https://github.com/dwhagar/evolutionSimulator/pull/61)
 - `DOCS.7`: Decisions log updated with the owner's answers to the clarification issues [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) and [#27](https://github.com/dwhagar/evolutionSimulator/issues/27) (closed); the tasks they changed are `DNA.14`, `REPRO.7`, `TRAIT.7`, `TRAIT.8`, `WORLD.7`, with three points still unclear in [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
 - `DNA.13`: Diploid genomes: `DiploidDNA` with a per-gene `DominanceModel` (default codominant average), gametes from each parent, and a `Genome` protocol so traits accept either kind. Haploid stays plain `DNA`. [#63](https://github.com/dwhagar/evolutionSimulator/pull/63)
 - `BRAIN.13`, `BRAIN.15`: Design notes on a brain shape that evolves inside a fixed-length genome (`docs/design/brain-shape.md`) and on learning during life (`docs/design/brain-learning.md`); owner questions [#52](https://github.com/dwhagar/evolutionSimulator/issues/52) to [#56](https://github.com/dwhagar/evolutionSimulator/issues/56) and [#57](https://github.com/dwhagar/evolutionSimulator/issues/57) filed (`BRAIN.17` to `BRAIN.20`, `WORLD.6`). The builds are `BRAIN.23` and `BRAIN.24`. [#60](https://github.com/dwhagar/evolutionSimulator/pull/60)
