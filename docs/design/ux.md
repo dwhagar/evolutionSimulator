@@ -686,6 +686,48 @@ no Qt, so they are tested without a window.
   trail (UX.15 draws those; the canvas paints in screen pixels from `camera.to_screen`, so an overlay is
   one more painting step after the animals).
 
+### As built: the creature inspector (`UX.14`)
+
+`viewer/panels/inspector.py` keeps the `inspector` PANEL (right dock) and hands the window an
+`InspectorPanel` from `viewer/inspector/`. The parts:
+
+- **`describe.py`** (no Qt): everything the inspector says, as text and small records, so it is tested
+  without a window: age in the unit that fits and a life stage (young below 12% of the lifespan, old
+  from 75%; only a way of saying it, nothing in the simulation uses it), the state, the decision in
+  words ("turning hard left, fast, eating or attacking"), the trait groups, the genes by cluster and the
+  closest relatives.
+- **Tabs** are the `tab_*.py` modules of `viewer/inspector/`, each exposing a `TAB` (`TabSpec(id, title,
+  factory(context, parent), order)`) that `discover_tabs()` finds, so UX.15 adds `tab_brain.py` and
+  edits nothing shared. A tab is a `TabPage` and overrides what it needs of `show_detail(detail or
+  None)`, `show_frame(frame)` and `show_history(history)`.
+- **Body** (`tab_body.py`): energy, health and vitality as bars; age, state, the decision, whether the
+  brain has run yet, mass and diet, position and heading, matings; the traits in their units
+  (`catalogue.describe_trait`), with the senses' ranges in a group of their own. Traits that only restate
+  a gene's level are left to the Genes tab. The brain's inputs and hidden values arrive after its next
+  run (selecting forces none, on purpose), so the line says "waiting" until `detail.brain` is filled; the
+  decision (`detail.decision`) is there at once.
+- **Genes** (`tab_genes.py`): the genome read through `ANIMAL_LAYOUT` into the catalogue's named genes,
+  grouped by the layout's clusters (`describe_gene` gives the name and the tooltip), each a bar 0 to 1
+  with a tick at the living population's mean for that gene (the newest history sample,
+  `animal.gene.<id>`) and an orange bar when it is more than two standard deviations away. A checkbox
+  shows the raw base-4 digits of each gene and of the brain's block. A genome that is not the animal
+  layout's (the stand-in simulation's) says so instead.
+- **Family** (`tab_family.py`): parents, the father of the litter it carries, its living children
+  (`detail.children`) and the eight closest relatives alive, found as the nearest family keys
+  (`family_a`, `family_b`) in the newest frame. Each id is a button that sends `Select`; one for an
+  animal that is not in the frame is greyed out (a dead parent cannot be selected).
+- **Selection and `Esc`.** The selected creature is the session's (`status.selected`), so a click in the
+  world, a link here and the keyboard all agree. `deselect` (`Esc`, in `KEY_MAP`, the View menu and
+  `context.actions`) sends `Deselect` and clears the panel; it is disabled while nothing is selected. A
+  creature that dies arrives once more as a detail marked dead with its cause, and stays on screen
+  until another is chosen or `Esc` clears it (the status change that deselects it comes first in the
+  same poll, so the panel waits one event-loop turn before clearing for any other deselection).
+- **Building widgets.** Every widget is given its parent when it is made and a layout is set on its
+  owner before it is filled (the PySide6 double free found in UX.12). Rows that must change are made once
+  (`IdLinks` has a fixed pool of buttons) or the container is replaced as a whole.
+- **Not built.** The Brain tab and the sense overlays (UX.15); a list to pick a creature from; the
+  "stand out" mark for traits (genes only).
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these
