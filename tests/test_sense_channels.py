@@ -7,7 +7,7 @@ import pickle
 import pytest
 
 from evolution_simulator import brain_adapter
-from evolution_simulator.brain import DEFAULT_SHAPE
+from evolution_simulator.brain import DEFAULT_BLUEPRINT, DEFAULT_SHAPE
 from evolution_simulator.brain_adapter import INPUT_NAMES, Percepts, Temperament, build_inputs
 from evolution_simulator.sense_channels import (
     INPUT_CHANNELS,
@@ -23,15 +23,21 @@ from evolution_simulator.sense_channels import (
     world_channels,
 )
 
-BODY = {"energy_ratio": 0.5, "health_ratio": 0.5, "vitality": 0.5, "ready_to_mate": True}
+BODY = {
+    "energy_ratio": 0.5,
+    "health_ratio": 0.5,
+    "vitality": 0.5,
+    "ready_to_mate": True,
+    "pain": 0.0,
+}
 
 
 # --- the table ---------------------------------------------------------------
 
 
-def test_the_table_is_the_seventeen_inputs_in_their_documented_order():
+def test_the_table_is_the_twenty_inputs_in_their_documented_order():
     assert INPUT_NAMES == tuple(c.name for c in INPUT_CHANNELS)
-    assert len(INPUT_CHANNELS) == DEFAULT_SHAPE.inputs == 17
+    assert len(INPUT_CHANNELS) == DEFAULT_SHAPE.inputs == DEFAULT_BLUEPRINT.inputs == 20
     assert INPUT_NAMES[:4] == ("energy_ratio", "health_ratio", "vitality", "ready_to_mate")
     assert INPUT_NAMES[4:12] == (
         "plant_direction",
@@ -43,30 +49,39 @@ def test_the_table_is_the_seventeen_inputs_in_their_documented_order():
         "mate_direction",
         "mate_closeness",
     )
-    assert INPUT_NAMES[12:] == (
+    assert INPUT_NAMES[12:17] == (
         "touching",
         "alarm_strength",
         "mating_call_strength",
         "call_direction",
         "crowding",
     )
+    assert INPUT_NAMES[17:] == ("pain", "daylight", "relative_size")  # SENSE.9
 
 
 def test_ranges_match_the_design_note():
     by_name = {c.name: c for c in INPUT_CHANNELS}
     for name in INPUT_NAMES:
         c = by_name[name]
-        if c.role == "bearing":
+        if c.role == "bearing" or name == "relative_size":
             assert (c.low, c.high) == (-1.0, 1.0)
         else:
             assert (c.low, c.high) == (0.0, 1.0)
 
 
-def test_body_rows_come_first_and_have_no_senses():
+def test_body_rows_have_no_senses_and_world_rows_make_the_percepts():
     body = body_channels()
-    assert [c.name for c in body] == list(INPUT_NAMES[:4])
+    assert [c.name for c in body] == [*INPUT_NAMES[:4], "pain"]
     assert all(c.senses == () for c in body)
-    assert [c.name for c in world_channels()] == list(INPUT_NAMES[4:])
+    assert [c.name for c in world_channels()] == list(INPUT_NAMES[4:17] + INPUT_NAMES[18:])
+
+
+def test_daylight_is_ambient_and_the_only_input_the_sensing_ignores():
+    assert [c.name for c in INPUT_CHANNELS if c.ambient] == ["daylight"]
+    assert Percepts(daylight=0.7).senses_nothing  # the time of day is not a sense
+    assert not Percepts(relative_size=-0.5).senses_nothing
+    assert senses_reporting("relative_size") == ("vision", "hearing")
+    assert senses_reporting("daylight") == ()
 
 
 def test_every_target_has_a_bearing_and_a_closeness():
@@ -177,31 +192,31 @@ def test_inputs_come_out_in_table_order_with_body_values_in_their_rows():
     named = dict(zip(INPUT_NAMES, inputs))
     assert named["energy_ratio"] == 0.5 and named["ready_to_mate"] == 1.0
     assert named["call_direction"] == -0.5
-    assert len(inputs) == 17
+    assert len(inputs) == 20
 
 
 def test_body_values_must_be_given_by_name_and_all_of_them():
     with pytest.raises(TypeError):
         build_inputs(Percepts(), energy_ratio=0.5)  # missing the rest
     with pytest.raises(TypeError):
-        build_inputs(Percepts(), pain=0.1, **BODY)  # not a channel yet
+        build_inputs(Percepts(), thirst=0.1, **BODY)  # not a channel yet
 
 
 def test_a_new_input_is_one_row():
-    """Adding pain (body) and daylight (world) to a copy of the table changes nothing else."""
+    """Adding thirst (body) and wind (world) to a copy of the table changes nothing else."""
     extra = (
-        InputChannel("pain", 0.0, 1.0, "body", description="Health lost this tick."),
-        InputChannel("daylight", 0.0, 1.0, "world", "level", ("vision",)),
+        InputChannel("thirst", 0.0, 1.0, "body", description="Need to drink."),
+        InputChannel("wind", 0.0, 1.0, "world", "level", ("touch",)),
     )
     table = INPUT_CHANNELS[:4] + (extra[0],) + INPUT_CHANNELS[4:] + (extra[1],)
     FuturePercepts = percepts_class(table, "FuturePercepts")
-    assert "daylight" in {f.name for f in dataclasses.fields(FuturePercepts)}
-    assert "pain" not in {f.name for f in dataclasses.fields(FuturePercepts)}  # body, not percept
+    assert "wind" in {f.name for f in dataclasses.fields(FuturePercepts)}
+    assert "thirst" not in {f.name for f in dataclasses.fields(FuturePercepts)}  # body, not percept
     build = inputs_builder(table, lambda name, t: 1.0)
-    inputs = build(FuturePercepts(daylight=0.75, plant_closeness=0.2), pain=0.4, **BODY)
-    assert len(inputs) == 19
-    assert inputs[4] == 0.4  # pain sits after the four old body rows
+    inputs = build(FuturePercepts(wind=0.75, plant_closeness=0.2), thirst=0.4, **BODY)
+    assert len(inputs) == 22
+    assert inputs[4] == 0.4  # thirst sits after the four old body rows
     assert inputs[-1] == 0.75
     assert inputs[5] == 0.0  # plant_direction, shifted by one
     assert inputs[6] == 0.2  # plant_closeness, shifted by one
-    assert len(INPUT_CHANNELS) == 17  # the real table is untouched
+    assert len(INPUT_CHANNELS) == 20  # the real table is untouched

@@ -48,6 +48,9 @@ class InputChannel:
     """For bearing and closeness rows, the class of thing they describe."""
     scaled_by: str | None = None
     """Name of a ``Temperament`` field that scales this input (``BRAIN.14``)."""
+    ambient: bool = False
+    """A world input that is the state of the world, not something sensed (daylight): it does not
+    count against ``Percepts.senses_nothing``."""
     description: str = ""
 
     def __post_init__(self) -> None:
@@ -68,6 +71,8 @@ class InputChannel:
             raise ValueError(f"Channel {self.name!r} names unknown senses {sorted(unknown)}.")
         if self.source == "body" and self.senses:
             raise ValueError(f"Body channel {self.name!r} cannot be reported by a sense.")
+        if self.ambient and self.source != "world":
+            raise ValueError(f"Channel {self.name!r}: only a world channel can be ambient.")
         if self.target is not None and self.role not in ("bearing", "closeness"):
             raise ValueError(
                 f"Channel {self.name!r}: only bearing and closeness rows have a target."
@@ -119,6 +124,9 @@ INPUT_CHANNELS: tuple[InputChannel, ...] = (
     InputChannel("mating_call_strength", 0.0, 1.0, "world", "strength", ("hearing",), description="Mating call heard."),
     InputChannel("call_direction", -1.0, 1.0, "world", "bearing", ("hearing",), description="Bearing to the loudest call."),
     InputChannel("crowding", 0.0, 1.0, "world", "level", ("vision", "hearing"), description="Other animals in reach."),
+    InputChannel("pain", 0.0, 1.0, "body", description="Health lost since the last decision; 20% of maximum or more reads 1."),
+    InputChannel("daylight", 0.0, 1.0, "world", "level", ambient=True, description="0 full night, 1 full day."),
+    InputChannel("relative_size", -1.0, 1.0, "world", "level", ("vision", "hearing"), description="Size of the nearest prey or threat against its own: log2(mass ratio) / 2."),
 )  # fmt: skip
 
 
@@ -178,9 +186,13 @@ def percepts_class(
         for c in world_channels(channels)
     ]
 
+    sensed = tuple(c.name for c in world_channels(channels) if not c.ambient)
+
     def senses_nothing(self: Any) -> bool:
-        """True when the world reports nothing at all: no creature, plant, contact, call or crowd."""
-        return self == type(self)()
+        """True when the world reports nothing at all: no creature, plant, contact, call or crowd.
+        The time of day is not a sense and does not count."""
+        blank = type(self)()
+        return all(getattr(self, n) == getattr(blank, n) for n in sensed)
 
     cls = make_dataclass(
         name,

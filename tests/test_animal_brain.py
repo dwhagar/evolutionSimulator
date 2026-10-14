@@ -5,7 +5,7 @@ import random
 import pytest
 
 from evolution_simulator import traits as traits_module
-from evolution_simulator.brain import DEFAULT_SHAPE, Brain
+from evolution_simulator.brain import DEFAULT_BLUEPRINT, DEFAULT_SHAPE, Brain
 from evolution_simulator.brain_adapter import (
     INPUT_NAMES,
     BrainDecision,
@@ -17,18 +17,23 @@ from evolution_simulator.brain_adapter import (
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import (
-    BRAIN_ACTIVE_THRESHOLD,
     BRAIN_CONNECTION_COST,
+    BRAIN_DEAD_ZONE,
     BRAIN_NEURON_COST,
     AnimalTraits,
     PlantTraits,
 )
 
 BODY = ("0123" * 18)[:70]
-BRAIN = "".join(str((i * 7 + i // 5) % 4) for i in range(396))  # fixed, varied, not saturated
-PINNED = DNA(ANIMAL_LAYOUT, BODY + BRAIN)
-FAINT = "13" * 198  # every weight is level 7 of 16: -0.133, below the active threshold
-STRONG = "3" * 396  # every weight is +2.0
+OPERATING = (
+    "0" * 16
+)  # brain_gain, reaction_time, curiosity, learning_rate: gain 0.5, think every tick
+BRAIN = "".join(str((i * 7 + i // 5) % 4) for i in range(908))  # fixed, varied, not saturated
+PINNED = DNA(ANIMAL_LAYOUT, BODY + OPERATING + BRAIN)
+FAINT = (
+    "13" * 454
+)  # every value is level 7 of 16: -0.133, so every gate is off and weights are dead
+STRONG = "3" * 908  # every value is +2.0: every gate on, every weight live
 
 SEEN = Percepts(
     plant_direction=-0.5, plant_closeness=0.8, threat_direction=0.2, threat_closeness=0.1
@@ -44,11 +49,13 @@ def with_brain(digits: str) -> DNA:
 
 def test_the_brain_is_built_from_the_genome_at_birth():
     traits = AnimalTraits(PINNED)
-    assert traits.brain == Brain.from_values(
-        DEFAULT_SHAPE, PINNED.values("brain"), dead_zone=BRAIN_ACTIVE_THRESHOLD
+    expected = DEFAULT_BLUEPRINT.build(
+        PINNED.values("brain"), dead_zone=BRAIN_DEAD_ZONE, gain=traits.brain.gain
     )
-    assert traits.brain.shape is DEFAULT_SHAPE
-    assert len(traits.brain.to_values()) == 198
+    assert traits.brain == expected
+    assert traits.brain.shape.inputs == DEFAULT_SHAPE.inputs == 20
+    assert traits.brain.shape.hidden == len(DEFAULT_BLUEPRINT.slots_on(PINNED.values("brain")))
+    assert len(traits.brain.to_values()) == traits.brain.shape.weight_count
 
 
 def test_different_genomes_give_different_brains_and_the_same_genome_the_same():
@@ -73,11 +80,14 @@ def test_plants_have_no_brain():
 
 def test_upkeep_charges_per_neuron_and_per_active_connection():
     faint, strong = AnimalTraits(with_brain(FAINT)), AnimalTraits(with_brain(STRONG))
-    assert faint.brain.active_connections(BRAIN_ACTIVE_THRESHOLD) == 0
-    assert faint.brain_upkeep == pytest.approx(BRAIN_NEURON_COST * 14)
-    assert strong.brain.active_connections(BRAIN_ACTIVE_THRESHOLD) == 17 * 8 + 8 * 6
+    # every gate off keeps one hidden neuron, whose weights are all inside the dead zone
+    assert faint.brain.shape.hidden == 1 and faint.brain.active_connections() == 0
+    assert faint.brain_upkeep == pytest.approx(BRAIN_NEURON_COST * 7)
+    # every gate on: 16 hidden neurons, each with 20 inputs and 6 outputs, all live
+    assert strong.brain.shape.hidden == 16
+    assert strong.brain.active_connections() == 16 * (20 + 6)
     assert strong.brain_upkeep == pytest.approx(
-        BRAIN_NEURON_COST * 14 + BRAIN_CONNECTION_COST * 184
+        BRAIN_NEURON_COST * 22 + BRAIN_CONNECTION_COST * 416
     )
 
 
@@ -86,22 +96,23 @@ def test_the_cost_threshold_is_the_brains_dead_zone():
     for seed in range(5):
         traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, random.Random(seed)))
         brain = traits.brain
-        assert brain.dead_zone == BRAIN_ACTIVE_THRESHOLD
+        shape = brain.shape
+        assert brain.dead_zone == BRAIN_DEAD_ZONE
         values = list(brain.to_values())
-        size = DEFAULT_SHAPE.neuron_size
+        size = shape.neuron_size
         weight_positions = [
             j * size + i
-            for j in range(DEFAULT_SHAPE.hidden)
+            for j in range(shape.hidden)
             for i in range(1, size)  # everything in a neuron block but its bias
         ]
-        live = [i for i in weight_positions if abs(values[i]) > BRAIN_ACTIVE_THRESHOLD]
+        live = [i for i in weight_positions if abs(values[i]) > BRAIN_DEAD_ZONE]
         assert brain.active_connections() == len(live)
         # switching off every weight that costs nothing changes nothing the creature does
         cut = [0.0 if i in weight_positions and i not in live else v for i, v in enumerate(values)]
-        plain = Brain.from_values(DEFAULT_SHAPE, cut)
-        inputs = [random.Random(seed).uniform(-1, 1) for _ in range(DEFAULT_SHAPE.inputs)]
+        plain = Brain.from_values(shape, cut, gain=brain.gain)
+        inputs = [random.Random(seed).uniform(-1, 1) for _ in range(shape.inputs)]
         assert brain.decide(inputs) == plain.decide(inputs)
-        assert plain.active_connections(BRAIN_ACTIVE_THRESHOLD) == len(live)
+        assert plain.active_connections(BRAIN_DEAD_ZONE) == len(live)
 
 
 def test_a_faint_brain_acts_only_through_its_biases():
@@ -141,7 +152,7 @@ def test_a_typical_random_brain_costs_a_few_percent_of_the_basal_budget():
 def test_the_cost_constants_are_module_level_so_they_can_move_to_config():
     assert traits_module.BRAIN_NEURON_COST > 0
     assert traits_module.BRAIN_CONNECTION_COST > 0
-    assert 0 < traits_module.BRAIN_ACTIVE_THRESHOLD < 2.0
+    assert 0 < traits_module.BRAIN_DEAD_ZONE < 2.0
 
 
 # --- thinking ---------------------------------------------------------------
@@ -164,6 +175,7 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
                 health_ratio=traits.current_health / traits.max_damage_capacity,
                 vitality=traits.vitality,
                 ready_to_mate=True,
+                pain=0.0,
                 temperament=Temperament(
                     traits.current_aggression,
                     traits._effective_fear(),
@@ -178,14 +190,15 @@ def test_think_runs_the_brain_on_the_animals_state_and_the_percepts():
 # Re-pinned for the animal layout with the three reproduction genes (REPRO.5): the body digits of
 # this genome now spell different genes.
 def test_pinned_decision_for_a_fixed_genome():
+    # Checked against a separate forward pass written from the genome values (gates, dead zone, gain).
     decision = adult(PINNED).think(SEEN)
-    assert decision.turn == pytest.approx(-0.783960832)
-    assert decision.speed == pytest.approx(0.994782749)
-    assert decision.eat_or_attack == pytest.approx(0.321942838)
-    assert decision.seek_mating == pytest.approx(0.984173382)
-    assert decision.alarm_call == pytest.approx(0.980643574)
-    assert decision.mating_call == pytest.approx(0.258157744)
-    assert decision.eats_or_attacks is False and decision.seeks_mating is True
+    assert decision.turn == pytest.approx(0.928239061)
+    assert decision.speed == pytest.approx(0.476344698)
+    assert decision.eat_or_attack == pytest.approx(0.911143506)
+    assert decision.seek_mating == pytest.approx(0.127545809)
+    assert decision.alarm_call == pytest.approx(0.719130673)
+    assert decision.mating_call == pytest.approx(0.838283436)
+    assert decision.eats_or_attacks is True and decision.seeks_mating is False
 
 
 def test_think_is_repeatable_and_changes_nothing():
@@ -391,6 +404,7 @@ def mate_input(percepts: Percepts, drive: float) -> float:
         health_ratio=1.0,
         vitality=1.0,
         ready_to_mate=True,
+        pain=0.0,
         temperament=Temperament(repro_drive=drive),
     )
     return inputs[INPUT_NAMES.index("mate_closeness")]

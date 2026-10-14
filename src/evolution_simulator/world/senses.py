@@ -135,6 +135,12 @@ class BasicSenses:
         prey_dir, prey_close = aim(nearest.get("prey"))
         threat_dir, threat_close = aim(nearest.get("threat"))
         mate_dir, mate_close = aim(nearest.get("mate"))
+        # Size of the nearer of the prey and threat, as log2 of the mass ratio over 2.
+        sized = [nearest[r] for r in ("prey", "threat") if r in nearest]
+        relative_size = 0.0
+        if sized:
+            other = min(sized, key=lambda found: found[:2])[2]
+            relative_size = max(-1.0, min(1.0, math.log2(other.traits.mass / traits.mass) / 2.0))
         return Percepts(
             plant_direction=plant_dir,
             plant_closeness=plant_close,
@@ -146,4 +152,6 @@ class BasicSenses:
             mate_closeness=mate_close,
             touching=touching,
             crowding=min(1.0, crowd / CROWDING_FULL),
+            daylight=world.daylight,
+            relative_size=relative_size,
         )
