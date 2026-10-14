@@ -269,7 +269,36 @@ class Brain:
         base = shape.hidden * size
         for k in range(shape.outputs):
             values[base + k] += bias_offsets[k]
-        return Brain(shape, values, self.dead_zone, self.gain)
+        # Only the output layer changed, so share the hidden layer (which is immutable) instead of
+        # building it again; the result is the brain ``Brain(shape, values, ...)`` would make.
+        numbers = tuple(values)
+        if not all(math.isfinite(v) for v in numbers[base:]) or not all(
+            math.isfinite(numbers[j * size + out_start + k])
+            for j in range(shape.hidden)
+            for k in range(shape.outputs)
+        ):
+            raise ValueError("Brain values must be finite numbers.")
+        dead_zone = self.dead_zone
+
+        def weight(value: float) -> float:
+            return 0.0 if abs(value) <= dead_zone else value
+
+        output_biases = numbers[base:]
+        outputs = tuple(
+            (
+                output_biases[k],
+                tuple(weight(numbers[j * size + out_start + k]) for j in range(shape.hidden)),
+            )
+            for k in range(shape.outputs)
+        )
+        fresh = object.__new__(Brain)
+        object.__setattr__(fresh, "shape", shape)
+        object.__setattr__(fresh, "dead_zone", dead_zone)
+        object.__setattr__(fresh, "gain", self.gain)
+        object.__setattr__(fresh, "_values", numbers)
+        object.__setattr__(fresh, "_hidden", self._hidden)
+        object.__setattr__(fresh, "_outputs", outputs)
+        return fresh
 
     # -------------------------------------------------------------------------
     # Size, for the energy cost of thinking
