@@ -6,11 +6,12 @@ from test_animal_brain import counted
 from world_support import animal_dna
 
 from evolution_simulator.brain_adapter import Percepts
+from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import PLANT_LAYOUT
-from evolution_simulator.traits import INTERRUPT_PAIN
 from evolution_simulator.world import Vec, World, WorldConfig
 
+INTERRUPT_PAIN = DEFAULT_RULES.brain.interrupt_pain
 QUIET = Percepts(plant_direction=0.2, plant_closeness=0.5)
 THREAT = Percepts(
     plant_direction=0.2, plant_closeness=0.5, threat_direction=-0.3, threat_closeness=0.4

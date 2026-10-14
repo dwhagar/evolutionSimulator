@@ -5,7 +5,6 @@ import random
 import pytest
 from genome_support import dna_from_v6
 
-from evolution_simulator import traits as traits_module
 from evolution_simulator.brain import DEFAULT_BLUEPRINT, DEFAULT_SHAPE, Brain
 from evolution_simulator.brain_adapter import (
     INPUT_NAMES,
@@ -15,15 +14,14 @@ from evolution_simulator.brain_adapter import (
     build_inputs,
     decode_outputs,
 )
+from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
-from evolution_simulator.traits import (
-    BRAIN_CONNECTION_COST,
-    BRAIN_DEAD_ZONE,
-    BRAIN_NEURON_COST,
-    AnimalTraits,
-    PlantTraits,
-)
+from evolution_simulator.traits import AnimalTraits, PlantTraits
+
+BRAIN_NEURON_COST = DEFAULT_RULES.brain.neuron_cost
+BRAIN_CONNECTION_COST = DEFAULT_RULES.brain.connection_cost
+BRAIN_DEAD_ZONE = DEFAULT_RULES.brain.dead_zone
 
 OLD_BODY = ("0123" * 18)[:70]
 BODY = (
@@ -154,10 +152,10 @@ def test_a_typical_random_brain_costs_a_few_percent_of_the_basal_budget():
     assert max(ratios) < 0.15
 
 
-def test_the_cost_constants_are_module_level_so_they_can_move_to_config():
-    assert traits_module.BRAIN_NEURON_COST > 0
-    assert traits_module.BRAIN_CONNECTION_COST > 0
-    assert 0 < traits_module.BRAIN_DEAD_ZONE < 2.0
+def test_the_cost_constants_live_in_the_brain_rules():
+    assert BRAIN_NEURON_COST > 0
+    assert BRAIN_CONNECTION_COST > 0
+    assert 0 < BRAIN_DEAD_ZONE < 2.0
 
 
 # --- thinking ---------------------------------------------------------------
@@ -399,7 +397,6 @@ def test_a_slower_thinker_pays_proportionally_less_upkeep():
 def test_the_interval_must_be_at_least_one_tick():
     with pytest.raises(ValueError):
         adult(PINNED, decision_interval=0)
-    assert traits_module.DECISION_INTERVAL >= 1
 
 
 # --- the reproduction drive (REPRO.5) -----------------------------------------

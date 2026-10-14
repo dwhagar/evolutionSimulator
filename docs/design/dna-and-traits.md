@@ -190,10 +190,9 @@ into clusters, with the five reproduction genes next to each other: layout versi
 - **Not built.** The protective effect of `parenting` on aggression and fear and the "own young" channel need a
   "young nearby" sense (`SENSE.14`), so parenting acts through energy only for now. The pregnancy list is kept on
   the bearers (visited in id order) rather than as a separate list in the world; the behaviour is the same.
-- **Constants.** `traits.py` holds them as named module constants (`WEAR_BASE`, `DRIVE_WEAR`, `REPAIR_*`,
-  `READINESS_*`, `DRIVE_*`, `SEX_DRIVE_MODIFIER`, `MATURITY_SHARE`, `MATING_EFFORT`, `FERTILITY_*`, `LITTER_MAX`,
-  `GESTATION_*`, `HEAL_*`, `RECOVERY_*`), named as in the design note's table so `TRAIT.3` can move them into the
-  config object. The gene ranges are in `trait_defs.py`.
+- **Constants.** They are fields of the rules tree in `config.py` (`TRAIT.3`; `life.wear_base`, `life.drive_wear`,
+  `reproduction.*`, `recovery.*` and so on, listed in [trait-config.md](trait-config.md)), named after the design note's
+  table. The gene ranges are in `trait_defs.py`.
 - **Long-run check.** `scripts/reproduction_check.py` runs the real traits in a small food-limited ecology and
   reports where the genes settle; see [reproduction-genes.md](reproduction-genes.md#long-run-check).
 

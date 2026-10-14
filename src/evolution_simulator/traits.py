@@ -2,8 +2,8 @@
 
 Each traits class reads its genes once to fix the organism's static phenotype (mass, speed, senses,
 upkeep and so on), then tracks runtime state (energy, health, age, drive flags) as the simulation
-ticks. All numeric constants below are the original prototype's tuning values; they are meant to
-be adjusted as the world model arrives.
+ticks. Every tuning number is in the rules tree of ``config.py`` (``TraitRules``, ``TRAIT.3``): an
+organism takes ``rules=`` and reads them from there, so nothing here is a constant.
 
 Anything random takes an injected ``random.Random`` so runs are repeatable.
 """
@@ -24,6 +24,7 @@ from evolution_simulator.brain_adapter import (
     build_inputs,
     decode_outputs,
 )
+from evolution_simulator.config import DEFAULT_RULES, TraitRules
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.learning import Learner, LearningRules, State
@@ -36,119 +37,6 @@ from evolution_simulator.sense_genes import (
     working_acuity,
 )
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
-
-# Energy cost of thinking per tick, added to basal metabolism. Placeholders for the first brain
-# (BRAIN.5, issue #25): they put a typical random brain at a few percent of the basal budget and are
-# meant to move into the shared config object (TRAIT.3).
-BRAIN_NEURON_COST: float = 0.0005
-"""Per hidden or output neuron."""
-BRAIN_CONNECTION_COST: float = 0.0001
-"""Per active connection, a weight whose absolute value is above ``BRAIN_DEAD_ZONE``."""
-BRAIN_DEAD_ZONE: float = 0.5
-"""The brain's dead zone (``BRAIN.21``, ``BRAIN.23``): a weight at or below this is off, both for cost
-and in ``Brain.decide``, so a connection pays only if it does something. At 0.5 a quarter of random
-weights are off (the levels at about +-0.13 and +-0.4)."""
-DECISION_INTERVAL: int = 1
-"""Ticks between brain decisions (``BRAIN.11``) for an animal built with an explicit interval; the
-default comes from the animal's ``reaction_time`` gene. Between decisions the animal keeps its last
-one. Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to
-move into the shared config object (TRAIT.3)."""
-INTERRUPT_PAIN: float = 0.05
-"""Pain at or above this (1% of maximum health lost since the last decision) cuts the decision
-interval short, so a hurt animal reacts at once (``BRAIN.22``)."""
-PAIN_FULL_FRACTION: float = 0.2
-"""Losing this fraction of maximum health (or more) since the last decision reads as full pain."""
-
-# Time. Every per-tick rate in this file is "per reference tick" (REPRO.8): an hour of simulated
-# time. The world multiplies the rates by ``dt = seconds_per_tick / REFERENCE_TICK_SECONDS``, so a
-# different tick length changes how many ticks things take, not how long they take. Durations are
-# kept in reference ticks (hours) too. Meant to move into the shared config object (TRAIT.3).
-REFERENCE_TICK_SECONDS: float = 3600.0
-TICKS_PER_DAY: float = 24.0
-"""Reference ticks in a simulated day."""
-
-# Wear and repair. Lifespan is the damage an animal can take divided by its wear per reference tick.
-WEAR_BASE: float = 0.0362
-"""Damage accumulated per reference tick with no repair and no drive. A default animal (size 0.5,
-repair 0.5, drive 0.5) lives 8,765 reference ticks, about a simulated year."""
-REPAIR_WEAR_DAMPING: float = 3.5
-"""Wear is divided by ``1 + REPAIR_WEAR_DAMPING * somatic_maint``."""
-DRIVE_WEAR: float = 0.6
-"""Wear is multiplied by ``1 + DRIVE_WEAR * repro_drive``: a strong urge to mate shortens life."""
-
-# Longevity trades against reproduction (TRAIT.6, docs/design/reproduction-genes.md). These are
-# starting values to be tuned and meant to move into the shared config object (TRAIT.3).
-REPAIR_COST: float = 0.20
-"""Upkeep per tick at full repair; it grows with the square of ``somatic_maint`` (convex)."""
-REPAIR_COST_EXPONENT: float = 2.0
-REPAIR_BIRTH_SURCHARGE: float = 2.0
-"""A parent's cost of a birth is multiplied by ``1 + REPAIR_BIRTH_SURCHARGE * somatic_maint``."""
-REPAIR_COOLDOWN_STRETCH: float = 1.0
-"""The cooldown is multiplied by ``1 + REPAIR_COOLDOWN_STRETCH * somatic_maint``."""
-
-# Plants (REPRO.3).
-SEED_BUDGET_SHARE: float = 0.35
-"""Share of its biomass a plant can put into one burst of seeds (the prototype's fixed number), before
-the longevity trade-off."""
-PLANT_LONGEVITY_GROWTH: float = 0.3
-"""Growth is multiplied by ``1 - PLANT_LONGEVITY_GROWTH * longevity``: a long-lived plant grows slower."""
-PLANT_LONGEVITY_SEEDS: float = 0.4
-"""The seed budget share is multiplied by ``1 - PLANT_LONGEVITY_SEEDS * longevity``: a long-lived plant
-seeds less."""
-SEED_READY_SHARE: float = 0.85
-"""A plant is ready to seed once it holds this share of its full size (the prototype's number)."""
-
-# Reproduction genes (REPRO.5, REPRO.8).
-READINESS_UPKEEP: float = 0.03
-"""Upkeep per tick for staying ready to breed, at ``READINESS_REFERENCE_DAYS`` between matings."""
-READINESS_REFERENCE_DAYS: float = 5.0
-READINESS_EXPONENT: float = 0.5
-"""Readiness upkeep is ``READINESS_UPKEEP * (REFERENCE_DAYS / cooldown_days) ** EXPONENT``."""
-DRIVE_UPKEEP: float = 0.05
-DRIVE_UPKEEP_EXPONENT: float = 2.0
-"""Upkeep per tick for the urge to mate: ``DRIVE_UPKEEP * repro_drive ** EXPONENT``."""
-DRIVE_THRESHOLD_BASE: float = 0.85
-DRIVE_THRESHOLD_SLOPE: float = 0.5
-DRIVE_THRESHOLD_VITALITY: float = 0.2
-DRIVE_THRESHOLD_RANGE: tuple[float, float] = (0.10, 0.95)
-"""Energy share needed to start looking for a mate:
-``clamp(BASE - SLOPE * drive - VITALITY * (1 - vitality), *RANGE)``."""
-DRIVE_BOLDNESS: float = 0.3
-"""While a mate is in view, fear is multiplied by ``1 - DRIVE_BOLDNESS * repro_drive``."""
-SEX_DRIVE_MODIFIER: Mapping[int, float] = {2: 0.25, 3: -0.25}
-"""The sex digit's second job: digit 2 raises the effective drive by 25%, digit 3 lowers it by 25%.
-The sex itself is the digit modulo 2: 0 impregnates, 1 bears."""
-MATURITY_SHARE: float = 0.06
-"""An animal can first mate at this share of its expected lifespan."""
-MATING_EFFORT: float = 0.03
-"""Share of its energy store each partner spends on a mating, whether or not it takes."""
-FERTILITY_CONCEPTION_BASE: float = 0.30
-FERTILITY_CONCEPTION_SLOPE: float = 0.60
-"""A mating takes with chance ``BASE + SLOPE * mean fertility of the two``."""
-LITTER_MAX: int = 8
-"""Litter size is ``1 + round(litter_capacity * (LITTER_MAX - 1))``: the bearer's ``fertility`` gene
-scaled by her size and recovery genes."""
-GESTATION_DAYS_BASE: float = 2.0
-GESTATION_DAYS_SPAN: float = 18.0
-"""Gestation is ``BASE + SPAN * fertility`` days (the bearer's gene)."""
-FERTILITY_UPKEEP: float = 0.04
-FERTILITY_UPKEEP_EXPONENT: float = 2.0
-GESTATION_UPKEEP: float = 0.5
-"""A pregnant bearer burns an extra ``GESTATION_UPKEEP * litter / LITTER_MAX`` of her basal metabolism."""
-GESTATION_SLOWING: float = 0.3
-"""A pregnant bearer's top speed is multiplied by ``1 - GESTATION_SLOWING * litter / LITTER_MAX``."""
-
-# Recovery (TRAIT.7).
-HEAL_HALFLIFE_DAYS: tuple[float, float] = (20.0, 1.0)
-"""Half-life of lost health at recovery 0 and recovery 1 (log scale between)."""
-HEAL_ENERGY_COST: float = 0.5
-"""Energy spent per point of health healed."""
-HEAL_MIN_ENERGY_RATIO: float = 0.5
-"""Lost health only heals while the energy store is at least this full."""
-RECOVERY_REGAIN: tuple[float, float] = (0.5, 2.0)
-"""Multiplier on ``SleepRules.energy_regain`` at recovery 0 and recovery 1."""
-RECOVERY_UPKEEP: float = 0.10
-RECOVERY_UPKEEP_EXPONENT: float = 2.0
 
 # =============================================================================
 # Base Traits: Shared Organism Physiology, Vitality & Mortality
@@ -259,7 +147,12 @@ class AnimalTraits(BaseTraits):
     metabolic trade-offs, senescence degradation, and environmental drive flags.
     """
 
-    def __init__(self, dna: Genome, decision_interval: int | None = None) -> None:
+    def __init__(
+        self,
+        dna: Genome,
+        decision_interval: int | None = None,
+        rules: TraitRules = DEFAULT_RULES,
+    ) -> None:
         if dna.layout != ANIMAL_LAYOUT:
             raise TypeError("AnimalTraits requires DNA with the animal layout.")
         t = ANIMAL_TRAITS.express(dna)
@@ -268,28 +161,37 @@ class AnimalTraits(BaseTraits):
         if decision_interval < 1:
             raise ValueError(f"Decision interval must be at least 1 tick, got {decision_interval}.")
         super().__init__(dna, t)
+        self.rules: TraitRules = rules
+        """Every tuning constant this animal lives by (``config.py``)."""
+        body = rules.body
 
         # ---------------------------------------------------------------------
         # 1. Epistatic Coupling & Allometric Scaling
         # ---------------------------------------------------------------------
         self.mass = float(t["mass"])
-        self.max_damage_capacity = 100.0 * (1.0 + t["size"])
-        self.max_energy = 100.0 * (1.0 + (2.0 * t["size"]))
+        self.max_damage_capacity = body.damage_capacity * (1.0 + t["size"])
+        self.max_energy = body.energy_capacity * (1.0 + (body.energy_size_gain * t["size"]))
 
-        self.base_max_speed: float = (2.0 + (6.0 * t["speed"])) / (1.0 + (0.8 * t["size"]))
-        self.base_turn_rate: float = (0.05 + (0.25 * t["agility"])) / (1.0 + (0.5 * t["size"]))
+        self.base_max_speed: float = (body.speed_base + (body.speed_span * t["speed"])) / (
+            1.0 + (body.speed_size_drag * t["size"])
+        )
+        self.base_turn_rate: float = (body.turn_base + (body.turn_span * t["agility"])) / (
+            1.0 + (body.turn_size_drag * t["size"])
+        )
 
         # Sensory geometry
         # The eye (SENSE.16): the field gene is the half-angle, and working acuity is capped by it.
         self.acuity: float = working_acuity(t["sight_fov"], t["sight_acuity"])
-        self.effective_sight_range: float = vision_reach(t["sight_reach"], self.acuity)
+        self.effective_sight_range: float = vision_reach(
+            t["sight_reach"], self.acuity, rules.organs
+        )
         self.fov_half_degrees: float = t["fov_half_degrees"]
         self.fov_degrees: float = 2.0 * self.fov_half_degrees
         self.hearing_range: float = t["hearing_range"]
         self.smell_sensitivity: float = t["smell"]
         self.smell_range: float = t["smell_range"]
 
-        self.body_radius: float = 0.5 * (self.mass**0.33)
+        self.body_radius: float = body.body_radius_scale * (self.mass**body.body_radius_exponent)
         self.tactile_range: float = self.body_radius * t["tactile_factor"]
 
         # Neural & Digestive Upkeep ("The Brain and Gut Tax")
@@ -302,16 +204,19 @@ class AnimalTraits(BaseTraits):
             t["touch"],
             t["taste"],
             self.acuity,
+            rules.organs,
         )
-        self.vision_noise: float = vision_direction_noise(self.acuity)
-        self.vision_closeness_noise: float = vision_closeness_noise(self.acuity)
-        self.hearing_noise: float = direction_noise("hearing", t["hearing"])
-        self.smell_noise: float = direction_noise("smell", t["smell"])
-        self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
+        self.vision_noise: float = vision_direction_noise(self.acuity, rules.organs)
+        self.vision_closeness_noise: float = vision_closeness_noise(self.acuity, rules.organs)
+        self.hearing_noise: float = direction_noise("hearing", t["hearing"], rules.organs)
+        self.smell_noise: float = direction_noise("smell", t["smell"], rules.organs)
+        self.gut_maintenance: float = body.gut_cost * (
+            (t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2)
+        )
         # The brain is read from the genome once at birth, like the body.
         # Its size comes from the gates in the genome, its sharpness from the gain gene.
         self.innate_brain: Brain = DEFAULT_BLUEPRINT.build(
-            dna.values("brain"), dead_zone=BRAIN_DEAD_ZONE, gain=t["brain_gain"]
+            dna.values("brain"), dead_zone=rules.brain.dead_zone, gain=t["brain_gain"]
         )
         # What it thinks with: the inherited brain plus what it has learned (BRAIN.24).
         self.brain: Brain = self.innate_brain
@@ -330,20 +235,25 @@ class AnimalTraits(BaseTraits):
         """The threat closeness the last time the brain looked, for the learning log."""
         self._ticks_since_decision: int = 0
         self.brain_upkeep: float = (
-            BRAIN_NEURON_COST * self.brain.neuron_count
-            + BRAIN_CONNECTION_COST * self.brain.active_connections()
+            rules.brain.neuron_cost * self.brain.neuron_count
+            + rules.brain.connection_cost * self.brain.active_connections()
         ) / self.decision_interval
-        self.repair_upkeep: float = REPAIR_COST * (t["somatic_maint"] ** REPAIR_COST_EXPONENT)
-        self.readiness_upkeep: float = READINESS_UPKEEP * (
-            (READINESS_REFERENCE_DAYS / t["cooldown_days"]) ** READINESS_EXPONENT
+        life, repro, recovery = rules.life, rules.reproduction, rules.recovery
+        self.repair_upkeep: float = life.repair_cost * (
+            t["somatic_maint"] ** life.repair_cost_exponent
         )
-        self.drive_upkeep: float = DRIVE_UPKEEP * (t["repro_drive"] ** DRIVE_UPKEEP_EXPONENT)
-        self.fertility_upkeep: float = FERTILITY_UPKEEP * (
-            t["fertility"] ** FERTILITY_UPKEEP_EXPONENT
+        self.readiness_upkeep: float = repro.readiness_upkeep * (
+            (repro.readiness_reference_days / t["cooldown_days"]) ** repro.readiness_exponent
         )
-        self.recovery_upkeep: float = RECOVERY_UPKEEP * (t["recovery"] ** RECOVERY_UPKEEP_EXPONENT)
+        self.drive_upkeep: float = repro.drive_upkeep * (
+            t["repro_drive"] ** repro.drive_upkeep_exponent
+        )
+        self.fertility_upkeep: float = repro.fertility_upkeep * (
+            t["fertility"] ** repro.fertility_upkeep_exponent
+        )
+        self.recovery_upkeep: float = recovery.upkeep * (t["recovery"] ** recovery.upkeep_exponent)
         self.basal_metabolism = (
-            (0.18 * (self.mass**0.75))
+            (body.basal_scale * (self.mass**body.basal_exponent))
             + self.repair_upkeep
             + self.readiness_upkeep
             + self.drive_upkeep
@@ -363,27 +273,30 @@ class AnimalTraits(BaseTraits):
         # prototype's and are kept as they were.
         self.sex_type: int = int(t["sex_strategy"])
         self.sex: int = self.sex_type % 2
-        self.drive_modifier: float = SEX_DRIVE_MODIFIER.get(self.sex_type, 0.0)
+        self.drive_modifier: float = dict(repro.sex_drive_modifier).get(self.sex_type, 0.0)
         self.effective_drive: float = min(
             1.0, max(0.0, t["repro_drive"] * (1.0 + self.drive_modifier))
         )
+        behaviour = rules.behaviour
         self.base_fear_weight: float = t["fear"]
         self.base_aggression: float = t["aggression"]
 
         if self.sex_type == 0:  # Tournament Male
-            self.base_aggression = min(1.0, self.base_aggression * 1.35)
-            self.base_fear_weight *= 0.65
+            self.base_aggression = min(
+                1.0, self.base_aggression * behaviour.tournament_male_aggression
+            )
+            self.base_fear_weight *= behaviour.tournament_male_fear
         elif self.sex_type == 3:  # Brooding Female
-            self.base_fear_weight = min(1.0, self.base_fear_weight * 1.3)
+            self.base_fear_weight = min(1.0, self.base_fear_weight * behaviour.brooding_female_fear)
 
         # ---------------------------------------------------------------------
         # 2. Dynamic Runtime States
         # ---------------------------------------------------------------------
-        self.current_energy = self.max_energy * 0.75
+        self.current_energy = self.max_energy * body.start_energy
         self.current_health = self.max_damage_capacity
         # A juvenile cannot mate until it has grown for a share of its expected lifespan. The
         # cooldown counts down in reference ticks, so it is a float.
-        self.mating_cooldown: float = MATURITY_SHARE * self.lifespan_ticks
+        self.mating_cooldown: float = repro.maturity_share * self.lifespan_ticks
         self.pregnancy: Pregnancy | None = None
 
         # Environmental stimulus inputs
@@ -418,8 +331,13 @@ class AnimalTraits(BaseTraits):
     def wear_per_tick(self) -> float:
         """Damage added per reference tick: the base wear, quicker with a strong urge to mate, slowed
         by repair (``somatic_maint``)."""
-        drive = 1.0 + (DRIVE_WEAR * self.phenotype["repro_drive"])
-        return WEAR_BASE * drive / (1.0 + (REPAIR_WEAR_DAMPING * self.phenotype["somatic_maint"]))
+        life = self.rules.life
+        drive = 1.0 + (life.drive_wear * self.phenotype["repro_drive"])
+        return (
+            life.wear_base
+            * drive
+            / (1.0 + (life.repair_wear_damping * self.phenotype["somatic_maint"]))
+        )
 
     @property
     def lifespan_ticks(self) -> float:
@@ -430,20 +348,23 @@ class AnimalTraits(BaseTraits):
     def cooldown_ticks(self) -> float:
         """Reference ticks before this animal can mate again: the ``repro_cooldown`` gene in days,
         stretched by repair (the energy that goes into repair is not there for breeding)."""
-        stretch = 1.0 + (REPAIR_COOLDOWN_STRETCH * self.phenotype["somatic_maint"])
-        return self.phenotype["cooldown_days"] * TICKS_PER_DAY * stretch
+        stretch = 1.0 + (self.rules.life.repair_cooldown_stretch * self.phenotype["somatic_maint"])
+        return self.phenotype["cooldown_days"] * self.rules.time.ticks_per_day * stretch
 
     @property
     def litter_size(self) -> int:
         """Young per birth if this animal bears: the ``litter_capacity`` cluster, which is the
         ``fertility`` gene scaled by body size and recovery (``DNA.15``)."""
-        return 1 + round(self.phenotype["litter_capacity"] * (LITTER_MAX - 1))
+        return 1 + round(
+            self.phenotype["litter_capacity"] * (self.rules.reproduction.litter_max - 1)
+        )
 
     @property
     def gestation_ticks(self) -> float:
         """Reference ticks a litter is carried if this animal bears."""
-        days = GESTATION_DAYS_BASE + (GESTATION_DAYS_SPAN * self.phenotype["fertility"])
-        return days * TICKS_PER_DAY
+        repro = self.rules.reproduction
+        days = repro.gestation_days_base + (repro.gestation_days_span * self.phenotype["fertility"])
+        return days * self.rules.time.ticks_per_day
 
     @property
     def is_pregnant(self) -> bool:
@@ -457,28 +378,32 @@ class AnimalTraits(BaseTraits):
     @property
     def rest_regain_factor(self) -> float:
         """Multiplier on the energy regained at rest (``recovery``)."""
-        low, high = RECOVERY_REGAIN
+        low, high = self.rules.recovery.rest_regain
         return low + (high - low) * self.phenotype["recovery"]
 
     @property
     def heal_halflife_ticks(self) -> float:
         """Reference ticks for half of the lost health to heal (``recovery``, log scale)."""
-        slow, fast = HEAL_HALFLIFE_DAYS
-        return slow * (fast / slow) ** self.phenotype["recovery"] * TICKS_PER_DAY
+        slow, fast = self.rules.recovery.heal_halflife_days
+        return slow * (fast / slow) ** self.phenotype["recovery"] * self.rules.time.ticks_per_day
 
     def _refresh_vitality_dependents(self) -> None:
         v = self.vitality
+        body, repro = self.rules.body, self.rules.reproduction
         health_ratio = max(0.0, self.current_health / self.max_damage_capacity)
-        physical_factor = v * (0.35 + (0.65 * health_ratio))
+        physical_factor = v * (body.health_floor + ((1.0 - body.health_floor) * health_ratio))
 
-        self.current_max_speed = self.base_max_speed * (0.3 + (0.7 * physical_factor))
+        self.current_max_speed = self.base_max_speed * (
+            body.speed_floor + ((1.0 - body.speed_floor) * physical_factor)
+        )
         if self.pregnancy is not None:
-            load = self.pregnancy.litter / LITTER_MAX
-            self.current_max_speed *= 1.0 - (GESTATION_SLOWING * load)
+            load = self.pregnancy.litter / repro.litter_max
+            self.current_max_speed *= 1.0 - (repro.gestation_slowing * load)
         self.effective_herb_eff = self.phenotype["herbivore_eff"] * v
         self.effective_carn_eff = self.phenotype["carnivore_eff"] * v
-        self.current_sight_range = self.effective_sight_range * (0.4 + (0.6 * v))
-        self.current_hearing_range = self.hearing_range * (0.4 + (0.6 * v))
+        sense_scale = body.sense_floor + ((1.0 - body.sense_floor) * v)
+        self.current_sight_range = self.effective_sight_range * sense_scale
+        self.current_hearing_range = self.hearing_range * sense_scale
 
     def update_metabolism_and_aging(
         self, movement_speed_ratio: float = 0.0, dt: float = 1.0
@@ -498,10 +423,11 @@ class AnimalTraits(BaseTraits):
         self._refresh_vitality_dependents()
 
         # Kinetic movement burn
-        kinetic_burn = (movement_speed_ratio**2) * (0.35 * self.mass)
+        repro = self.rules.reproduction
+        kinetic_burn = (movement_speed_ratio**2) * (self.rules.body.kinetic_burn * self.mass)
         upkeep = self.basal_metabolism
         if self.pregnancy is not None:
-            upkeep *= 1.0 + (GESTATION_UPKEEP * self.pregnancy.litter / LITTER_MAX)
+            upkeep *= 1.0 + (repro.gestation_upkeep * self.pregnancy.litter / repro.litter_max)
         self.current_energy -= (upkeep * dt) + kinetic_burn
 
         self._heal(dt)
@@ -519,13 +445,14 @@ class AnimalTraits(BaseTraits):
 
     def _heal(self, dt: float) -> None:
         """Lost health heals with a half-life set by ``recovery``, while there is energy to spare,
-        at ``HEAL_ENERGY_COST`` per point. Accumulated wear (ageing) does not heal."""
+        at ``RecoveryRules.heal_energy_cost`` per point. Accumulated wear (ageing) does not heal."""
         lost = self.max_damage_capacity - self.current_health
-        if lost <= 0.0 or self.current_energy < HEAL_MIN_ENERGY_RATIO * self.max_energy:
+        recovery = self.rules.recovery
+        if lost <= 0.0 or self.current_energy < recovery.heal_min_energy_ratio * self.max_energy:
             return
         healed = lost * (1.0 - 0.5 ** (dt / self.heal_halflife_ticks))
         self.current_health += healed
-        self.current_energy -= healed * HEAL_ENERGY_COST
+        self.current_energy -= healed * recovery.heal_energy_cost
 
     def set_environmental_stimuli(
         self,
@@ -536,7 +463,9 @@ class AnimalTraits(BaseTraits):
     ) -> None:
         """Feeds sensory world events into dynamic drive modulation."""
         self.env_threat_detected = threat_detected
-        self.env_target_size_ratio = max(0.1, target_size_ratio)
+        self.env_target_size_ratio = max(
+            self.rules.behaviour.min_target_size_ratio, target_size_ratio
+        )
         self.env_local_density = min(1.0, max(0.0, local_density))
         self.env_tactile_collision = tactile_contact
 
@@ -553,16 +482,18 @@ class AnimalTraits(BaseTraits):
     @property
     def pain(self) -> float:
         """Health lost since the last decision as a share of the pain ceiling (0 to 1)."""
-        return min(
-            1.0, self.damage_since_decision / (PAIN_FULL_FRACTION * self.max_damage_capacity)
-        )
+        full = self.rules.brain.pain_full_fraction
+        return min(1.0, self.damage_since_decision / (full * self.max_damage_capacity))
 
     def _effective_fear(self, mate_in_view: bool = False) -> float:
         """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down.
-        A driven animal is bolder while a possible mate is in view (``DRIVE_BOLDNESS``)."""
-        fear = self.base_fear_weight * (1.2 - (0.5 * self.vitality))
+        A driven animal is bolder while a possible mate is in view (``drive_boldness``)."""
+        behaviour = self.rules.behaviour
+        fear = self.base_fear_weight * (
+            behaviour.fear_wear_base - (behaviour.fear_wear_slope * self.vitality)
+        )
         if mate_in_view:
-            fear *= 1.0 - (DRIVE_BOLDNESS * self.effective_drive)
+            fear *= 1.0 - (self.rules.reproduction.drive_boldness * self.effective_drive)
         return fear
 
     def think(self, percepts: Percepts, rng: random.Random | None = None) -> BrainDecision:
@@ -626,7 +557,7 @@ class AnimalTraits(BaseTraits):
         """Whether something happened since the brain last ran that should not wait for the next
         scheduled decision (``BRAIN.22``): it is hurting, a threat has appeared, or it is newly in
         contact with something."""
-        if self.pain >= INTERRUPT_PAIN:
+        if self.pain >= self.rules.brain.interrupt_pain:
             return True
         if percepts.threat_closeness > 0.0 and self._decided_threat <= 0.0:
             return True
@@ -653,7 +584,7 @@ class AnimalTraits(BaseTraits):
         """
         if self._decision is None or self._ticks_since_decision >= self.decision_interval:
             return None
-        if self.pain >= INTERRUPT_PAIN:
+        if self.pain >= self.rules.brain.interrupt_pain:
             return None
         learner = self._active_learner(rng)
         if learner is not None:
@@ -711,13 +642,15 @@ class AnimalTraits(BaseTraits):
         return True
 
     def _update_needs_and_drives(self) -> None:
+        behaviour, repro = self.rules.behaviour, self.rules.reproduction
         energy_ratio = self.current_energy / self.max_energy
         starvation_factor = max(0.0, 1.0 - energy_ratio)
 
         # Dynamic Aggression (Nature + Nurture)
-        hunger_aggression_boost = 1.0 + (1.6 * (starvation_factor**2))
-        crowd_aggression_boost = 1.0 + (0.4 * self.env_local_density)
-        size_confidence = min(2.0, max(0.2, self.env_target_size_ratio))
+        hunger_aggression_boost = 1.0 + (behaviour.hunger_aggression_gain * (starvation_factor**2))
+        crowd_aggression_boost = 1.0 + (behaviour.crowd_aggression_gain * self.env_local_density)
+        low_confidence, high_confidence = behaviour.size_confidence_range
+        size_confidence = min(high_confidence, max(low_confidence, self.env_target_size_ratio))
 
         modulated_aggression = (
             self.base_aggression
@@ -728,7 +661,9 @@ class AnimalTraits(BaseTraits):
         self.current_aggression = min(1.0, max(0.0, modulated_aggression))
 
         # Tactile Reflex
-        self.flag_tactile_evade = self.env_tactile_collision and (self.phenotype["touch"] > 0.1)
+        self.flag_tactile_evade = self.env_tactile_collision and (
+            self.phenotype["touch"] > behaviour.tactile_threshold
+        )
 
         # Fear vs Aggression Fight-or-Flight
         if self.env_threat_detected:
@@ -742,17 +677,18 @@ class AnimalTraits(BaseTraits):
         else:
             self.flag_in_fear = False
             self.flag_wants_to_attack = (
-                self.current_aggression > 0.4
-                and starvation_factor > 0.3
-                and self.effective_carn_eff > 0.1
+                self.current_aggression > behaviour.hunt_aggression
+                and starvation_factor > behaviour.hunt_starvation
+                and self.effective_carn_eff > behaviour.forage_efficiency
             )
 
         # Hunger
-        if energy_ratio < 0.5:
+        if energy_ratio < behaviour.hunger_threshold:
             self.flag_wants_food = True
-            self.flag_target_is_plant = self.effective_herb_eff > 0.1
+            self.flag_target_is_plant = self.effective_herb_eff > behaviour.forage_efficiency
             self.flag_target_is_prey = (
-                self.effective_carn_eff > 0.1 and self.current_aggression > 0.2
+                self.effective_carn_eff > behaviour.forage_efficiency
+                and self.current_aggression > behaviour.prey_aggression
             )
         else:
             self.flag_wants_food = False
@@ -761,14 +697,14 @@ class AnimalTraits(BaseTraits):
 
         # Mating urgency: the drive gene lowers the energy needed to start looking, and so does
         # failing health (senescence desperation).
-        low, high = DRIVE_THRESHOLD_RANGE
+        low, high = repro.drive_threshold_range
         mating_threshold = min(
             high,
             max(
                 low,
-                DRIVE_THRESHOLD_BASE
-                - (DRIVE_THRESHOLD_SLOPE * self.effective_drive)
-                - (DRIVE_THRESHOLD_VITALITY * (1.0 - self.vitality)),
+                repro.drive_threshold_base
+                - (repro.drive_threshold_slope * self.effective_drive)
+                - (repro.drive_threshold_vitality * (1.0 - self.vitality)),
             ),
         )
         self.flag_wants_mate = (
@@ -780,13 +716,13 @@ class AnimalTraits(BaseTraits):
         self.signal_to_emit = None
 
         if (
-            self.phenotype["encoder_fidelity"] > 0.05
+            self.phenotype["encoder_fidelity"] > behaviour.signal_gene_threshold
             and self.current_energy > self.call_energy_cost
         ):
             if self.flag_in_fear:
                 self.flag_ready_to_signal = True
                 self.signal_to_emit = 2  # Alarm / Flee
-            elif self.flag_wants_mate and (1.0 - self.vitality) > 0.3:
+            elif self.flag_wants_mate and (1.0 - self.vitality) > behaviour.mating_call_wear:
                 self.flag_ready_to_signal = True
                 self.signal_to_emit = 0  # Mating Call
 
@@ -803,7 +739,15 @@ class AnimalTraits(BaseTraits):
 
     def inspect_food(self, toxicity: float, rng: random.Random) -> bool:
         """Uses taste to detect toxins before consumption."""
-        detection_probability = min(1.0, toxicity * (0.2 + (0.8 * self.phenotype["taste"])))
+        behaviour = self.rules.behaviour
+        detection_probability = min(
+            1.0,
+            toxicity
+            * (
+                behaviour.taste_detection_base
+                + (behaviour.taste_detection_gain * self.phenotype["taste"])
+            ),
+        )
         return rng.random() < detection_probability
 
     def feed(self, biomass: float, is_meat: bool, toxicity: float = 0.0) -> float:
@@ -811,16 +755,23 @@ class AnimalTraits(BaseTraits):
         if not self.is_alive:
             return 0.0
 
+        behaviour = self.rules.behaviour
         if toxicity > 0.0:
-            poison_damage = toxicity * (1.0 - (0.5 * self.phenotype["taste"])) * 25.0
+            poison_damage = (
+                toxicity
+                * (1.0 - (behaviour.poison_taste_shield * self.phenotype["taste"]))
+                * behaviour.poison_damage
+            )
             self.apply_damage(poison_damage)
             if not self.is_alive:
                 return 0.0
 
         if is_meat:
-            efficiency = self.effective_carn_eff * (1.0 - (0.4 * self.phenotype["herbivore_eff"]))
+            other = behaviour.diet_penalty * self.phenotype["herbivore_eff"]
+            efficiency = self.effective_carn_eff * (1.0 - other)
         else:
-            efficiency = self.effective_herb_eff * (1.0 - (0.4 * self.phenotype["carnivore_eff"]))
+            other = behaviour.diet_penalty * self.phenotype["carnivore_eff"]
+            efficiency = self.effective_herb_eff * (1.0 - other)
 
         energy_gain = biomass * efficiency
         self.current_energy = min(self.max_energy, self.current_energy + energy_gain)
@@ -834,22 +785,24 @@ class AnimalTraits(BaseTraits):
         """One mating between a sex-0 animal (``impregnator``) and a sex-1 animal (``bearer``).
 
         Both must be able to mate and have more energy than the mating effort, or nothing happens
-        (``REFUSED``). Otherwise each spends ``MATING_EFFORT`` of its store and starts its cooldown,
-        and the mating takes with chance ``0.30 + 0.60 * mean fertility``. If it takes, the bearer
+        (``REFUSED``). Otherwise each spends ``mating_effort`` of its store and starts its cooldown,
+        and the mating takes with chance ``conception_base + conception_slope * mean fertility``. If it takes, the bearer
         is pregnant: the litter's genomes are fixed now, its size and the gestation time come from
         the bearer's ``fertility`` gene, and her cooldown starts at the birth instead.
         """
         if impregnator.sex != 0 or bearer.sex != 1:
             return MatingResult.REFUSED
         for animal in (impregnator, bearer):
-            if not animal.can_mate or animal.current_energy <= MATING_EFFORT * animal.max_energy:
+            effort = animal.rules.reproduction.mating_effort
+            if not animal.can_mate or animal.current_energy <= effort * animal.max_energy:
                 return MatingResult.REFUSED
         for animal in (impregnator, bearer):
-            animal.current_energy -= MATING_EFFORT * animal.max_energy
+            animal.current_energy -= animal.rules.reproduction.mating_effort * animal.max_energy
             animal.mating_cooldown = animal.cooldown_ticks
             animal.matings += 1
         mean_fertility = 0.5 * (impregnator.phenotype["fertility"] + bearer.phenotype["fertility"])
-        chance = FERTILITY_CONCEPTION_BASE + (FERTILITY_CONCEPTION_SLOPE * mean_fertility)
+        repro = impregnator.rules.reproduction
+        chance = repro.conception_base + (repro.conception_slope * mean_fertility)
         taken = rng.random() < chance
         if taken:
             children = tuple(
@@ -866,7 +819,7 @@ class AnimalTraits(BaseTraits):
         """What this parent pays for a litter: its own ``care_fraction`` over two of each newborn's
         energy store, times a surcharge for repair (the disposable-soma trade-off: energy put into
         repair is not there for the young). The newborns get the unsurcharged amount."""
-        surcharge = 1.0 + (REPAIR_BIRTH_SURCHARGE * self.phenotype["somatic_maint"])
+        surcharge = 1.0 + (self.rules.life.repair_birth_surcharge * self.phenotype["somatic_maint"])
         return 0.5 * self.phenotype["care_fraction"] * sum(newborn_max_energies) * surcharge
 
     @staticmethod
@@ -922,19 +875,21 @@ class PlantTraits(BaseTraits):
     canopy light shading, chemical defense expenditure, and seed burst triggers.
     """
 
-    def __init__(self, dna: Genome) -> None:
+    def __init__(self, dna: Genome, rules: TraitRules = DEFAULT_RULES) -> None:
         if dna.layout != PLANT_LAYOUT:
             raise TypeError("PlantTraits requires DNA with the plant layout.")
         t = PLANT_TRAITS.express(dna)
         super().__init__(dna, t)
+        self.rules: TraitRules = rules
+        plant = rules.plant
 
         # ---------------------------------------------------------------------
         # 1. Structural Scaling & Phenotypes
         # ---------------------------------------------------------------------
         self.max_biomass: float = float(t["max_biomass"])
         self.max_energy = self.max_biomass
-        self.max_damage_capacity = self.max_biomass * 0.8
-        self.mass = self.max_biomass * 0.5
+        self.max_damage_capacity = self.max_biomass * plant.damage_capacity_share
+        self.mass = self.max_biomass * plant.mass_share
 
         # Canopy radius and root competition footprint
         self.canopy_radius: float = t["canopy_radius"]
@@ -948,22 +903,26 @@ class PlantTraits(BaseTraits):
 
         # Toxicity intensity (0.0 to 1.0) and ongoing chemical defense cost
         self.toxicity: float = t["toxicity"]
-        self.chemical_defense_tax: float = 0.05 * (self.toxicity**1.5)
+        self.chemical_defense_tax: float = plant.toxin_cost * (
+            self.toxicity**plant.toxin_cost_exponent
+        )
 
         # Baseline photosynthetic intake per tick; a long life slows growth (TRAIT.8)
         self.longevity: float = t["longevity"]
         self.base_growth_rate: float = t["base_growth_rate"] * (
-            1.0 - (PLANT_LONGEVITY_GROWTH * self.longevity)
+            1.0 - (plant.longevity_growth * self.longevity)
         )
-        self.basal_metabolism = (0.02 * (self.mass**0.5)) + self.chemical_defense_tax
+        self.basal_metabolism = (
+            plant.upkeep_scale * (self.mass**plant.upkeep_exponent)
+        ) + self.chemical_defense_tax
 
         # ---------------------------------------------------------------------
         # 2. Dynamic Runtime States
         # ---------------------------------------------------------------------
         # Plants sprout as fragile seedlings with a small starter reserve
-        self.current_biomass: float = self.max_biomass * 0.15
+        self.current_biomass: float = self.max_biomass * plant.start_biomass
         self.current_energy = self.current_biomass
-        self.current_health = self.max_damage_capacity * 0.5
+        self.current_health = self.max_damage_capacity * plant.start_health
         self.growth_cooldown: int = 0
         self.lived_ticks: float = 0.0
         """Reference ticks (hours) lived so far; the plant dies of old age at ``lifespan_ticks``."""
@@ -975,7 +934,7 @@ class PlantTraits(BaseTraits):
         # Behavioral/Lifecycle flag. A seedling is a juvenile for a share of its lifespan, like an
         # animal (REPRO.5 and TRAIT.8): it can first seed at 6% of its lifespan.
         self.flag_ready_to_seed: bool = False
-        self.seed_cooldown: float = MATURITY_SHARE * self.lifespan_ticks
+        self.seed_cooldown: float = rules.reproduction.maturity_share * self.lifespan_ticks
 
         # A seedling's vitality follows its starting health, not the default of 1.0.
         self._refresh_vitality_dependents()
@@ -984,18 +943,19 @@ class PlantTraits(BaseTraits):
     @property
     def lifespan_ticks(self) -> float:
         """Reference ticks (hours) a plant lives if nothing kills it: the ``longevity`` gene in days."""
-        return self.phenotype["lifespan_days"] * TICKS_PER_DAY
+        return self.phenotype["lifespan_days"] * self.rules.time.ticks_per_day
 
     @property
     def seeding_interval_ticks(self) -> float:
         """Reference ticks between seed bursts at the shortest (the ``seeding_interval`` gene in days)."""
-        return self.phenotype["seeding_days"] * TICKS_PER_DAY
+        return self.phenotype["seeding_days"] * self.rules.time.ticks_per_day
 
     @property
     def seed_budget(self) -> float:
         """Biomass this plant can put into a burst of seeds right now: a share of its biomass that
         shrinks as the plant lives longer."""
-        share = SEED_BUDGET_SHARE * (1.0 - (PLANT_LONGEVITY_SEEDS * self.longevity))
+        plant = self.rules.plant
+        share = plant.seed_budget_share * (1.0 - (plant.longevity_seeds * self.longevity))
         return share * self.current_biomass
 
     def seed_capacity(self) -> int:
@@ -1016,8 +976,9 @@ class PlantTraits(BaseTraits):
         - sunlight: reduced by overhead canopies of taller neighboring plants.
         - soil_competition: reduced if neighboring root radii overlap.
         """
-        self.sunlight_factor = min(1.0, max(0.05, sunlight))
-        self.soil_competition_factor = min(1.0, max(0.05, soil_competition))
+        floor = self.rules.plant.light_floor
+        self.sunlight_factor = min(1.0, max(floor, sunlight))
+        self.soil_competition_factor = min(1.0, max(floor, soil_competition))
 
     def update_growth_and_metabolism(self, dt: float = 1.0) -> None:
         """Advances one tick of photosynthesis, chemical defense upkeep, and maturation. ``dt`` is the
@@ -1051,7 +1012,8 @@ class PlantTraits(BaseTraits):
             # Passive tissue repair when growing
             if self.current_health < self.max_damage_capacity:
                 self.current_health = min(
-                    self.max_damage_capacity, self.current_health + (net_growth * 0.5)
+                    self.max_damage_capacity,
+                    self.current_health + (net_growth * self.rules.plant.repair_share),
                 )
         else:
             # Deficit burns stored biomass to sustain metabolic tax
@@ -1067,9 +1029,10 @@ class PlantTraits(BaseTraits):
     def _update_needs_and_drives(self) -> None:
         # A plant is ready to drop seeds when it is grown, healthy, past its seeding cooldown and
         # can pay for at least one seed
+        plant = self.rules.plant
         self.flag_ready_to_seed = (
-            self.current_biomass >= (self.max_biomass * SEED_READY_SHARE)
-            and self.vitality > 0.4
+            self.current_biomass >= (self.max_biomass * plant.seed_ready_share)
+            and self.vitality > plant.seed_ready_vitality
             and self.seed_cooldown <= 0.0
             and self.seed_capacity() >= 1
         )
@@ -1090,9 +1053,9 @@ class PlantTraits(BaseTraits):
         self.current_energy = self.current_biomass
 
         # Grazing inflicts direct physical damage to plant structure
-        self.apply_damage(actual_consumed * 0.75)
+        self.apply_damage(actual_consumed * self.rules.plant.graze_damage)
 
-        if self.current_biomass <= 2.0:
+        if self.current_biomass <= self.rules.plant.dies_below_biomass:
             self._die()
 
         return (actual_consumed, self.toxicity)

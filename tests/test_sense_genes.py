@@ -8,6 +8,7 @@ import statistics
 import pytest
 
 from evolution_simulator import sense_genes as sg
+from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, FOUNDER_SENSE_SPREAD, seed_sense_genes
 from evolution_simulator.sensing import Neighbour, SenseOrgans, organs_from_traits, sense
@@ -56,11 +57,15 @@ def test_touch_is_always_on():
     )
 
 
+RULES = DEFAULT_RULES.organs
+NOISE = {"hearing": RULES.hearing_noise, "smell": RULES.smell_noise}
+
+
 # --- noise ---------------------------------------------------------------------------
 
 
 def test_noise_falls_as_the_gene_rises():
-    for organ, (worst, best) in sg.NOISE_AT_GENE.items():
+    for organ, (worst, best) in NOISE.items():
         assert sg.direction_noise(organ, 0.0) == worst
         assert sg.direction_noise(organ, 1.0) == best
         assert sg.direction_noise(organ, 0.5) == pytest.approx((worst + best) / 2)
@@ -98,12 +103,12 @@ def test_a_lost_sense_costs_nothing_and_cost_grows_with_the_area_covered():
     assert sg.sense_cost(30.0, 90.0, 0, 0, 0, 0) == pytest.approx(
         sg.sense_cost(30.0, 360.0, 0, 0, 0, 0) / 4
     )  # a quarter of the field costs a quarter
-    assert sg.sense_cost(0, 360, 0, 0, 1.0, 0.0) == sg.TOUCH_COST
-    assert sg.sense_cost(0, 360, 0, 0, 0.0, 0.5) == pytest.approx(sg.TASTE_COST * 0.25)
+    assert sg.sense_cost(0, 360, 0, 0, 1.0, 0.0) == RULES.touch_cost
+    assert sg.sense_cost(0, 360, 0, 0, 0.0, 0.5) == pytest.approx(RULES.taste_cost * 0.25)
 
 
 def test_vision_costs_the_most_per_area():
-    assert sg.COST_PER_AREA["vision"] > max(sg.COST_PER_AREA["hearing"], sg.COST_PER_AREA["smell"])
+    assert RULES.vision_cost_per_area > max(RULES.hearing_cost_per_area, RULES.smell_cost_per_area)
 
 
 def test_a_wide_eye_costs_more_than_a_narrow_one_at_the_same_gene():

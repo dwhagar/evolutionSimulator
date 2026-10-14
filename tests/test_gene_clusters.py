@@ -175,7 +175,10 @@ def test_dominance_acts_inside_each_gene_before_the_cluster_combines():
     ],
 )
 def test_the_same_fertility_gene_gives_different_litters(fertility, size, recovery, litter):
-    from evolution_simulator.traits import LITTER_MAX, AnimalTraits
+    from evolution_simulator.config import DEFAULT_RULES
+    from evolution_simulator.traits import AnimalTraits
+
+    LITTER_MAX = DEFAULT_RULES.reproduction.litter_max
 
     traits = AnimalTraits(genome(fertility=fertility, size=size, recovery=recovery))
     assert (
@@ -351,7 +354,7 @@ def test_the_cost_table_names_real_traits():
 
 
 def test_the_genes_the_cost_table_leaves_free_are_a_known_short_list():
-    # What pays for these is not in traits.py yet (TRAIT.3 and the brain costs will decide). A new
+    # What pays for these is not in traits.py yet (TRAIT.9 will decide). A new
     # gene that lands here without a cost should be a deliberate choice.
     assert ANIMAL_TRAITS.unpaid_genes() == (
         "speed",

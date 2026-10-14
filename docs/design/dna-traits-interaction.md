@@ -188,8 +188,9 @@ These wait on the owner's answers or on other tasks and are tracked in [TODO.md]
   or modifier role, `MEAN` and `MODIFIED`, cluster tags checked by the layout, an optional whole-cluster
   crossover unit, `TraitSet.explain` and the cost table. The `SWITCH` combiner (one gene silences another) is
   not built; add it when a trait needs it.
-- Tuning constants inside the formulas are still inline numbers (`TRAIT.3`). The trait table already holds
-  the ranges; the formula constants (`0.08`, `0.18`, `0.75`) are what remain.
+- The tuning constants are in one rules tree (`TRAIT.3`, [trait-config.md](trait-config.md)):
+  `AnimalTraits` and `PlantTraits` take `rules=` and the world holds them in `WorldConfig.traits`. The trait
+  table holds the ranges; the formula constants (`0.08`, `0.18`, `0.75`) are rule fields.
 - Diploid is built (`DNA.13`, [#3](https://github.com/dwhagar/evolutionSimulator/issues/3)):
   `DiploidDNA` holds two `DNA` strands and blends each gene by a `DominanceModel` (default codominant,
   the average) when `value`, `digit` or `values` is read, so the trait table does not change. Which species
