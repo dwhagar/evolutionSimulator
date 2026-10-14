@@ -1,5 +1,7 @@
+import re
+
 import evolution_simulator
 
 
-def test_version():
-    assert evolution_simulator.__version__ == "0.1.0"
+def test_version_format():
+    assert re.fullmatch(r"\d+\.\d+\.\d+", evolution_simulator.__version__)

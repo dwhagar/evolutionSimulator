@@ -1,0 +1,9 @@
+# Versioning source of truth. Format: MAJOR.minor.build (e.g. 0.0.23).
+#
+# The build number is the count of commits since `base`, so every commit
+# increments it automatically. Only change major/minor (and move `base` to the
+# commit that starts the new release line) when a milestone or goal is set.
+# See docs/versioning.md.
+major = 0
+minor = 0
+base = "c21303d4719ec29316186d67afb516b9806af0f5"
