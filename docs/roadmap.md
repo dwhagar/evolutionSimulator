@@ -19,18 +19,18 @@ Done:
 - Traits as data, with DNA reading genes by ID, `TRAIT.4` and `DNA.10` ([#31](https://github.com/dwhagar/evolutionSimulator/pull/31)).
 - The interaction document, `DOCS.5` ([#32](https://github.com/dwhagar/evolutionSimulator/pull/32)).
 - The animal brain and its gene blocks, `BRAIN.2`, `DNA.11`, `DNA.12` ([#34](https://github.com/dwhagar/evolutionSimulator/pull/34)).
+- Gene-following crossover, `DNA.7` ([#48](https://github.com/dwhagar/evolutionSimulator/pull/48)); behaviour genes bending what the brain perceives, `BRAIN.14` ([#47](https://github.com/dwhagar/evolutionSimulator/pull/47)); a decision interval, `BRAIN.11` ([#50](https://github.com/dwhagar/evolutionSimulator/pull/50)); mutation that favours low digits, `DNA.8` ([#58](https://github.com/dwhagar/evolutionSimulator/pull/58)).
 
 Still to build, now that the owner has answered the open questions:
-- Crossover and mutation as the owner specified, `DNA.7` and `DNA.8`.
 - Diploid genomes with dominance, `DNA.13`.
 - Plants asexual, slower to mutate and longer lived, `REPRO.3`; animal mate choice by genetic closeness, `REPRO.4`.
-- The three reproduction genes replacing `fertility`, `REPRO.5` (design note first).
-- Longevity traded against reproduction, `TRAIT.6`; prototype quirk fixes, `TRAIT.5`; and one constants config, `TRAIT.3`.
+- The three reproduction genes replacing `fertility`, `REPRO.5`, built together with longevity traded against reproduction, `TRAIT.6` (design note done, `REPRO.6`, [#49](https://github.com/dwhagar/evolutionSimulator/pull/49)).
+- Prototype quirk fixes, `TRAIT.5`; and one constants config, `TRAIT.3`.
 
 ## Next: world, senses and the thinking brain
 
 Not yet given a version; the owner sets milestones.
-- The world: continuous 2D space with user-set bounds, time scales from a minute to a thousand years per second, and a day-night cycle (`WORLD.2` to `WORLD.5`).
+- The world: continuous 2D space with user-set bounds, time scales from a minute to a thousand years per second, and a day-night cycle (`WORLD.2` to `WORLD.5`); `WORLD.3` waits on the owner's answer about time scales (question 8 on [#36](https://github.com/dwhagar/evolutionSimulator/issues/36)).
 - Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`.
 - The brain acting and learning: behaviour genes feeding the brain, random wander when undecided, a shape that evolves, and nightly learning (`BRAIN.13` to `BRAIN.16`, `BRAIN.10`).
 
