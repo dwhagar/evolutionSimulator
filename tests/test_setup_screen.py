@@ -202,7 +202,9 @@ def test_the_world_config_form_covers_every_field_and_returns_the_default(qapp):
 def context(controller, settings):
     actions = {}
     messages = []
-    ctx = ViewerContext(controller, actions, lambda text, ms: messages.append(text), settings)
+    ctx = ViewerContext(
+        controller, actions, lambda text, ms: messages.append(text), settings=settings
+    )
     ctx.messages = messages
     return ctx
 
@@ -464,4 +466,73 @@ def test_a_new_run_starts_a_new_history_and_the_charts_follow(qapp, settings, cl
         assert controller.frame.tick == 30
     finally:
         window.close()
+        backend.close()
+
+
+def test_a_saved_run_gets_its_last_checkpoint_before_a_new_run_replaces_it(
+    qapp, settings, clock, tmp_path
+):
+    from evolution_simulator.runs import RunStore
+    from evolution_simulator.session import build_world
+    from evolution_simulator.viewer.run_manager import RunManager
+
+    session = Session(
+        build_world(NewRun(WorldConfig(seed=1), 10, 30)),
+        rules=SessionRules(work_budget=10.0),
+        clock=clock,
+    )
+    backend = LocalBackend(session)
+    controller = ViewerController(backend)
+    manager = RunManager.install(controller, RunStore(tmp_path / "runs"))
+    messages = []
+    context = ViewerContext(
+        controller, {}, lambda text, ms: messages.append(text), settings=settings
+    )
+    asked = []
+    panel = SetupPanel(context, confirm=lambda text: asked.append(text) or False)
+    try:
+        controller.send(Step(5))
+        controller.poll()
+        manager.save_now()
+        controller.send(Step(7))
+        clock.advance(0.1)
+        controller.poll()
+        assert manager.current_run is not None and controller.frame.tick == 12
+        assert panel.start() is True, (
+            messages,
+            asked,
+        )  # no question: the run is saved and gets its last checkpoint
+        assert asked == []
+        controller.poll()
+        assert manager.current_run is None
+        [summary] = manager.list_runs()
+        assert summary.tick == 12  # the final checkpoint, written before the world was replaced
+        assert controller.frame.tick == 0
+    finally:
+        backend.close()
+
+
+def test_a_world_that_was_never_saved_is_only_replaced_after_a_yes(qapp, settings, clock, tmp_path):
+    from evolution_simulator.runs import RunStore
+    from evolution_simulator.session import build_world
+    from evolution_simulator.viewer.run_manager import RunManager
+
+    session = Session(
+        build_world(NewRun(WorldConfig(seed=1), 10, 30)),
+        rules=SessionRules(work_budget=10.0),
+        clock=clock,
+    )
+    backend = LocalBackend(session)
+    controller = ViewerController(backend)
+    manager = RunManager.install(controller, RunStore(tmp_path / "runs"))
+    context = ViewerContext(controller, {}, lambda text, ms: None, settings=settings)
+    answers = iter([False, True])
+    panel = SetupPanel(context, confirm=lambda text: next(answers))
+    try:
+        controller.send(Step(4))
+        controller.poll()
+        assert panel.start() is False and session.simulation.tick == 4
+        assert panel.start() is True and session.simulation.tick == 0
+        assert manager.list_runs() == []  # nothing was saved behind the user's back
+    finally:
         backend.close()

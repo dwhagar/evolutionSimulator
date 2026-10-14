@@ -580,8 +580,11 @@ settings form, a line that says what is wrong (Start is disabled until nothing i
   drops `RunStarted` (it is exempt from the event caps) and discards the old run's pending world events.
   `LocalBackend` starts a new `Recorder` on the new world and publishes the empty history at once, so
   the charts clear; `ViewerController` also forgets `history`.
-- **Not saved.** Starting a run throws the old one away; if it has run (tick above 0) the screen asks
-  first. Saving and loading runs is UX.9, UX.10 and UX.18.
+- **Saved runs (UX.18).** The File entry and the label come through `ViewerContext.add_menu_action`
+  and `set_run_label`. Starting a run asks `RunManager`: if a saved run is current, `detach()` writes its
+  last checkpoint before the world is replaced and nothing is asked; a world that was never saved
+  (tick above 0, no current run) is only replaced after a yes. The new run is not saved until Save run
+  now.
 - **Found on the way.** `LocalBackend` subscribed `self._events.append` and then rebound `self._events`
   in each poll, so every event after the first poll went into a list nobody read. It subscribes a method
   now (`_heard`) and a test polls twice.

@@ -9,7 +9,9 @@ A dock on the left, closed at first; File > New run (Ctrl+N) opens it. From the 
 - **Settings**: a form generated from the frozen ``WorldConfig`` and the rules under it
   (``viewer.config_form``), with a filter box. Nothing in it names a field.
 - **Start run**: sends ``NewRun`` through the backend. Nothing is started while any box holds
-  something that does not fit; the line under the form says what is wrong.
+  something that does not fit; the line under the form says what is wrong. A run that was saved
+  (UX.18) gets its last checkpoint and is detached first; one that was never saved is only thrown
+  away after a yes.
 
 The last run started is remembered (``setup/last``) and comes back the next time the program opens.
 """
@@ -23,6 +25,7 @@ from collections.abc import Callable
 from dataclasses import replace
 
 from PySide6.QtCore import QSettings
+from PySide6.QtGui import QAction, QKeySequence
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
@@ -39,9 +42,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from evolution_simulator.session import RunStarted
 from evolution_simulator.viewer.config_form import ConfigError, ConfigForm
 from evolution_simulator.viewer.presets import BUILTIN_PRESETS, Preset, RunSetup
 from evolution_simulator.viewer.registry import PanelSpec, ViewerContext
+from evolution_simulator.viewer.run_manager import RunManager
 from evolution_simulator.world.world import WorldConfig
 
 log = logging.getLogger(__name__)
@@ -104,8 +109,7 @@ class SetupPanel(QWidget):
         self._connect()
         self._load_presets()
         self.apply(self._remembered() or BUILTIN_PRESETS[0].setup)
-        if "new_run" in context.actions:
-            context.actions["new_run"].triggered.connect(self.reveal)
+        context.controller.event_received.connect(self._on_event)
 
     # -------------------------------------------------------------------------
     # Building
@@ -336,16 +340,20 @@ class SetupPanel(QWidget):
         except ValueError as error:
             self.context.show_message(f"Cannot start: {error}", 8000)
             return False
+        manager = RunManager.for_controller(self.context.controller)
         frame = self.context.controller.frame
         if (
-            frame is not None
+            manager.current_run is None
+            and frame is not None
             and frame.tick > 0
             and not self._confirm(
-                f"The run in progress ({frame.elapsed}, tick {frame.tick:,}) is not saved and will be "
-                "lost. Start a new run anyway?"
+                f"The run in progress ({frame.elapsed}, tick {frame.tick:,}) is not saved and "
+                "will be lost. Start a new run anyway?"
             )
         ):
             return False
+        if manager.current_run is not None:
+            manager.detach()  # a saved run gets its last checkpoint, before its world is replaced
         if not self.context.send(command):
             return False
         if self.settings is not None:
@@ -365,6 +373,10 @@ class SetupPanel(QWidget):
         name, ok = QInputDialog.getText(self, "Save preset", "Name of the preset:")
         return name if ok else None
 
+    def _on_event(self, event: object) -> None:
+        if isinstance(event, RunStarted):
+            self.context.set_run_label(event.label)
+
     def reveal(self) -> None:
         """Bring the dock this panel sits in to the front (File > New run)."""
         widget = self.parentWidget()
@@ -377,7 +389,13 @@ class SetupPanel(QWidget):
 
 
 def build(context: ViewerContext) -> SetupPanel:
-    return SetupPanel(context)
+    panel = SetupPanel(context)
+    new_run = QAction("&New run...", panel)
+    new_run.setShortcut(QKeySequence(QKeySequence.StandardKey.New))
+    new_run.triggered.connect(panel.reveal)
+    context.actions["new_run"] = new_run
+    context.add_menu_action("file", new_run)
+    return panel
 
 
 PANEL = PanelSpec(id="setup", title="New run", area="left", factory=build, order=10, visible=False)
