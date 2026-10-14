@@ -271,6 +271,13 @@ class AnimalTraits(BaseTraits):
         if self.is_alive:
             self._update_needs_and_drives()
 
+    def reset_behaviour(self) -> None:
+        """Forget the cached brain decision and the wander turn, so the next ``think`` decides
+        afresh. The world calls it when an animal falls asleep (``WORLD.5``)."""
+        self._decision = None
+        self._ticks_since_decision = 0
+        self.wanderer.reset()
+
     def _effective_fear(self) -> float:
         """Fear as it currently acts: the gene (after sex adjustment), stronger when worn down."""
         return self.base_fear_weight * (1.2 - (0.5 * self.vitality))

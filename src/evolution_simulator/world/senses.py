@@ -63,12 +63,20 @@ class BasicSenses:
     """Sight within the animal's range and field of view, plus touch and crowding.
 
     Prey is a lighter animal, a threat a heavier one, and a possible mate is the nearest animal
-    that is neither (so roughly its own size). Calls are not heard yet.
+    that is neither (so roughly its own size). Calls are not heard yet. Sight range is scaled by
+    the light (``SensingRules.light_factor``, the owner-question default of issue 41), so animals
+    see less at night.
     """
+
+    def __init__(self) -> None:
+        # Imported here because ``sensing`` itself imports from this package.
+        from evolution_simulator.sensing import SensingRules
+
+        self._rules = SensingRules()
 
     def perceive(self, world: World, animal: Animal) -> Percepts:
         traits = animal.traits
-        sight = traits.current_sight_range
+        sight = traits.current_sight_range * self._rules.light_factor(world.daylight)
         half_view = math.radians(traits.fov_degrees) / 2.0
         touch_range = traits.tactile_range if traits.phenotype["touch"] > 0.1 else 0.0
 

@@ -32,8 +32,10 @@ from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import AnimalTraits, PlantTraits
 from evolution_simulator.world.bounds import Bounds
+from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import BasicSenses, Senses, wrap_angle
+from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
 from evolution_simulator.world.vector import Vec
@@ -57,6 +59,9 @@ class WorldConfig:
     """An animal below this fraction of its energy store will not mate (the cost is up to 45%)."""
     birth_scatter: float = 1.0
     """A child appears within this distance of its parents' midpoint."""
+    day_cycle: DayCycle | None = field(default_factory=DayCycle)
+    """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
+    sleep: SleepRules = field(default_factory=SleepRules)
     max_animals: int = 1000
     max_plants: int = 5000
     """Safety caps so a run cannot grow without limit; births stop at the cap."""
@@ -107,6 +112,7 @@ class World:
         """Largest canopy radius of any plant added so far; bounds the plant search radius."""
         self.max_body: float = 0.0
         """Largest body radius of any animal added so far."""
+        self._sleep_listeners: list[SleepListener] = []
 
     # -------------------------------------------------------------------------
     # Reading the world
@@ -128,6 +134,27 @@ class World:
     def elapsed(self) -> str:
         """Simulated time so far, for example ``3d 04:00:00``."""
         return format_duration(self.simulated_seconds)
+
+    @property
+    def daylight(self) -> float:
+        """Light now, from 0 (midnight) to 1 (noon); always 1 without a day cycle."""
+        cycle = self.config.day_cycle
+        return 1.0 if cycle is None else cycle.daylight(self.simulated_seconds)
+
+    @property
+    def is_night(self) -> bool:
+        cycle = self.config.day_cycle
+        return False if cycle is None else cycle.is_night(self.simulated_seconds)
+
+    @property
+    def day(self) -> int:
+        """Midnights passed since the start (0 on the first day)."""
+        cycle = self.config.day_cycle
+        return 0 if cycle is None else cycle.day_number(self.simulated_seconds)
+
+    def add_sleep_listener(self, listener: SleepListener) -> None:
+        """Be told, in id order, when an animal falls asleep or wakes (the hook for BRAIN.24)."""
+        self._sleep_listeners.append(listener)
 
     @property
     def animals(self) -> list[Animal]:
@@ -229,14 +256,22 @@ class World:
         animals = self.animals
         plants = self.plants
         self._refresh_animal_index()
+        self._update_sleep(animals)
+        sunlight = self.daylight
+        for plant in plants:
+            plant.traits.set_environmental_conditions(sunlight=sunlight)
 
-        # 1. Sense and decide, all from the same start-of-tick world.
+        # 1. Sense and decide, all from the same start-of-tick world. Sleepers do not.
         for animal in animals:
-            percepts = self.senses.perceive(self, animal)
-            animal.last_decision = animal.traits.think(percepts, self.rng)
+            if not animal.asleep:
+                percepts = self.senses.perceive(self, animal)
+                animal.last_decision = animal.traits.think(percepts, self.rng)
 
-        # 2. Live, move and eat.
+        # 2. Live, move and eat (or sleep).
         for animal in animals:
+            if animal.asleep:
+                self._rest(animal)
+                continue
             decision = animal.last_decision
             assert decision is not None
             animal.traits.update_metabolism_and_aging(decision.speed)
@@ -275,6 +310,37 @@ class World:
             plant_deaths=plant_deaths,
         )
 
+    def _update_sleep(self, animals: list[Animal]) -> None:
+        """Put animals to sleep at night and wake them in the morning (or when starving)."""
+        night = self.is_night
+        starving_below = self.config.sleep.starving_below
+        for animal in animals:
+            if not animal.is_alive:
+                continue
+            traits = animal.traits
+            hungry = traits.current_energy < starving_below * traits.max_energy
+            should_sleep = night and not hungry
+            if should_sleep and not animal.asleep:
+                animal.asleep = True
+                animal.last_decision = None
+                traits.reset_behaviour()
+                for listener in self._sleep_listeners:
+                    listener.fell_asleep(self, animal)
+            elif animal.asleep and not should_sleep:
+                animal.asleep = False
+                for listener in self._sleep_listeners:
+                    listener.woke(self, animal)
+
+    def _rest(self, animal: Animal) -> None:
+        """One tick of sleep: age as usual, burn less energy and regain some."""
+        rules = self.config.sleep
+        traits = animal.traits
+        traits.update_metabolism_and_aging(0.0)
+        if traits.is_alive:
+            saved = traits.basal_metabolism * (1.0 - rules.metabolism_factor)
+            gained = saved + rules.energy_regain * traits.max_energy
+            traits.current_energy = min(traits.max_energy, traits.current_energy + gained)
+
     def _refresh_animal_index(self) -> None:
         self._animal_index.clear()
         for animal in self.animals:
@@ -301,6 +367,7 @@ class World:
             a
             for a in animals
             if a.is_alive
+            and not a.asleep
             and a.last_decision is not None
             and a.last_decision.seeks_mating
             and a.traits.mating_cooldown == 0
