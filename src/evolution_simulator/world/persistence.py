@@ -201,6 +201,7 @@ _ANIMAL_FIELDS: tuple[str, ...] = _BASE_FIELDS + (
     "_decided_threat",
     "_decided_touch",
     "_ticks_since_decision",
+    "tiredness",
 )
 """Scalar runtime state of ``AnimalTraits``. Anything with structure is handled in
 ``_animal_traits_to_data``: the pregnancy, the cached decision, the wander turn, the learner."""
@@ -343,6 +344,7 @@ def _animal_to_data(animal: Animal, animal_ids: Mapping[int, int]) -> dict[str, 
         "parents": list(animal.parents),
         "asleep": animal.asleep,
         "disturbed": animal.disturbed,
+        "awake_time": animal.awake_time,
         "partner": animal.partner,
         "last_decision": _encode(animal.last_decision),
         "traits": _animal_traits_to_data(animal.traits, animal_ids),
@@ -535,6 +537,7 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
         )
         animal.asleep = _decode(bool, animal_data["asleep"])
         animal.disturbed = _decode(bool, animal_data["disturbed"])
+        animal.awake_time = _decode(float, animal_data["awake_time"])
         animal.partner = _decode(int | None, animal_data["partner"])
         animal.last_decision = _decode(BrainDecision | None, animal_data["last_decision"])
         world._animals[animal.id] = animal

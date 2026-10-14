@@ -16,7 +16,7 @@ from persistence_support import (
 from world_support import animal_dna, hourly_world, plant_dna
 
 from evolution_simulator.diploid import DiploidDNA
-from evolution_simulator.layouts import founder_animal_dna, founder_plant_dna
+from evolution_simulator.layouts import LAYOUTS, founder_animal_dna, founder_plant_dna
 from evolution_simulator.world import Bounds, DayCycle, Vec, World, WorldConfig, WorldSenses
 from evolution_simulator.world import persistence as saves
 from evolution_simulator.world.persistence import (
@@ -276,7 +276,7 @@ def test_the_document_says_what_it_is(tmp_path):
     document = json.loads(path.read_text())
     assert document["format"] == saves.FORMAT
     assert document["format_version"] == FORMAT_VERSION
-    assert document["layouts"] == {"animal": 7, "plant": 3}
+    assert document["layouts"] == {layout.name: layout.version for layout in LAYOUTS}
     assert document["state_digest"] == rich_world_at(5).state_digest()
     assert document["world"]["tick"] == 5
 
@@ -303,7 +303,7 @@ def test_a_save_from_a_newer_format_is_refused():
 
 def test_a_save_with_other_gene_layouts_is_refused_up_front():
     data = world_to_dict(rich_world_at(3))
-    data["layouts"] = {"animal": 6, "plant": 3}
+    data["layouts"] = {**data["layouts"], "animal": data["layouts"]["animal"] - 1}
     with pytest.raises(SaveFormatError, match="layouts"):
         world_from_dict(data)
 

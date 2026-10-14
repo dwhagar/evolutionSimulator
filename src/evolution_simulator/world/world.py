@@ -823,7 +823,7 @@ class World:
             parts.append(
                 f"A{animal.id}|{animal.position.coords!r}|{animal.heading!r}|"
                 f"{traits.current_energy!r}|{traits.current_health!r}|{traits.dna}|"
-                f"{animal.asleep}|{animal.disturbed}|{animal.partner}|{traits.age_ticks}|"
+                f"{animal.asleep}|{animal.disturbed}|{animal.awake_time!r}|{animal.partner}|{traits.age_ticks}|"
                 f"{traits.matings}|{traits.mating_cooldown!r}|"
                 f"{None if pregnancy is None else (pregnancy.litter, pregnancy.remaining)!r}|"
                 f"{None if learner is None else (learner.offsets, learner.open_decisions)!r}"
