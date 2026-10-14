@@ -4,6 +4,10 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-14: request for sense genes
+
+The owner asked for new genes: a field of vision (degrees from the direction of movement in either direction) with an acuity (how accurately they see), and a gene for how well each sense works, each starting middle of the road. Predators default to narrow, high-acuity vision and prey to lower acuity with a wider field; a lower acuity trades off with a wider field and a higher acuity with a narrower one. The owner also asked for an evaluation of what properties the world needs to support each sense. Task `SENSE.15` (design, [#95](https://github.com/dwhagar/evolutionSimulator/pull/95)), builds `SENSE.16` and `WORLD.12`; the open questions are `SENSE.17` to `SENSE.21` ([#88](https://github.com/dwhagar/evolutionSimulator/issues/88) to [#92](https://github.com/dwhagar/evolutionSimulator/issues/92)).
+
 ## 2026-10-14: answers to the clarification issues
 
 Issue [#36](https://github.com/dwhagar/evolutionSimulator/issues/36) and [#27](https://github.com/dwhagar/evolutionSimulator/issues/27) are answered and closed. Points that stayed unclear are in [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
