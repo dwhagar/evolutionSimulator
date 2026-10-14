@@ -20,9 +20,9 @@ def test_the_defaults_give_the_same_animal_as_before_the_move():
     assert animal.max_energy == pytest.approx(166.666667)
     assert animal.max_damage_capacity == pytest.approx(133.333333)
     assert animal.base_max_speed == pytest.approx(3.157894737)
-    assert animal.basal_metabolism == pytest.approx(0.4223206645)
+    assert animal.basal_metabolism == pytest.approx(0.4227206645)
     assert animal.wear_per_tick == pytest.approx(0.0200492308)
-    assert animal.brain_upkeep == pytest.approx(0.00305)
+    assert animal.brain_upkeep == pytest.approx(0.00345)
     assert animal.repair_upkeep == pytest.approx(0.0222222222)
     assert animal.gut_maintenance == pytest.approx(0.0133333333)
     assert animal.cooldown_ticks == pytest.approx(227.641171487)
@@ -73,12 +73,12 @@ def test_the_rules_are_frozen_hashable_and_compare_by_value():
 
 def test_every_organism_rule_is_read_by_the_formulas():
     # A rule nobody reads is a constant left behind: each field of the organism sections is read
-    # by traits.py or sense_genes.py (the sensing section is exercised by the sensing tests).
+    # by traits.py, sense_genes.py or the world's senses (the sensing section is exercised by the sensing tests).
     import pathlib
 
     source = ""
     root = pathlib.Path(__file__).resolve().parents[1] / "src" / "evolution_simulator"
-    for name in ("traits.py", "sense_genes.py"):
+    for name in ("traits.py", "sense_genes.py", "world/senses.py"):
         source += (root / name).read_text()
     unused = []
     for section in dataclasses.fields(TraitRules):

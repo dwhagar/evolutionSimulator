@@ -37,9 +37,9 @@ def test_the_blueprint_sizes():
     assert SMALL.neuron_size == 5 and SMALL.value_count == 16
     assert SMALL.group_sizes == (5, 5, 5, 1)
     bp = DEFAULT_BLUEPRINT
-    assert (bp.inputs, bp.max_hidden, bp.outputs) == (20, 16, 6)
-    assert bp.neuron_size == 28 and bp.value_count == 454
-    assert bp.group_sizes == (28,) * 16 + (6,)
+    assert (bp.inputs, bp.max_hidden, bp.outputs) == (28, 16, 6)
+    assert bp.neuron_size == 36 and bp.value_count == 582
+    assert bp.group_sizes == (36,) * 16 + (6,)
     assert bp.signed_outputs == DEFAULT_SHAPE.signed_outputs
     with pytest.raises(ValueError):
         BrainBlueprint(0, 4, 2)
@@ -83,14 +83,14 @@ def test_the_built_brain_is_the_same_as_a_fixed_shape_brain():
     r = rng(2)
     values = [r.uniform(-2, 2) for _ in range(DEFAULT_BLUEPRINT.value_count)]
     for j in range(16):
-        values[j * 28] = 1.0 if j < 8 else -1.0  # eight slots on
+        values[j * 36] = 1.0 if j < 8 else -1.0  # eight slots on
     built = DEFAULT_BLUEPRINT.build(values)
     fixed = Brain.from_values(
         DEFAULT_SHAPE,
-        [v for j in range(8) for v in values[j * 28 + 1 : (j + 1) * 28]] + values[16 * 28 :],
+        [v for j in range(8) for v in values[j * 36 + 1 : (j + 1) * 36]] + values[16 * 36 :],
     )
     assert built == fixed
-    x = [r.uniform(-1, 1) for _ in range(20)]
+    x = [r.uniform(-1, 1) for _ in range(28)]
     assert built.decide(x) == fixed.decide(x)
 
 
@@ -98,13 +98,13 @@ def test_spare_slots_do_nothing_whatever_they_hold():
     r = rng(3)
     values = [r.uniform(-2, 2) for _ in range(DEFAULT_BLUEPRINT.value_count)]
     for j in range(16):
-        values[j * 28] = 1.0 if j % 2 == 0 else -1.0
+        values[j * 36] = 1.0 if j % 2 == 0 else -1.0
     before = DEFAULT_BLUEPRINT.build(values)
     for j in range(1, 16, 2):  # scramble every spare slot (but keep the gates off)
-        for i in range(1, 28):
-            values[j * 28 + i] = r.uniform(-2, 2)
+        for i in range(1, 36):
+            values[j * 36 + i] = r.uniform(-2, 2)
     after = DEFAULT_BLUEPRINT.build(values)
-    x = [r.uniform(-1, 1) for _ in range(20)]
+    x = [r.uniform(-1, 1) for _ in range(28)]
     assert before.decide(x) == after.decide(x)
     assert before == after
 
@@ -113,13 +113,13 @@ def test_flipping_one_gate_changes_the_neuron_count_by_exactly_one():
     r = rng(4)
     values = [r.uniform(-2, 2) for _ in range(DEFAULT_BLUEPRINT.value_count)]
     for j in range(16):
-        values[j * 28] = 1.0 if j < 6 else -1.0
+        values[j * 36] = 1.0 if j < 6 else -1.0
     base = DEFAULT_BLUEPRINT.build(values).shape.hidden
     assert base == 6
-    values[10 * 28] = 0.3  # wake a spare
+    values[10 * 36] = 0.3  # wake a spare
     assert DEFAULT_BLUEPRINT.build(values).shape.hidden == 7
     values[0] = -0.3  # switch one off
-    values[10 * 28] = -0.3
+    values[10 * 36] = -0.3
     assert DEFAULT_BLUEPRINT.build(values).shape.hidden == 5
 
 
@@ -153,10 +153,10 @@ def test_gain_sharpens_decisions_and_one_is_the_old_network():
 def test_the_gain_must_be_positive_and_is_part_of_the_brain():
     for bad in (0.0, -1.0, math.nan, math.inf):
         with pytest.raises(ValueError):
-            Brain.from_values(DEFAULT_SHAPE, [0.0] * 222, gain=bad)
-    a = Brain.from_values(DEFAULT_SHAPE, [0.1] * 222)
-    assert a != Brain.from_values(DEFAULT_SHAPE, [0.1] * 222, gain=2.0)
-    assert a.to_values() == Brain.from_values(DEFAULT_SHAPE, [0.1] * 222, gain=2.0).to_values()
+            Brain.from_values(DEFAULT_SHAPE, [0.0] * 286, gain=bad)
+    a = Brain.from_values(DEFAULT_SHAPE, [0.1] * 286)
+    assert a != Brain.from_values(DEFAULT_SHAPE, [0.1] * 286, gain=2.0)
+    assert a.to_values() == Brain.from_values(DEFAULT_SHAPE, [0.1] * 286, gain=2.0).to_values()
 
 
 # --- the genome ---------------------------------------------------------------------
@@ -165,7 +165,7 @@ def test_the_gain_must_be_positive_and_is_part_of_the_brain():
 def test_the_brain_block_matches_the_blueprint():
     assert BRAIN_GENE.count == DEFAULT_BLUEPRINT.value_count
     assert BRAIN_GENE.groups == DEFAULT_BLUEPRINT.group_sizes
-    assert ANIMAL_LAYOUT.version == 7 and ANIMAL_LAYOUT.length == 96 + 908
+    assert ANIMAL_LAYOUT.version == 8 and ANIMAL_LAYOUT.length == 96 + 1164
 
 
 def test_unit_crossover_keeps_a_slot_with_its_gate():
@@ -174,12 +174,12 @@ def test_unit_crossover_keeps_a_slot_with_its_gate():
     for seed in range(20):
         child = a.crossover_by_unit(b, rng(seed))
         for j in range(16):
-            lo, hi = start + j * 56, start + (j + 1) * 56  # 28 values of two digits
+            lo, hi = start + j * 72, start + (j + 1) * 72  # 36 values of two digits
             piece = child.get_slice(lo, hi)
             assert piece in (a.get_slice(lo, hi), b.get_slice(lo, hi))
-            assert child.values("brain")[j * 28] in (
-                a.values("brain")[j * 28],
-                b.values("brain")[j * 28],
+            assert child.values("brain")[j * 36] in (
+                a.values("brain")[j * 36],
+                b.values("brain")[j * 36],
             )
 
 
@@ -189,7 +189,7 @@ def test_random_animals_have_about_half_their_slots_on_and_a_quarter_of_weights_
         traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, rng(seed)))
         values = traits.dna.values("brain")
         on += len(DEFAULT_BLUEPRINT.slots_on(values))
-        weights = [v for j in range(16) for v in values[j * 28 + 2 : (j + 1) * 28]]
+        weights = [v for j in range(16) for v in values[j * 36 + 2 : (j + 1) * 36]]
         off += sum(1 for w in weights if abs(w) <= BRAIN_DEAD_ZONE)
         total += len(weights)
     assert on / 60 == pytest.approx(8.0, abs=1.0)

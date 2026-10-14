@@ -219,6 +219,11 @@ neighbours, the world finds and classifies the neighbours.
   matters. Seeded founders (`BRAIN.9`) do not call at all; calling is left to evolve. That is the
   whole call rule: the brain decides, the world charges and delivers.
 - **Touch** sees the world's edge as well as other bodies (`World.edge_distance`).
+- **Family, wall, clock and tiredness** (`SENSE.14`). `classify` calls a viewer's own child *young* while it has lived less
+  than the viewer's `dependence_ticks`; for a possible mate `perceive` hands `sense()` a function that compares the two
+  genomes (`DNA.distance`, only when the answer is read); `World.edge_vector` gives the unit vector to the nearest wall
+  for the edge bearing; `World.day_phase` gives the clock (`None` without a day cycle); `_update_tiredness` counts each
+  animal's time awake (`Animal.awake_time`, cleared by sleep) as a share of a day and hands it to its traits.
 - **Size and light.** Each animal neighbour carries its mass and the step gets the viewer's mass,
   for the relative-size input (`SENSE.9`); the daylight input is the world's daylight.
 

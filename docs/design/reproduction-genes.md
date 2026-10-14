@@ -14,7 +14,7 @@ The numbers are starting values to tune, not measurements of the running simulat
 > (`TRAIT.7`), pregnancies, absolute-day durations and per-hour charging, with the constants named as in the
 > table at the end. Animal layout version 5 then (1,000 digits; version 7 and 1,004 digits after `SENSE.16` and `DNA.15`, which also made the litter size follow the `litter_capacity` cluster). Differences from the note: the pregnancy list is
 > kept on the bearers, not in a separate world list; the protective effect of `parenting` and the "own young"
-> channel wait for `SENSE.14`; a father who has died pays nothing and gives nothing at the birth; the
+> channel were built in `SENSE.14` (animal layout version 8, 1,260 digits); a father who has died pays nothing and gives nothing at the birth; the
 > costs of drive (wear, upkeep) follow the gene, while the threshold, boldness and brain input follow the
 > sex-modified drive. The plant genes are `REPRO.3` and `TRAIT.8` (the seed genes and the longevity gene are built; plant layout version 3). See [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity) and the
 > [long-run check](#long-run-check) below.
@@ -167,7 +167,7 @@ Both sexes carry the gene. For a mating between an impregnating animal `i` and a
   - a threat near the young is treated as dangerous to them: aggression is multiplied by
     `1 + 0.5 * parenting` and fear by `1 - 0.4 * parenting`, which makes the parent fight instead of
     flee and so puts itself in danger. Low-parenting animals ignore the young and keep their normal fear.
-- Until `SENSE.14` provides the percept, parenting acts through energy only.
+- Built in `SENSE.14`: the "own young" channel (`young_direction`, `young_closeness`), the dependence period and the protective effect on aggression and fear.
 - **First generation:** `parenting = 0` (care fraction 0.10, no protection), `fertility = 0.75`.
 
 ### Longevity trades against reproduction (`TRAIT.6`)
@@ -313,7 +313,7 @@ change.
    closeness preference); a pregnancy list (bearer, litter, due tick); births at the due tick, placing the
    litter near the bearer; `dt`-scaled charging.
 5. `brain_adapter.py`: `Temperament.repro_drive` bending `mate_closeness`; `Temperament.parenting` and
-   the "own young" channel when `SENSE.14` lands.
+   the "own young" channel (built in `SENSE.14`).
 6. Plants (second change): three plant genes, plant ageing, the seed budget, plant layout version bump.
 7. Tests: care fraction and who pays; neither parent charged if one cannot pay; litter size and gestation
    from the bearer; pregnancy blocks mating; cooldown scales with repair; drive shortens lifespan by
@@ -395,7 +395,7 @@ What it shows:
   predators, no cold, no distance to cover. Without that cost to lack of parental energy, the gene has
   nothing to pay for. The design starts parenting at 0 on purpose, so that evolution has to find the
   benefit. This check cannot show whether it does; it needs predation, newborn vulnerability and the
-  parent staying near its young (`SENSE.14`).
+  parent staying near its young (the sense is built, `SENSE.14`; the check still needs predation).
 
 ### Re-check after the clusters (`DNA.15`)
 

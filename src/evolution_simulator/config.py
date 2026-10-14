@@ -166,6 +166,17 @@ class ReproductionRules:
     25%, digit 3 lowers it. The sex itself is the digit modulo 2: 0 impregnates, 1 bears."""
     maturity_share: float = 0.06
     """An animal (or plant) can first breed at this share of its expected lifespan."""
+    young_dependence: float = 0.06
+    """Young depend on a parent for ``parenting * young_dependence`` of the parent's expected
+    lifespan after birth; a parent senses them as "own young" while they do (``SENSE.14``)."""
+    young_protection: float = 0.5
+    young_fearlessness: float = 0.4
+    """A parent that sees its dependent young and a threat fights harder and flees less: aggression
+    rises by ``parenting * young_protection`` and fear falls by ``parenting * young_fearlessness``
+    (as fractions of their values)."""
+    similarity_unrelated: float = 0.75
+    """The share of digits that differ between two unrelated random genomes; a possible mate whose
+    genome differs by this much or more has similarity 0 (``SENSE.14``)."""
     mating_effort: float = 0.03
     """Share of its store each partner spends on a mating, whether or not it takes."""
     conception_base: float = 0.30

@@ -16,6 +16,7 @@ class Animal:
 
     __slots__ = (
         "asleep",
+        "awake_time",
         "disturbed",
         "heading",
         "id",
@@ -43,6 +44,8 @@ class Animal:
         self.parents = parents
         self.last_decision: BrainDecision | None = None
         self.asleep: bool = False
+        self.awake_time: float = 0.0
+        """Reference ticks (hours) since it last slept (``SENSE.14``'s tiredness)."""
         self.disturbed: bool = False
         self.partner: int | None = None
 

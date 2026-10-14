@@ -236,6 +236,23 @@ class World:
         cycle = self.config.day_cycle
         return 0 if cycle is None else cycle.day_number(self.simulated_seconds)
 
+    @property
+    def day_phase(self) -> float | None:
+        """The position in the day from 0 (midnight) up to 1, or ``None`` without a day cycle."""
+        cycle = self.config.day_cycle
+        return None if cycle is None else cycle.phase(self.simulated_seconds)
+
+    def edge_vector(self, position: Vec) -> tuple[float, float]:
+        """A unit vector from ``position`` toward the nearest wall (the lowest axis, then the low
+        side, wins a tie)."""
+        best = (math.inf, 0, 0.0)
+        for axis, (c, size) in enumerate(zip(position.coords, self.bounds.size)):
+            for gap, sign in ((c, -1.0), (size - c, 1.0)):
+                if gap < best[0]:
+                    best = (gap, axis, sign)
+        _, axis, sign = best
+        return (sign, 0.0) if axis == 0 else (0.0, sign)
+
     def edge_distance(self, position: Vec) -> float:
         """Distance from ``position`` to the nearest wall."""
         return min(min(c, size - c) for c, size in zip(position.coords, self.bounds.size))
@@ -548,6 +565,7 @@ class World:
         """Put animals to sleep at night and wake them in the morning, when starving, or when an
         alarm call disturbs them."""
         night = self.is_night
+        self._update_tiredness(animals)
         starving_below = self.config.sleep.starving_below
         if night:
             self._wake_by_alarm()
@@ -569,6 +587,23 @@ class World:
                 animal.asleep = False
                 for listener in self._sleep_listeners:
                     listener.woke(self, animal)
+
+    def _update_tiredness(self, animals: list[Animal]) -> None:
+        """Count the time each animal has been awake and hand it to the brain as a share of a day
+        (``SENSE.14``). Without a day cycle nobody sleeps, so nobody is tired."""
+        cycle = self.config.day_cycle
+        day = (
+            0.0
+            if cycle is None
+            else cycle.length_seconds / self.config.traits.time.reference_tick_seconds
+        )
+        dt = self.dt
+        for animal in animals:
+            if animal.asleep:
+                animal.awake_time = 0.0
+            else:
+                animal.awake_time += dt
+            animal.traits.tiredness = min(1.0, animal.awake_time / day) if day > 0.0 else 0.0
 
     def _rest(self, animal: Animal) -> None:
         """One tick of sleep: age as usual, burn less energy and regain some."""

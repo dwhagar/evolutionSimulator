@@ -24,6 +24,7 @@ BODY = {
     "vitality": 0.5,
     "ready_to_mate": False,
     "pain": 0.0,
+    "tiredness": 0.0,
 }
 
 
@@ -345,3 +346,52 @@ def test_validation():
     ):
         with pytest.raises(ValueError):
             bad()
+
+
+# --- the newer inputs (SENSE.14) ----------------------------------------------------------
+
+
+def test_the_clock_is_the_time_of_day_as_a_sine_and_a_cosine():
+    noon = look([], conditions=SensingConditions(clock=0.5))
+    assert noon.clock_sin == pytest.approx(0.0, abs=1e-12) and noon.clock_cos == pytest.approx(-1.0)
+    dusk = look([], conditions=SensingConditions(clock=0.75))
+    assert dusk.clock_sin == pytest.approx(-1.0) and dusk.clock_cos == pytest.approx(0.0, abs=1e-12)
+    blank = look([])
+    assert (blank.clock_sin, blank.clock_cos) == (0.0, 0.0)  # no day cycle, no clock
+    for bad in (-0.1, 1.1):
+        with pytest.raises(ValueError):
+            SensingConditions(clock=bad)
+
+
+def test_the_wall_is_reported_by_bearing_and_closeness_when_in_reach():
+    # The wall lies to the left of a creature facing east (+y is left): bearing -0.5.
+    percepts = look([], edge_distance=10.0, edge_direction=(0.0, 1.0))
+    assert percepts.edge_closeness > 0.0
+    assert percepts.edge_direction == pytest.approx(-0.5)
+    far = look([], edge_distance=500.0, edge_direction=(0.0, 1.0))
+    assert far.edge_closeness == 0.0 and far.edge_direction == 0.0
+    unknown = look([], edge_distance=10.0)
+    assert unknown.edge_direction == 0.0  # no direction given, no bearing
+
+
+def test_a_mates_likeness_is_reported_from_the_chosen_mate_and_only_when_asked_for():
+    asked = []
+
+    def likeness() -> float:
+        asked.append(1)
+        return 0.8
+
+    mate = thing("mate", 10.0, similarity=likeness)
+    assert look([mate]).mate_similarity == pytest.approx(0.8)
+    assert len(asked) == 1
+    asked.clear()
+    assert look([thing("prey", 10.0, ident=2, similarity=likeness)]).mate_similarity == 0.0
+    assert not asked  # nothing to compare, so the genomes are never read
+    assert look([thing("mate", 10.0, similarity=0.3)]).mate_similarity == pytest.approx(0.3)
+
+
+def test_own_young_are_found_like_any_other_target():
+    percepts = look([thing("young", 10.0, -45.0)])
+    assert percepts.young_closeness == pytest.approx(0.75)
+    assert percepts.young_direction > 0.0
+    assert percepts.mate_closeness == 0.0

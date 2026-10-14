@@ -36,7 +36,7 @@ from evolution_simulator.sense_genes import (
     vision_reach,
     working_acuity,
 )
-from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
+from evolution_simulator.trait_defs import ANIMAL_TRAITS, CARE_FRACTION_RANGE, PLANT_TRAITS
 
 # =============================================================================
 # Base Traits: Shared Organism Physiology, Vitality & Mortality
@@ -305,6 +305,8 @@ class AnimalTraits(BaseTraits):
         # cooldown counts down in reference ticks, so it is a float.
         self.mating_cooldown: float = repro.maturity_share * self.lifespan_ticks
         self.pregnancy: Pregnancy | None = None
+        self.tiredness: float = 0.0
+        """Time awake as a share of a day, 0 to 1; the world sets it (``SENSE.14``)."""
 
         # Environmental stimulus inputs
         self.env_target_size_ratio: float = 1.0
@@ -337,6 +339,22 @@ class AnimalTraits(BaseTraits):
     def lifespan_ticks(self) -> float:
         """Reference ticks (hours) until accumulated wear reaches the damage this body can take."""
         return self.max_damage_capacity / self.wear_per_tick
+
+    @property
+    def lived_ticks(self) -> float:
+        """Reference ticks (hours) lived so far (wear grows with time, whatever the tick)."""
+        return self.accumulated_damage / self.wear_per_tick
+
+    @property
+    def parenting(self) -> float:
+        """The ``parenting`` gene as 0 to 1 (the care fraction's place in its range)."""
+        low, high = CARE_FRACTION_RANGE
+        return (self.phenotype["care_fraction"] - low) / (high - low)
+
+    @property
+    def dependence_ticks(self) -> float:
+        """How long, in reference ticks, this animal's young depend on it after birth."""
+        return self.parenting * self.rules.reproduction.young_dependence * self.lifespan_ticks
 
     @property
     def cooldown_ticks(self) -> float:
@@ -514,7 +532,18 @@ class AnimalTraits(BaseTraits):
             return self._decision
         if not self.can_mate and (percepts.mate_closeness or percepts.mate_direction):
             # Not ready to breed: a possible mate does not pull on it (REPRO.5).
-            percepts = replace(percepts, mate_closeness=0.0, mate_direction=0.0)
+            percepts = replace(
+                percepts, mate_closeness=0.0, mate_direction=0.0, mate_similarity=0.0
+            )
+        aggression, fear = (
+            self.current_aggression,
+            self._effective_fear(mate_in_view=percepts.mate_closeness > 0.0),
+        )
+        if percepts.young_closeness > 0.0 and percepts.threat_closeness > 0.0:
+            # A threat near its dependent young: a caring parent fights instead of fleeing.
+            repro = self.rules.reproduction
+            aggression *= 1.0 + self.parenting * repro.young_protection
+            fear *= 1.0 - self.parenting * repro.young_fearlessness
         inputs = build_inputs(
             percepts,
             energy_ratio=self.current_energy / self.max_energy,
@@ -522,10 +551,12 @@ class AnimalTraits(BaseTraits):
             vitality=self.vitality,
             ready_to_mate=self.can_mate,
             pain=self.pain,
+            tiredness=self.tiredness,
             temperament=Temperament(
-                aggression=self.current_aggression,
-                fear=min(1.0, self._effective_fear(mate_in_view=percepts.mate_closeness > 0.0)),
+                aggression=min(1.0, aggression),
+                fear=min(1.0, fear),
                 repro_drive=self.effective_drive,
+                parenting=self.parenting,
             ),
         )
         self.damage_since_decision = 0.0

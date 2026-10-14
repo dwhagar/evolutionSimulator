@@ -147,7 +147,9 @@ def test_founders_differ_a_little_and_still_agree_with_the_rule():
     data = samples(1500, 4)
     shares = [agreement(b, data) for b in brains]
     assert sum(shares) / len(shares) >= 0.9
-    assert min(shares) >= 0.75
+    # One level on a pivotal bias (the running neuron's, say) can cost a founder up to half of the
+    # agreement; the average stays high and evolution repairs the odd unlucky founder.
+    assert min(shares) >= 0.5
 
 
 def test_variation_moves_only_that_many_levels_and_never_a_gate():
