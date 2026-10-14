@@ -1,9 +1,11 @@
 """Charts and history (UX.16): pyqtgraph line charts of the recorded statistics.
 
-Five tabs read the ``HistorySamples`` the controller publishes (``controller.history``, one new
+Six tabs read the ``HistorySamples`` the controller publishes (``controller.history``, one new
 sample per simulated day): population, births and deaths (by cause), condition (energy, health and
-the shares asleep, pregnant and ready), a trait or gene over time (mean, spread and range), and a
-gene distribution that can be scrubbed through time. Everything is read from
+the shares asleep, pregnant and ready), lineages (founders that still have descendants alive), a trait
+or gene over time (mean, the middle 80 percent from the 10th to the 90th percentile, and the range),
+and a gene distribution that can be scrubbed through time. Genes and traits carry the display names
+and units of the catalogue (``evolution_simulator.catalogue``). Everything is read from
 ``evolution_simulator.history``; nothing here touches the world.
 
 The time axis is in simulated days, and in years once the run is more than two years old. Charts
@@ -32,6 +34,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from evolution_simulator.catalogue import Description, describe_gene, describe_trait
 from evolution_simulator.history import HistorySamples
 from evolution_simulator.viewer.controller import ViewerController
 from evolution_simulator.viewer.registry import PanelSpec, ViewerContext
@@ -106,16 +109,43 @@ def time_axis(history: HistorySamples | None) -> TimeAxis:
     return TimeAxis("days", days_per_period)
 
 
+def describe_stat(name: str) -> Description | None:
+    """The catalogue's name, unit and meaning of a recorded gene or trait
+    (``animal.gene.speed``, ``plant.trait.canopy_radius``), or ``None`` for anything else."""
+    _, _, rest = name.partition(".")
+    group, _, field = rest.partition(".")
+    try:
+        if group == "gene" and field:
+            return describe_gene(field)
+        if group == "trait" and field:
+            return describe_trait(field)
+    except KeyError:
+        return None
+    return None
+
+
 def pretty_stat(name: str) -> str:
-    """A readable name for a recorded statistic (``animal.trait.max_speed`` -> ``max speed (trait)``).
-    A display-name catalogue (UX.29) can replace this later."""
+    """A readable name for a recorded statistic: the catalogue's display name for a gene or trait
+    (``animal.gene.sight_fov`` -> ``Field of vision (gene)``), else the name made readable
+    (``animal.trait.max_speed`` -> ``max speed (trait)``)."""
     _, _, rest = name.partition(".")
     if rest == "age_at_death":
         return "age at death"
     group, _, field = rest.partition(".")
     if group in ("trait", "gene") and field:
+        described = describe_stat(name)
+        if described is not None:
+            return f"{described.name} ({group})"
         return f"{field.replace('_', ' ')} ({group})"
     return rest.replace(".", " ").replace("_", " ")
+
+
+def stat_label(name: str) -> str:
+    """The vertical-axis label of a statistic: its name and, when the catalogue has one, its unit."""
+    described = describe_stat(name)
+    if described is None or not described.unit:
+        return pretty_stat(name)
+    return f"{pretty_stat(name)}, {described.unit}"
 
 
 def stats_of_kind(history: HistorySamples, kind: str) -> list[str]:
@@ -153,6 +183,24 @@ def histogram_shares(counts: Sequence[int]) -> np.ndarray:
 def spread_band(means: np.ndarray, stds: np.ndarray, los: np.ndarray, his: np.ndarray):
     """The lower and upper edge of mean plus or minus one deviation, kept inside the range seen."""
     return np.maximum(means - stds, los), np.minimum(means + stds, his)
+
+
+def percentile_band(
+    means: np.ndarray,
+    stds: np.ndarray,
+    los: np.ndarray,
+    his: np.ndarray,
+    p10s: np.ndarray,
+    p90s: np.ndarray,
+):
+    """The lower and upper edge of the middle 80 percent (10th to 90th percentile). Where a sample
+    has no percentiles (history recorded before they were kept, a nan here), the edge is the mean
+    plus or minus one deviation, as ``spread_band`` gives."""
+    fallback_low, fallback_high = spread_band(means, stds, los, his)
+    return (
+        np.where(np.isnan(p10s), fallback_low, p10s),
+        np.where(np.isnan(p90s), fallback_high, p90s),
+    )
 
 
 def death_causes(history: HistorySamples, kind: str) -> list[str]:
@@ -330,6 +378,18 @@ class ConditionTab(SeriesTab):
         )
 
 
+class LineagesTab(SeriesTab):
+    """How many founders still have a line of descent alive (through the mother, or the seeding
+    plant). It falls when a line dies out, so it shows diversity being lost."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "Lineages",
+            "Founder lines still alive",
+            [("lineages.animal", "Animals", BLUE), ("lineages.plant", "Plants", GREEN)],
+        )
+
+
 class FlowsTab(ChartTab):
     """Births and deaths per period, and the deaths split by cause."""
 
@@ -369,7 +429,7 @@ class FlowsTab(ChartTab):
 
 
 class TraitTab(ChartTab):
-    """One trait or gene over time: its mean, a band of one deviation, and the range seen."""
+    """One trait or gene over time: its mean, the middle 80 percent, and the range seen."""
 
     title = "Traits and genes"
 
@@ -380,6 +440,11 @@ class TraitTab(ChartTab):
             self.kind.addItem(text, kind)
         self.stat = self.add_combo()
         self.show_range = self.add_check("Range (lowest to highest)", True)
+        self.show_band = self.add_check("Middle 80% (10th to 90th percentile)", True)
+        self.show_band.setToolTip(
+            "Where history was recorded before percentiles were kept, the band is the mean "
+            "plus or minus one deviation instead."
+        )
         self.controls.addStretch(1)
         self._listed: tuple[str, ...] = ()
 
@@ -402,6 +467,11 @@ class TraitTab(ChartTab):
         self.stat.clear()
         for name in names:
             self.stat.addItem(pretty_stat(name), name)
+            described = describe_stat(name)
+            if described is not None:
+                self.stat.setItemData(
+                    self.stat.count() - 1, described.meaning, Qt.ItemDataRole.ToolTipRole
+                )
         index = self.stat.findData(keep)
         self.stat.setCurrentIndex(index if index >= 0 else (0 if names else -1))
         self.stat.blockSignals(False)
@@ -412,7 +482,7 @@ class TraitTab(ChartTab):
         name = self.stat.currentData()
         if name is None:
             return
-        self.plot.getPlotItem().setLabel("left", pretty_stat(name))
+        self.plot.getPlotItem().setLabel("left", stat_label(name))
         days, stats = history.stat_series(name)
         if not days:
             return
@@ -425,8 +495,10 @@ class TraitTab(ChartTab):
         if self.show_range.isChecked():
             self.plot.line(x, hi, colour, "Highest", width=1, style=Qt.PenStyle.DashLine)
             self.plot.line(x, lo, colour, "Lowest", width=1, style=Qt.PenStyle.DashLine)
-        if len(x) > 1:
-            low, high = spread_band(mean, std, lo, hi)
+        if len(x) > 1 and self.show_band.isChecked():
+            p10 = np.array([np.nan if s.p10 is None else s.p10 for s in stats])
+            p90 = np.array([np.nan if s.p90 is None else s.p90 for s in stats])
+            low, high = percentile_band(mean, std, lo, hi, p10, p90)
             top, bottom = pg.PlotCurveItem(x, high), pg.PlotCurveItem(x, low)
             fill = _colour(colour)
             fill.setAlpha(60)
@@ -542,7 +614,15 @@ class ChartsPanel(QWidget):
         self.controller = controller
         self.tabs = QTabWidget()
         self.chart_tabs: list[ChartTab] = [
-            tab() for tab in (PopulationTab, FlowsTab, ConditionTab, TraitTab, DistributionTab)
+            tab()
+            for tab in (
+                PopulationTab,
+                FlowsTab,
+                ConditionTab,
+                LineagesTab,
+                TraitTab,
+                DistributionTab,
+            )
         ]
         for tab in self.chart_tabs:
             self.tabs.addTab(tab, tab.title)

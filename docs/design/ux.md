@@ -247,6 +247,17 @@ dependencies (a test checks that no core module names Qt or numpy).
   averaged by the periods each covers, histograms add. A coarser sample is built from the finer ones, so
   its `span` (periods covered) varies around the nominal length; every sample says its `day` (period it
   ends at) and `span`.
+- **Percentiles, lineages and the format (UX.32).** A `Stat` also carries `p10` and `p90` (linear
+  interpolation between the nearest ranks). Merging cannot be exact for percentiles without the numbers,
+  so a merged `Stat` takes the count-weighted average of the two, which is exact for equal parts and
+  close for samples of one population; it has none if either side has none. The samples have levels
+  `lineages.animal` and `lineages.plant`: the number of distinct founders with a line of descent alive,
+  where the line goes through the mother (the last parent of a `Born` event) or the seeding plant, and a
+  founder, or anyone born before the recorder started, is its own root. The recorder keeps one root per
+  living organism born while recording (`Born` sets it, `Died` drops it) and saves them. The history
+  format is 2 (`HISTORY_FORMAT`); `READABLE_FORMATS` is `(1, 2)`: a format-1 history or saved recorder
+  loads, its statistics have no percentiles and its living organisms are their own roots, and saving it
+  again writes format 2. A `Stat` is saved as five numbers, or seven with the percentiles.
 - **What the viewer reads.** `recorder.history()` returns an immutable `HistorySamples`: `tiers`,
   `samples()` (all, oldest first), `series(name)` (days and values, flows per period so tiers share one
   scale), `stat_series(name)`, `histogram_at(name, day)` for scrubbing, `names()` and `stat_names()`.
@@ -461,7 +472,7 @@ are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
   window never waits on a dialog.
 ### As built: the charts (`UX.16`)
 
-`viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with five
+`viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with six
 pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 
 - **History reaches the screen through the backend.** `Batch.history` carries the recorder's
@@ -474,19 +485,22 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
   and **UX.10** will load a saved history into the same signal.
 - **Tabs.** Population (animals, plants, corpses); Births and deaths (animals or plants, with the
   deaths split by cause, only the causes that happened); Condition (average energy, health, age and
-  diet, and the shares asleep, pregnant and ready to mate); Traits and genes (any recorded statistic
-  of the animals or the plants: its mean, a band of one standard deviation kept inside the range
-  seen, and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
+  diet, and the shares asleep, pregnant and ready to mate); Lineages (UX.32: founders that still have
+  a line of descent alive, animals and plants); Traits and genes (any recorded statistic
+  of the animals or the plants: its mean, the middle 80 percent from the 10th to the 90th percentile
+  (UX.32), and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
   a gene as shares of the population, with a slider over the days that have one, which follows the
   newest unless the user scrubbed back).
 - **Axis.** Simulated days, and years once the newest sample is two years in; flows are per day on
   every tier. Mouse wheel zooms and drag pans, right-click is pyqtgraph's menu (it also exports an
   image), and "Reset view" fits the data again.
-- **Differences from the first sketch.** The band is the mean plus or minus one deviation, not the
-  10th to 90th percentile, because the recorder keeps the mean, deviation, lowest and highest and not
-  percentiles. The number of lineages is not charted (the recorder does not count them; a separate
-  item if wanted). Stat names are made readable by `pretty_stat`; the display-name catalogue
-  (UX.29) can replace it.
+- **Differences from the first sketch, and what UX.32 changed.** The first build drew the mean plus or
+  minus one deviation, had no lineage chart and made stat names with `pretty_stat`, because the recorder
+  kept only mean, deviation, lowest and highest. UX.32 (below, under the recorder) added the percentiles
+  and lineage counts, so the band is the 10th to 90th percentile (the old band stays for samples
+  recorded without percentiles), the Lineages tab exists, and `pretty_stat` and the axis label
+  (`stat_label`, with the unit) use the display-name catalogue (UX.29), falling back to the readable
+  form for a name it does not know. The combo's tooltips carry the catalogue's one-line meaning.
 - **Drawing.** Redraws are throttled (200 ms) and only the tab in view is drawn, and only while the
   panel is visible, so a fast-forward costs the charts almost nothing. Colours are the Okabe and Ito
   colour-blind-safe set, one fixed colour per death cause, and the plots take the window's own
