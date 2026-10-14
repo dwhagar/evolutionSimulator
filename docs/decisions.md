@@ -4,6 +4,10 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-14: request for species graphs
+
+The owner asked for population graphs of plants and animals and, as lines diverge, separate population graphs for the most divergent species of each kind. The totals exist already (charts, Population tab, `UX.16`). The per-species graphs need a working definition of a species (a cluster of close genomes that stays separated), tracked by the history recorder: `SPECIES.1` tracker, `SPECIES.2` recording, `UX.41` charts. How clear a gap counts ([#206](https://github.com/dwhagar/evolutionSimulator/issues/206), `SPECIES.3`) and how many lines to show ([#207](https://github.com/dwhagar/evolutionSimulator/issues/207), `SPECIES.4`) are open with defaults.
+
 ## 2026-10-14: owner taps on the decision cards
 
 The owner answered ten open questions with taps on cards in the project chat. Answers beyond the working defaults are marked **changes the default**.
