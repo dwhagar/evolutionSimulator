@@ -16,9 +16,10 @@ a toy model, with the model stated.
     `repro_interval` (the shortest gap between births, as a share of the animal's lifespan).
   - **Tier 2, motivation (behaviour):** `repro_drive` (how strongly the animal wants to reproduce).
 - All three also reach behaviour, each for its own reason: caregiving through protective behaviour
-  around young, the interval through the "not ready" gate on all mating behaviour, and the drive through
-  when and how boldly the animal looks for a mate. The brain gets all three as inputs
-  ([BRAIN.14](../../TODO.md)).
+  around young (and the hunger a costly birth leaves behind), the interval through the "not ready" gate
+  on all mating behaviour, and the drive through when and how boldly the animal looks for a mate. They
+  reach the brain the way `BRAIN.14` already does it: as fields on `Temperament` in
+  `brain_adapter.py` that bend the input they concern, with no new brain inputs.
 - Offspring survival is not a separate number. A newborn starts with the energy its parents gave it, so
   it lives or starves according to the same energy rules as everyone else.
 - Longevity (`somatic_maint`) pays for itself by competing with reproduction: more repair means a more
@@ -26,7 +27,7 @@ a toy model, with the model stated.
   that grows faster than the benefit.
 - Every time is a **share of the animal's own lifespan**, so none of it depends on how long a tick is.
   That matters because of a problem with the fastest time scales, raised as question 8 below.
-- The layout changes (version 3), so saved animal genomes stop loading. The brain gains 2 inputs.
+- The animal layout changes (version 3), so saved animal genomes stop loading. The brain's shape does not change.
 
 ## What exists today
 
@@ -79,7 +80,8 @@ added), so `sex_strategy` and the brain block move along by five. `ANIMAL_LAYOUT
 - **Behaviour:** an animal with dependent young nearby is more protective: aggression times
   `1 + 0.5 * care_fraction_norm`, fear times `1 - 0.4 * care_fraction_norm`, where `care_fraction_norm`
   is the gene value 0 to 1. This needs "young nearby" from the senses, so it waits for `SENSE.1`;
-  until then the modifier is zero. The gene value is also a brain input.
+  until then the modifier is zero. Meanwhile caregiving already acts on behaviour through its cost:
+  a costly birth leaves the parent hungry, and the existing hunger rule sends it foraging.
 
 ### Interval: a limit on how often (tier 1)
 
@@ -94,7 +96,7 @@ added), so `sex_strategy` and the brain block move along by five. `ANIMAL_LAYOUT
 - A short interval also means more births from the same body, each paying the full cost, so a fast
   breeder is limited by its food supply, not by the gene.
 - **Behaviour:** while the cooldown runs, the animal does not seek a mate, does not mating-call, and
-  the brain sees `ready_to_mate = 0` (already an input) plus the time left as a share of the interval.
+  the brain sees `ready_to_mate = 0` (already an input).
 
 ### Drive: the urge to reproduce (tier 2)
 
@@ -107,8 +109,10 @@ added), so `sex_strategy` and the brain block move along by five. `ANIMAL_LAYOUT
   - Boldness: while a mate is in view, `effective_fear` is multiplied by `1 - 0.3 * drive`.
   - Upkeep: `0.05 * drive ** 2` per tick (search, display, hormones). At drive 1 that is about 10% of a
     mid-size animal's basal metabolism.
-- The brain input `repro_urge` is `0` during a cooldown, otherwise `drive * min(1, energy_ratio /
-  threshold)`: it rises as the animal gets fed.
+- In the brain, the drive is a `Temperament` field that bends the `mate_closeness` input with the same
+  factor as aggression and fear (0.4 to 1.6, 0.5 neutral): a high-drive animal finds a mate "closer" and
+  is pulled to it harder. During a cooldown the factor is 0. The brain's existing `ready_to_mate` input
+  stays as the gate.
 - The reason it is separate from caregiving: a high-drive, low-caregiving animal is a fast, careless
   breeder; low-drive, high-caregiving is a slow, devoted one; and the two other combinations are also
   coherent strategies.
@@ -222,8 +226,9 @@ take both.
      returns the newborn's starting energy;
    - replace the `0.35 + 0.35 * vitality` threshold with the drive formula;
    - basal metabolism gains the readiness and drive upkeep and the new repair cost.
-4. `brain_adapter.py`: add `repro_urge` and `caregiving` to `INPUT_NAMES` (17 to 19 inputs, brain
-   weights 198 to 214), which bumps the layout again if both changes land together.
+4. `brain_adapter.py`: add `repro_drive` to `Temperament` (bending `mate_closeness`), and `caregiving`
+   once `SENSE.1` provides a "young nearby" percept. `INPUT_NAMES` and the brain's shape stay as they
+   are.
 5. Tests: the newborn's energy equals the parents' mean `care_fraction` times its `max_energy`; neither
    parent is charged if one cannot afford the birth; cooldown ticks scale with lifespan; full repair
    makes a birth cost double; and repair cost is convex.
