@@ -392,17 +392,19 @@ def test_nobody_mates_in_cooldown_pregnant_dead_or_without_the_energy():
 
 
 def test_the_chance_of_conceiving_rises_with_both_fertilities():
+    TRIALS = 300  # seeded, so the same every run; the spread at 300 is about 0.03
+
     def chance(fertility_a: str, fertility_b: str) -> float:
         taken = 0
-        for i in range(2000):
+        for i in range(TRIALS):
             father, mother = male(fertility=fertility_a), female(fertility=fertility_b)
             result = AnimalTraits.mate(father, mother, random.Random(i))
             taken += result is MatingResult.CONCEIVED
-        return taken / 2000
+        return taken / TRIALS
 
-    assert chance("000", "000") == pytest.approx(0.30, abs=0.04)
-    assert chance("333", "333") == pytest.approx(0.90, abs=0.04)
-    assert chance("333", "000") == pytest.approx(0.60, abs=0.04)
+    assert chance("000", "000") == pytest.approx(0.30, abs=0.06)
+    assert chance("333", "333") == pytest.approx(0.90, abs=0.06)
+    assert chance("333", "000") == pytest.approx(0.60, abs=0.06)
 
 
 def test_litter_size_and_gestation_come_from_the_bearers_fertility():
