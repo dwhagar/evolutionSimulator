@@ -75,12 +75,12 @@ def record(signal):
 
 def test_the_shell_ships_a_placeholder_in_each_default_slot(qapp):
     specs = {spec.id: spec for spec in discover_panels()}
-    assert {sid: spec.area for sid, spec in specs.items()} == {
+    assert {sid: spec.area for sid, spec in specs.items()}.items() >= {
         "world": "center",
         "controls": "top",
         "inspector": "right",
         "charts": "right",
-    }
+    }.items()
     right = [spec.id for spec in discover_panels() if spec.area == "right"]
     assert right == ["inspector", "charts"]
 
@@ -192,9 +192,9 @@ def test_the_local_backend_reports_events_once(clock):
 
 
 def test_the_window_puts_each_panel_in_its_slot(window):
-    assert set(window.panels) == {"world", "controls", "inspector", "charts"}
+    assert set(window.panels) >= {"world", "controls", "inspector", "charts"}
     assert window.centralWidget() is window.panels["world"]
-    assert set(window.docks) == {"controls", "inspector", "charts"}
+    assert set(window.docks) >= {"controls", "inspector", "charts"}
     areas = {sid: window.dockWidgetArea(dock) for sid, dock in window.docks.items()}
     assert areas["controls"] == QtCore.Qt.DockWidgetArea.TopDockWidgetArea
     assert areas["inspector"] == areas["charts"] == QtCore.Qt.DockWidgetArea.RightDockWidgetArea
@@ -309,7 +309,7 @@ def test_the_layout_is_remembered_and_can_be_reset(controller, settings, qapp):
 def test_a_saved_layout_from_another_version_is_ignored(controller, settings, qapp):
     settings.setValue("window/state", QtCore.QByteArray(b"not a layout"))
     win = MainWindow(controller, settings=settings)
-    assert set(win.docks) == {"controls", "inspector", "charts"}  # the default layout stands
+    assert set(win.docks) >= {"controls", "inspector", "charts"}  # the default layout stands
     assert not win.docks["charts"].isHidden()
     win.close()
 

@@ -32,6 +32,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         help="keep the window layout in this .ini file instead of the user's settings",
     )
     parser.add_argument(
+        "--runs-folder",
+        metavar="DIR",
+        help="where saved runs live (default: the per-user folder, see evolution_simulator.runs)",
+    )
+    parser.add_argument(
         "--quit-after",
         type=int,
         metavar="MS",
@@ -73,6 +78,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     backend = LocalBackend(Session(build_simulation(args)))
     controller = ViewerController(backend)
+    from evolution_simulator.runs import RunStore
+    from evolution_simulator.viewer.run_manager import RunManager
+
+    RunManager.install(controller, RunStore(args.runs_folder) if args.runs_folder else None)
     settings = QSettings(args.settings, QSettings.Format.IniFormat) if args.settings else None
     label = f"{'world' if args.world else 'fake'}, seed {args.seed}"
     window = MainWindow(controller, run_label=label, settings=settings)
