@@ -317,10 +317,12 @@ def test_a_ready_plant_drops_seeds_nearby():
     world = make(bounds=Bounds((200, 200)))
     plant = ready_plant(world, Vec.of(150, 150), seed_clutch="3333", dispersal_radius="1111")
     assert plant.traits.seed_count == 8
+    capacity = plant.traits.seed_capacity()
+    assert 1 <= capacity <= 8
     report = world.step()
-    assert report.plant_births == 8
+    assert report.plant_births == capacity
     seeds = [p for p in world.plants if p is not plant]
-    assert len(seeds) == 8
+    assert len(seeds) == capacity
     for seed in seeds:
         assert seed.parents == (plant.id,)
         assert seed.position.distance_to(plant.position) <= plant.traits.dispersal_radius + 1e-9

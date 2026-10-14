@@ -557,10 +557,11 @@ def test_the_seed_budget_is_35_percent_of_biomass():
 def test_seed_capacity_is_the_clutch_the_budget_can_pay_for():
     small = PlantTraits(plant_with(max_biomass="3333", seed_clutch="3333", seed_provision="000"))
     small.current_biomass = small.max_biomass
-    assert small.seed_count == 8 and small.seed_capacity() == 8
+    assert small.seed_count == 8 and small.seed_capacity() == 7  # 0.35 / 0.05
+
     dear = PlantTraits(plant_with(max_biomass="3333", seed_clutch="3333", seed_provision="333"))
     dear.current_biomass = dear.max_biomass
-    assert dear.seed_provision == pytest.approx(0.40)
+    assert dear.seed_provision == pytest.approx(0.50)
     assert dear.seed_capacity() == 0  # one seed costs more than the budget
     empty = PlantTraits(plant_with(seed_clutch="3333"))
     empty.current_biomass = 0.0

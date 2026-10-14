@@ -170,7 +170,7 @@ six old genes plus `seed_provision` (3 digits) and `seeding_interval` (3 digits)
   which for plants are 0.005 per digit (0.15 changed digits per seed, half the animal body's per-digit rate).
 - **Lives longer.** A plant dies when its age reaches `PLANT_LIFESPAN_TICKS` (25,000, five times the longest
   animal). It is a placeholder constant until `TRAIT.8`, which may turn it into a gene.
-- **Pays for seeds.** `seed_provision` (3% to 40% of the seed's own full biomass, log scale) is what each
+- **Pays for seeds.** `seed_provision` (5% to 50% of the seed's own full biomass, log scale) is what each
   seed starts with. The 35% seed budget (`SEED_BUDGET_SHARE`) is spent on as many seeds as it pays for, up to
   `seed_clutch`, so `seed_capacity = min(seed_clutch, budget / (provision * max_biomass))`. If the seeds
   came out bigger than the budget (a mutated `max_biomass`), `launch_seeds` scales every seed down together.

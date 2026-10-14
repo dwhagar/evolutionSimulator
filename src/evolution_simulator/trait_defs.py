@@ -31,7 +31,7 @@ CARE_FRACTION_RANGE: tuple[float, float] = (0.10, 0.80)
 INTERVAL_FRACTION_RANGE: tuple[float, float] = (0.01, 0.25)
 """Shortest gap between births as a share of the expected lifespan (``repro_interval``, log scale)."""
 
-SEED_PROVISION_RANGE: tuple[float, float] = (0.03, 0.40)
+SEED_PROVISION_RANGE: tuple[float, float] = (0.05, 0.50)
 """A seed's starting biomass as a share of its own full size (``seed_provision``, log scale). The
 prototype's fixed 15% sits inside it. A starting range to tune."""
 
