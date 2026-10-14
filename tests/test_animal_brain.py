@@ -319,8 +319,11 @@ class CountingBrain:
         self.calls = 0
 
     def decide(self, inputs):
+        return self.decide_with_hidden(inputs)[1]
+
+    def decide_with_hidden(self, inputs):
         self.calls += 1
-        return self.brain.decide(inputs)
+        return self.brain.decide_with_hidden(inputs)
 
     def __getattr__(self, name):
         return getattr(self.brain, name)

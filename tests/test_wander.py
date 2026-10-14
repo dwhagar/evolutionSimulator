@@ -180,7 +180,9 @@ def test_wandering_explores_where_a_stuck_brain_goes_in_circles():
 
 def animal(seed: int = 3) -> AnimalTraits:
     # Think on every call: the reaction-time gene would otherwise cache the first decision.
-    return AnimalTraits(DNA.random(ANIMAL_LAYOUT, rng(seed)), decision_interval=1)
+    traits = AnimalTraits(DNA.random(ANIMAL_LAYOUT, rng(seed)), decision_interval=1)
+    traits.curiosity = 0.0  # curiosity noise would also change the decisions compared here
+    return traits
 
 
 def test_think_without_an_rng_is_the_plain_brain_decision():

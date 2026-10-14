@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
+from evolution_simulator.learning import LearningRules, NightlyLearning
 from evolution_simulator.traits import AnimalTraits, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.daycycle import DayCycle
@@ -98,6 +99,9 @@ class WorldConfig:
     day_cycle: DayCycle | None = field(default_factory=DayCycle)
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     sleep: SleepRules = field(default_factory=SleepRules)
+    learning: LearningRules | None = field(default_factory=LearningRules)
+    """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
+    ``None`` turns it off."""
     plants: PlantRules = field(default_factory=PlantRules)
     max_animals: int = 1000
     max_plants: int = 5000
@@ -148,6 +152,8 @@ class World:
         self.max_body: float = 0.0
         """Largest body radius of any animal added so far."""
         self._sleep_listeners: list[SleepListener] = []
+        if self.config.learning is not None:
+            self.add_sleep_listener(NightlyLearning())
 
     # -------------------------------------------------------------------------
     # Reading the world
@@ -253,6 +259,7 @@ class World:
     def _insert_animal(
         self, traits: AnimalTraits, place: Vec, facing: float, parents: tuple[int, ...]
     ) -> Animal:
+        traits.learning_rules = self.config.learning
         animal = Animal(self._new_id(), traits, place, facing, parents)
         self._animals[animal.id] = animal
         self._animal_index.insert(animal.id, animal.position)
