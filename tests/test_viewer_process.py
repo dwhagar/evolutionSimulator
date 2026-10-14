@@ -2,6 +2,7 @@
 and resuming a hosted world. Qt's offscreen platform."""
 
 import time
+from typing import ClassVar
 
 import pytest
 from session_support import FailsAtTick
@@ -12,13 +13,20 @@ from PySide6.QtCore import QSettings
 from PySide6.QtWidgets import QMessageBox
 
 from evolution_simulator.runs import RunError, RunStore, RunStoreRules
-from evolution_simulator.session import FakeSpec, InProcessClient, Select, Step, WorldSpec
+from evolution_simulator.session import (
+    FakeSpec,
+    InProcessClient,
+    ResumeSpec,
+    Select,
+    Step,
+    WorldSpec,
+)
 from evolution_simulator.viewer import app
 from evolution_simulator.viewer.controller import ViewerController
 from evolution_simulator.viewer.process_backend import ProcessBackend
 from evolution_simulator.viewer.run_manager import RunManager
 from evolution_simulator.viewer.window import MainWindow
-from evolution_simulator.world import WorldConfig
+from evolution_simulator.world import World, WorldConfig
 
 DAY = 24
 
@@ -139,12 +147,93 @@ def test_the_dialog_is_a_warning_with_two_choices(made, tmp_path, qapp):
 
 
 def test_which_options_start_a_process():
-    assert not app.uses_process(app.parse_args([]))
-    assert app.uses_process(app.parse_args(["--world"]))
-    assert not app.uses_process(app.parse_args(["--world", "--in-process"]))
-    assert app.uses_process(app.parse_args(["--process"]))
-    assert isinstance(app.build_recipe(app.parse_args(["--world"])), WorldSpec)
-    assert isinstance(app.build_recipe(app.parse_args(["--process"])), FakeSpec)
+    process = app.uses_process
+    assert process(app.parse_args([]))  # the real world is the default, in its own process
+    assert process(app.parse_args(["--world"]))  # the old way to ask for it
+    assert not process(app.parse_args(["--in-process"]))
+    assert not process(app.parse_args(["--fake"]))
+    assert process(app.parse_args(["--fake", "--process"]))
+    assert isinstance(app.build_recipe(app.parse_args([])), WorldSpec)
+    assert isinstance(app.build_recipe(app.parse_args(["--fake"])), FakeSpec)
+
+
+def test_what_starts_a_new_world_instead_of_opening_the_newest_run():
+    new = app.wants_new_world
+    assert not new(app.parse_args([]))
+    for flags in (["--new"], ["--seed", "3"], ["--animals", "9"], ["--plants", "9"], ["--fake"]):
+        assert new(app.parse_args(flags)), flags
+    assert app.founders(app.parse_args(["--seed", "3", "--plants", "7"])) == (3, 120, 7)
+
+
+def test_the_newest_saved_run_with_a_checkpoint_is_the_one_opened(tmp_path):
+    store = RunStore(tmp_path / "runs")
+    assert app.newest_run(store) is None
+    world = World(WorldConfig(seed=1))
+    world.populate(3, 10)
+    older = store.create(world, name="older")
+    world.run(5)
+    newer = store.create(world, name="newer")
+    (newer.path / "checkpoints").rename(newer.path / "gone")  # a run with nothing to open
+    assert app.newest_run(store).id == older.id
+
+
+class RecordingBackend(ProcessBackend):
+    made: ClassVar[list] = []
+
+    def __init__(self, recipe, *args, **kwargs):
+        super().__init__(recipe, *args, **kwargs)
+        RecordingBackend.made.append(recipe)
+
+
+def launch(monkeypatch, tmp_path, *flags):
+    from evolution_simulator.viewer import process_backend
+
+    RecordingBackend.made = []
+    monkeypatch.setattr(process_backend, "ProcessBackend", RecordingBackend)
+    argv = ["--quit-after", "400", "--settings", str(tmp_path / "v.ini")]
+    argv += ["--runs-folder", str(tmp_path / "runs"), *flags]
+    assert app.main(argv) == 0
+    return RecordingBackend.made
+
+
+def test_a_plain_launch_with_nothing_saved_starts_the_default_founders(qapp, monkeypatch, tmp_path):
+    [recipe] = launch(monkeypatch, tmp_path)
+    assert isinstance(recipe, WorldSpec) and (recipe.animals, recipe.plants) == (120, 600)
+
+
+def test_a_plain_launch_opens_the_newest_saved_run_and_new_leaves_it_alone(
+    qapp, monkeypatch, tmp_path
+):
+    world = World(WorldConfig(seed=4))
+    world.populate(6, 20)
+    run = RunStore(tmp_path / "runs").create(world, name="kept")
+
+    [recipe] = launch(monkeypatch, tmp_path)
+    assert isinstance(recipe, ResumeSpec) and recipe.run_id == run.id
+    assert recipe.root == str(tmp_path / "runs")
+
+    [fresh] = launch(monkeypatch, tmp_path, "--new")
+    assert isinstance(fresh, WorldSpec)
+    [asked] = launch(monkeypatch, tmp_path, "--seed", "9", "--animals", "5")
+    assert isinstance(asked, WorldSpec) and asked.animals == 5 and asked.config.seed == 9
+    assert launch(monkeypatch, tmp_path, "--fake") == []  # in this process: no backend made
+    [piped] = launch(monkeypatch, tmp_path, "--fake", "--process")
+    assert isinstance(piped, FakeSpec)
+
+
+def test_the_opened_run_is_the_current_run_of_the_window(qapp, monkeypatch, tmp_path):
+    from evolution_simulator.viewer import run_manager
+
+    world = World(WorldConfig(seed=4))
+    world.populate(6, 20)
+    run = RunStore(tmp_path / "runs").create(world, name="kept")
+    adopted = []
+    original = run_manager.RunManager.adopt
+    monkeypatch.setattr(
+        run_manager.RunManager, "adopt", lambda self, r: (adopted.append(r.id), original(self, r))
+    )
+    launch(monkeypatch, tmp_path)
+    assert adopted == [run.id]
 
 
 # --- saving and resuming a world that lives in the other process ------------------------------

@@ -337,21 +337,25 @@ def test_format_speed_names_the_preset_the_achieved_speed_and_when_behind():
 # --- the command line --------------------------------------------------------------
 
 
-def test_the_command_line_defaults_to_the_fake_simulation():
+def test_the_command_line_defaults_to_the_real_world_in_its_own_process():
+    from evolution_simulator.viewer import app
+
     args = parse_args([])
-    assert not args.world and args.seed == 0 and args.quit_after is None
+    assert not args.fake and args.quit_after is None
+    assert app.uses_process(args) and not app.wants_new_world(args)
+    assert app.founders(args) == (0, 120, 600)
 
 
 def test_main_opens_the_window_and_returns_when_it_closes(qapp, tmp_path):
-    code = main(["--quit-after", "50", "--settings", str(tmp_path / "layout.ini")])
+    code = main(["--fake", "--quit-after", "50", "--settings", str(tmp_path / "layout.ini")])
     assert code == 0
     assert (tmp_path / "layout.ini").exists()  # the layout was saved on close
 
 
-def test_main_can_run_the_real_world(qapp, tmp_path):
+def test_main_can_run_the_real_world_in_this_process(qapp, tmp_path):
     code = main(
         [
-            "--world",
+            "--in-process",
             "--animals",
             "5",
             "--plants",
@@ -360,6 +364,8 @@ def test_main_can_run_the_real_world(qapp, tmp_path):
             "50",
             "--settings",
             str(tmp_path / "layout.ini"),
+            "--runs-folder",
+            str(tmp_path / "runs"),
         ]
     )
     assert code == 0

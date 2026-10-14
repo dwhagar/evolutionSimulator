@@ -33,11 +33,12 @@ jobs:
           if ($p.ExitCode -ne 0) { throw "selftest exit code $($p.ExitCode)" }
       - name: Check the window opens and closes
         # Qt's offscreen platform: no screen needed. --quit-after closes the window by itself.
+        # A plain launch starts the real world in its own process, as a user's double-click does.
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          $p = Start-Process dist\evolutionSimulator\evolutionSimulator.exe -ArgumentList "--quit-after","1500","--settings","$env:RUNNER_TEMP\viewer.ini" -Wait -PassThru
+          $p = Start-Process dist\evolutionSimulator\evolutionSimulator.exe -ArgumentList "--quit-after","4000","--settings","$env:RUNNER_TEMP\viewer.ini","--runs-folder","$env:RUNNER_TEMP\runs" -Wait -PassThru
           if ($p.ExitCode -ne 0) { throw "viewer exit code $($p.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
