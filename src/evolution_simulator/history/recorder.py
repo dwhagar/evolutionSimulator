@@ -23,7 +23,7 @@ import gzip
 import json
 import math
 import os
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -160,6 +160,7 @@ class Recorder:
         self._ages: dict[str, list[float]] = {kind: [] for kind in KINDS}
         """Ages (in periods) of those who died since the last sample."""
         self._attached = False
+        self._sample_listeners: list[Callable[[Sample], None]] = []
         if attach:
             self.attach()
 
@@ -184,6 +185,16 @@ class Recorder:
         if remover is not None:
             remover(self._on_step)
         self._attached = False
+
+    def add_sample_listener(self, listener: Callable[[Sample], None]) -> None:
+        """Call ``listener(sample)`` with each new single-period sample as it is taken, before it
+        is merged into any coarser one (the process host sends these to the viewer, whose
+        ``HistoryMirror`` merges them the same way)."""
+        self._sample_listeners.append(listener)
+
+    def remove_sample_listener(self, listener: Callable[[Sample], None]) -> None:
+        if listener in self._sample_listeners:
+            self._sample_listeners.remove(listener)
 
     def _on_event(self, event: WorldEvent) -> None:
         if isinstance(event, Born):
@@ -212,6 +223,8 @@ class Recorder:
         self._last_period = now
         self._taken += 1
         self._push(0, sample)
+        for listener in tuple(self._sample_listeners):
+            listener(sample)
         return True
 
     def _take(self, period: int, span: int) -> Sample:
@@ -284,20 +297,7 @@ class Recorder:
     # ---- the ring buffers --------------------------------------------------
 
     def _push(self, level: int, sample: Sample) -> None:
-        """Add a sample to a tier, merging it into the newest one when they belong to the same
-        stretch of that tier, and pass the oldest on when the tier is over its capacity."""
-        tier = self._tiers[level]
-        rule = self.rules.tiers[level]
-        if tier and _bucket(tier[-1], rule) == _bucket(sample, rule):
-            tier[-1] = tier[-1].merge(sample)
-        else:
-            tier.append(sample)
-        while len(tier) > rule.capacity:
-            oldest = tier.pop(0)
-            if level + 1 < len(self._tiers):
-                self._push(level + 1, oldest)
-            else:
-                tier[0] = oldest.merge(tier[0])
+        push_sample(self._tiers, self.rules.tiers, level, sample)
 
     # ---- reading and saving ------------------------------------------------
 
@@ -349,6 +349,26 @@ class Recorder:
         if attach:
             recorder.attach()
         return recorder
+
+
+def push_sample(
+    tiers: list[list[Sample]], rules: Sequence[TierRule], level: int, sample: Sample
+) -> None:
+    """Add a sample to a tier, merging it into the newest one when they belong to the same stretch
+    of that tier, and pass the oldest on when the tier is over its capacity. The ring buffers of a
+    ``Recorder`` and of a ``HistoryMirror`` are both kept by this."""
+    tier = tiers[level]
+    rule = rules[level]
+    if tier and _bucket(tier[-1], rule) == _bucket(sample, rule):
+        tier[-1] = tier[-1].merge(sample)
+    else:
+        tier.append(sample)
+    while len(tier) > rule.capacity:
+        oldest = tier.pop(0)
+        if level + 1 < len(tiers):
+            push_sample(tiers, rules, level + 1, oldest)
+        else:
+            tier[0] = oldest.merge(tier[0])
 
 
 def _bucket(sample: Sample, rule: TierRule) -> int:
