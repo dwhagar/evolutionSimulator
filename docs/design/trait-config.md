@@ -99,23 +99,15 @@ Drives, temperament, feeding and calling (animals).
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `hunger_threshold` | `0.5` | Below this share of the energy store an animal wants food. |
-| `forage_efficiency` | `0.1` | It only targets plants (or prey) it digests at least this well. |
-| `prey_aggression` | `0.2` | It only targets prey if its aggression is above this. |
-| `hunt_aggression` | `0.4` |  |
-| `hunt_starvation` | `0.3` | Without a threat in view it wants to attack when aggression and starvation pass these (and it can digest meat). |
 | `hunger_aggression_gain` | `1.6` | Aggression is multiplied by `1 + gain * starvation ** 2`. |
 | `crowd_aggression_gain` | `0.4` | Aggression is multiplied by `1 + gain * local density`. |
-| `size_confidence_range` | `(0.2, 2.0)` | The target-to-own size ratio, clamped, scales aggression and the fight-or-flight test. |
+| `size_confidence_range` | `(0.2, 2.0)` | The target-to-own size ratio, clamped, scales aggression. |
 | `min_target_size_ratio` | `0.1` |  |
 | `fear_wear_base` | `1.2` |  |
 | `fear_wear_slope` | `0.5` | Fear acts as `gene * (base - slope * vitality)`: stronger when worn down. |
-| `tactile_threshold` | `0.1` | The touch gene must be above this for a tactile reflex. |
 | `tournament_male_aggression` | `1.35` |  |
 | `tournament_male_fear` | `0.65` |  |
 | `brooding_female_fear` | `1.3` | The sex digit's behaviour offsets (digit 0 and digit 3); the prototype's. |
-| `signal_gene_threshold` | `0.05` | The encoder gene must be above this to call at all. |
-| `mating_call_wear` | `0.3` | A wanting animal calls for a mate once it has lost this much vitality. |
 | `taste_detection_base` | `0.2` |  |
 | `taste_detection_gain` | `0.8` | Chance to notice toxin: `toxicity * (base + gain * taste)`. |
 | `poison_damage` | `25.0` |  |
@@ -167,6 +159,10 @@ Drive, readiness, mating, pregnancy and birth (animals).
 | `drive_boldness` | `0.3` | While a mate is in view, fear is multiplied by `1 - boldness * effective drive`. |
 | `sex_drive_modifier` | `((2, 0.25), (3, -0.25))` | The sex digit's second job, as (digit, change) pairs: digit 2 raises the effective drive by 25%, digit 3 lowers it. The sex itself is the digit modulo 2: 0 impregnates, 1 bears. |
 | `maturity_share` | `0.06` | An animal (or plant) can first breed at this share of its expected lifespan. |
+| `young_dependence` | `0.06` | Young depend on a parent for `parenting * young_dependence` of the parent's expected lifespan after birth; a parent senses them as "own young" while they do (`SENSE.14`). |
+| `young_protection` | `0.5` |  |
+| `young_fearlessness` | `0.4` | A parent that sees its dependent young and a threat fights harder and flees less: aggression rises by `parenting * young_protection` and fear falls by `parenting * young_fearlessness` (as fractions of their values). |
+| `similarity_unrelated` | `0.75` | The share of digits that differ between two unrelated random genomes; a possible mate whose genome differs by this much or more has similarity 0 (`SENSE.14`). |
 | `mating_effort` | `0.03` | Share of its store each partner spends on a mating, whether or not it takes. |
 | `conception_base` | `0.3` |  |
 | `conception_slope` | `0.6` | A mating takes with chance `base + slope * mean fertility of the two`. |

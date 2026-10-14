@@ -22,6 +22,7 @@ from evolution_simulator.sensing import (
 from evolution_simulator.traits import AnimalTraits
 from evolution_simulator.world import Bounds, DayCycle, Vec, World, WorldConfig, WorldSenses
 from evolution_simulator.world.senses import (
+    _similarity_to,
     classify,
     loudness,
     relative_direction,
@@ -29,6 +30,7 @@ from evolution_simulator.world.senses import (
 )
 
 HERE = Vec.of(500, 500)
+NOTHING_BUT_TIME = Percepts(daylight=1.0, clock_sin=math.sin(math.pi), clock_cos=-1.0)  # noon
 BLIND_DEAF = {"hearing": "0000", "smell": "0000"}
 NARROW = {"sight_range": "3333", "sight_fov": "0000", "touch": "0000", **BLIND_DEAF}
 WIDE = {"sight_range": "3333", "sight_fov": "3333", "touch": "0000", **BLIND_DEAF}  # 33 units
@@ -123,7 +125,7 @@ def test_things_out_of_range_or_outside_the_field_of_view_are_not_seen():
     world.add_plant(plant_dna(), Vec.of(500 + 100, 500))  # beyond 60 units
     world.add_plant(plant_dna(), Vec.of(480, 500))  # behind, outside 40 degrees
     world.add_plant(plant_dna(), Vec.of(510, 540))  # ahead-ish but far off to the side
-    assert seen_by(world, animal) == Percepts(daylight=1.0)
+    assert seen_by(world, animal) == NOTHING_BUT_TIME
 
 
 def test_a_plant_one_can_stand_on_is_seen_whichever_way_it_faces():
@@ -223,7 +225,7 @@ def test_an_animal_does_not_sense_itself():
     world = World()
     me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
     seen = seen_by(world, me)
-    assert seen == Percepts(daylight=1.0)  # daylight is reported even when nothing else is
+    assert seen == NOTHING_BUT_TIME  # the time of day is reported even when nothing else is
 
 
 def test_a_sleeper_is_quiet_but_not_invisible():
@@ -292,6 +294,7 @@ def test_the_dark_shortens_sight_and_sleep_closes_the_eyes():
 
 def brute_force(world, animal, rules, rng):
     """The same sensing step fed with every plant and animal in the world, no search at all."""
+    unrelated = world.config.traits.reproduction.similarity_unrelated
     neighbours = []
     for plant in world.plants:
         neighbours.append(
@@ -319,6 +322,9 @@ def brute_force(world, animal, rules, rng):
                 alarm_call_radius=alarm,
                 mating_call_radius=mating,
                 mass=other.traits.mass,
+                similarity=_similarity_to(animal, other, unrelated)
+                if classify(animal, other) == "mate"
+                else 0.0,
             )
         )
     return sense(
@@ -327,11 +333,12 @@ def brute_force(world, animal, rules, rng):
         animal.radius,
         organs_from_traits(animal.traits),
         neighbours,
-        SensingConditions(daylight=world.daylight, asleep=animal.asleep),
+        SensingConditions(daylight=world.daylight, asleep=animal.asleep, clock=world.day_phase),
         rules,
         rng,
         edge_distance=world.edge_distance(animal.position) - animal.radius,
         mass=animal.traits.mass,
+        edge_direction=world.edge_vector(animal.position),
     )
 
 
@@ -382,8 +389,8 @@ def calling_world(**config):
     return world, caller, listener
 
 
-def test_calls_are_off_unless_the_world_turns_them_on():
-    world = World()
+def test_calls_can_be_turned_off():
+    world = World(WorldConfig(calls_enabled=False))
     add_caller(world)
     listener = world.add_animal(animal_dna(**EARS), Vec.of(515, 500), heading=0.0)
     world.run(3)
@@ -514,3 +521,135 @@ def test_the_step_loop_uses_whatever_senses_it_is_given():
     world.step()
     assert senses.asked == [first.id, second.id]
     assert first.last_decision is not None
+
+
+# --- the family, the wall, the clock and tiredness (SENSE.14) -------------------------------
+
+
+def test_a_dependent_child_is_young_to_its_parent_and_nothing_else_to_anyone():
+    world = World()
+    parent = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    child = world.add_animal(animal_dna(size=MASS_2), Vec.of(510, 500), parents=(parent.id,))
+    stranger = world.add_animal(animal_dna(size=MASS_2, **WIDE), Vec.of(490, 500))
+    assert classify(parent, child) == "young"
+    assert classify(stranger, child) == "mate"
+    assert classify(child, parent) == "mate"  # a parent is not the child's young
+    seen = seen_by(world, parent)
+    assert seen.young_closeness > 0.0 and seen.young_direction == pytest.approx(0.0, abs=0.06)
+    assert seen.mate_closeness > 0.0  # the stranger is still a possible mate
+    assert abs(seen.mate_direction) == pytest.approx(1.0, abs=0.06)  # behind, not the child
+
+
+def test_a_grown_child_is_no_longer_young():
+    world = World()
+    parent = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    child = world.add_animal(animal_dna(size=MASS_2), Vec.of(510, 500), parents=(parent.id,))
+    assert child.traits.lived_ticks < parent.traits.dependence_ticks
+    child.traits.accumulated_damage = (
+        parent.traits.dependence_ticks * child.traits.wear_per_tick * 2
+    )
+    assert child.traits.lived_ticks > parent.traits.dependence_ticks
+    assert classify(parent, child) == "mate"
+    assert seen_by(world, parent).young_closeness == 0.0
+
+
+def test_a_more_caring_parent_keeps_its_young_longer():
+    careless = AnimalTraits(animal_dna(parenting="000"))
+    caring = AnimalTraits(animal_dna(parenting="333"))
+    assert careless.parenting == pytest.approx(0.0)
+    assert caring.parenting == pytest.approx(1.0)
+    assert careless.dependence_ticks == 0.0
+    assert caring.dependence_ticks == pytest.approx(
+        caring.rules.reproduction.young_dependence * caring.lifespan_ticks
+    )
+
+
+def test_a_possible_mate_reports_how_alike_it_is():
+    world = World()
+    me = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    world.add_animal(animal_dna(size=MASS_2, **WIDE), Vec.of(510, 500))  # the same genome
+    assert seen_by(world, me).mate_similarity == pytest.approx(1.0)
+    world = World()
+    me = world.add_animal(animal_dna(size=MASS_2, **WIDE), HERE, heading=0.0)
+    unlike = DNA.random(ANIMAL_LAYOUT, random.Random(5)).replaced("size", MASS_2)
+    world.add_animal(unlike, Vec.of(510, 500))
+    assert 0.0 <= seen_by(world, me).mate_similarity < 0.5
+    world = World()
+    alone = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
+    assert seen_by(world, alone).mate_similarity == 0.0  # nothing to compare
+
+
+def test_the_wall_is_seen_or_felt_when_near_and_otherwise_not_reported():
+    world = World()
+    near = world.add_animal(animal_dna(**WIDE), Vec.of(10, 500), heading=0.0)  # wall behind, left
+    mid = world.add_animal(animal_dna(**WIDE), Vec.of(500, 300), heading=0.0)
+    seen = seen_by(world, near)
+    assert seen.edge_closeness > 0.0
+    assert abs(seen.edge_direction) == pytest.approx(1.0, abs=0.06)  # straight behind
+    ahead = world.add_animal(animal_dna(**WIDE), Vec.of(990, 500), heading=0.0)
+    assert seen_by(world, ahead).edge_direction == pytest.approx(0.0, abs=0.06)
+    assert seen_by(world, ahead).edge_closeness > 0.0
+    assert seen_by(world, mid).edge_closeness == 0.0 and seen_by(world, mid).edge_direction == 0.0
+
+
+def test_the_wall_is_out_of_sight_for_a_blind_animal_unless_it_touches():
+    world = World()
+    blind = world.add_animal(
+        animal_dna(sight_range="0000", touch="0000", **BLIND_DEAF), Vec.of(10, 500)
+    )
+    assert seen_by(world, blind).edge_closeness == 0.0
+
+
+def test_the_clock_follows_the_day_and_is_blank_without_one():
+    world = World(WorldConfig(day_cycle=SHORT_DAY))
+    me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
+    for _ in range(3):
+        seen = seen_by(world, me)
+        phase = world.day_phase
+        assert seen.clock_sin == pytest.approx(math.sin(math.tau * phase))
+        assert seen.clock_cos == pytest.approx(math.cos(math.tau * phase))
+        world.run(7)
+    bare = World(WorldConfig(day_cycle=None))
+    me = bare.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
+    assert (seen_by(bare, me).clock_sin, seen_by(bare, me).clock_cos) == (0.0, 0.0)
+
+
+def test_tiredness_builds_while_awake_and_clears_in_sleep():
+    world = World(WorldConfig(day_cycle=SHORT_DAY, calls_enabled=False))
+    me = world.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
+    assert me.traits.tiredness == 0.0
+    world.run(10)
+    first = me.traits.tiredness
+    assert 0.0 < first <= 1.0
+    world.run(10)
+    assert me.traits.tiredness >= first or me.asleep
+    me.asleep = True
+    world.run(1)
+    assert me.traits.tiredness == 0.0
+    bare = World(WorldConfig(day_cycle=None))
+    other = bare.add_animal(animal_dna(**WIDE), HERE, heading=0.0)
+    bare.run(10)
+    assert other.traits.tiredness == 0.0
+
+
+def test_a_threat_near_its_young_makes_a_caring_parent_bolder(monkeypatch):
+    import evolution_simulator.traits as traits_module
+
+    seen_temperaments = []
+    real = traits_module.build_inputs
+
+    def spy(percepts, **kwargs):
+        seen_temperaments.append(kwargs["temperament"])
+        return real(percepts, **kwargs)
+
+    monkeypatch.setattr(traits_module, "build_inputs", spy)
+    danger = Percepts(threat_closeness=0.5, threat_direction=0.3)
+    guarded = replace(danger, young_closeness=0.5)
+    caring, uncaring = animal_dna(parenting="333"), animal_dna(parenting="000")
+    for dna in (caring, uncaring):  # a new animal for each look: the brain keeps its last answer
+        AnimalTraits(dna).think(danger)
+        AnimalTraits(dna).think(guarded)
+    (alone, protecting, flat, same) = seen_temperaments
+    assert protecting.aggression >= alone.aggression
+    assert protecting.fear < alone.fear
+    assert (same.aggression, same.fear) == (flat.aggression, flat.fear)

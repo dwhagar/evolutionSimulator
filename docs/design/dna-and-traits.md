@@ -187,8 +187,8 @@ into clusters, with the five reproduction genes next to each other: layout versi
 - **First generation.** `World.populate` builds animals with `layouts.founder_animal_dna`: random genomes with
   `fertility` 0.75 (six young), `parenting` 0 and the rest of the reproduction genes at 0.5 (`FOUNDER_LEVELS`).
   `add_animal` takes whatever genome it is given.
-- **Not built.** The protective effect of `parenting` on aggression and fear and the "own young" channel need a
-  "young nearby" sense (`SENSE.14`), so parenting acts through energy only for now. The pregnancy list is kept on
+- **Built later (`SENSE.14`).** The protective effect of `parenting` on aggression and fear and the "own young" channel
+  exist now (animal layout version 8). The pregnancy list is kept on
   the bearers (visited in id order) rather than as a separate list in the world; the behaviour is the same.
 - **Constants.** They are fields of the rules tree in `config.py` (`TRAIT.3`; `life.wear_base`, `life.drive_wear`,
   `reproduction.*`, `recovery.*` and so on, listed in [trait-config.md](trait-config.md)), named after the design note's
@@ -212,7 +212,7 @@ test keeps it so). All the numbers are in the rules tree ([trait-config.md](trai
 | `brain_gain` | none, recorded | A scale on the weights, which evolve too: any gain can be matched by the weights, so selection has no direction to push it. | |
 | `curiosity` | none, recorded | Pays for itself: it nudges every output at random, so the animal moves, eats and mates less reliably, and a noisy speed burns more than a steady one because the burn is convex. | |
 
-**Effect.** An average animal's basal metabolism rises by about 4% (0.4223 to 0.4405 for the all-ones reference) and its
+**Effect.** An average animal's basal metabolism rises by about 4% (0.4227 to 0.4409 for the all-ones reference) and its
 movement burn is unchanged at average speed; a fast animal moving fast burns several times as much, a slow one a
 fraction.
 

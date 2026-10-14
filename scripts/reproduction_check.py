@@ -108,7 +108,7 @@ def _tick(animals: list[AnimalTraits], eco: Ecology, rng: random.Random) -> None
         if rng.random() < injury:
             animal.apply_damage(rng.uniform(eco.injury_low, eco.injury_high))
         animal.update_metabolism_and_aging(eco.forage_ratio if eco.trait_pressures else 0.0)
-    willing = [a for a in animals if a.is_alive and a.flag_wants_mate]
+    willing = [a for a in animals if a.is_alive and a.wants_mate]
     males = [a for a in willing if a.sex == 0]
     females = [a for a in willing if a.sex == 1]
     rng.shuffle(males)

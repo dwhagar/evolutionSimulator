@@ -19,6 +19,10 @@ Task IDs and the owner's answers are recorded in [../decisions.md](../decisions.
 `WORLD.5`, the evolving brain shape `BRAIN.13`, learning `BRAIN.15`, the random-movement fallback
 `BRAIN.16`, mate choice `REPRO.4`, the constants config `TRAIT.3`).
 
+> **Update, 2026-10-14 (`SENSE.14`).** Eight more inputs are built (animal layout version 8): own young
+> (bearing and closeness), a mate's likeness, tiredness, the bearing and closeness of the world's edge,
+> and the time of day as a sine and a cosine. See the "Inputs 21 to 28" row in [brain.md](brain.md).
+
 > **Update, 2026-10-14 (`SENSE.15`).** The sense channels, the sensing step, the sense genes and
 > inputs 18 to 20 are built (`SENSE.8` to `SENSE.11`, `SENSE.9`); `sense_genes.py` now has ranges that
 > reach 0, noise that falls with the gene, and cost on the area covered, so parts of

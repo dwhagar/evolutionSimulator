@@ -38,8 +38,10 @@ class LearningRules:
 
     log_size: int = 64
     """Decisions kept in the day log; the oldest are dropped when it is full."""
-    reward_window: int = 10
-    """Ticks after a decision over which its outcome is counted."""
+    reward_window: float = 10.0
+    """Reference ticks (hours) after a decision over which its outcome is counted; the learner
+    turns it into ticks with the world's ``dt`` (at least one), so the length of a tick does not
+    change what an animal learns from (``WORLD.16``)."""
     energy_weight: float = 1.0
     """Reward per unit of energy-store fraction gained (a fall counts against)."""
     health_weight: float = 2.0
@@ -56,8 +58,10 @@ class LearningRules:
     """The most a number's total learned change may reach, so repeated nights cannot run away."""
 
     def __post_init__(self) -> None:
-        if self.log_size < 1 or self.reward_window < 1:
-            raise ValueError("log_size and reward_window must be at least 1.")
+        if self.log_size < 1:
+            raise ValueError("log_size must be at least 1.")
+        if not (math.isfinite(self.reward_window) and self.reward_window > 0.0):
+            raise ValueError(f"reward_window must be above zero, got {self.reward_window}.")
         for name in ("energy_weight", "health_weight", "mating_weight", "safety_weight"):
             if not math.isfinite(getattr(self, name)):
                 raise ValueError(f"{name} must be a finite number.")
@@ -161,8 +165,10 @@ _Open = tuple[int, State, tuple[float, ...], tuple[float, ...], tuple[float, ...
 class Learner:
     """One creature's day log and learned offsets."""
 
-    def __init__(self, hidden: int, outputs: int, rules: LearningRules) -> None:
+    def __init__(self, hidden: int, outputs: int, rules: LearningRules, dt: float = 1.0) -> None:
         self.rules = rules
+        self.window: int = max(1, round(rules.reward_window / dt))
+        """The reward window in ticks of ``dt`` reference ticks each."""
         self.offsets: Offsets = zero_offsets(hidden, outputs)
         self._tick = 0
         self._pending: deque[_Open] = deque()
@@ -180,7 +186,7 @@ class Learner:
     def observe(self, state: State) -> None:
         """Note the creature's state at the start of a tick; closes decisions whose window ended."""
         self._tick += 1
-        window = self.rules.reward_window
+        window = self.window
         while self._pending and self._tick - self._pending[0][0] >= window:
             self._close(state)
 

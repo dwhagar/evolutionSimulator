@@ -145,6 +145,35 @@ def designed_net():
     return Net(w1, b1, w2, b2)
 
 
+def warm_net():
+    """The table now in ``seed_brain.py`` as a ``Net`` of ``SEED_HIDDEN`` neurons, with the prey
+    wiring added: prey pulls the steering neuron and the walk neuron like a plant, and the last
+    neurons added since the table was fitted detect prey in reach, which eats."""
+    idx = {name: i for i, name in enumerate(INPUT_NAMES)}
+    zero = level(0.0)
+    w1 = np.full((H, N_IN), zero)
+    b1 = np.full(H, zero)
+    w2 = np.full((N_OUT, H), zero)
+    for j, slot in enumerate(sb.SEED_SLOTS):
+        b1[j] = slot[0]
+        w1[j] = slot[1 : 1 + N_IN]
+        w2[:, j] = slot[1 + N_IN :]
+    net = Net(w1, b1, w2, np.array(sb.SEED_OUTPUT_BIASES))
+    fresh = len(sb.SEED_SLOTS)
+    if fresh < H:
+        net.w1[0, idx["prey_direction"]] = level(0.667)
+        net.w1[1, idx["prey_closeness"]] = level(2.0)
+        net.w1[fresh, idx["prey_closeness"]] = level(1.867)
+        net.b1[fresh] = level(-0.933)
+        net.w2[2, fresh] = level(2.0)
+    # SENSE.14: the new inputs start neutral; young pull like a mate, the edge pushes like a threat.
+    if net.w1[0, idx["young_direction"]] == zero:
+        net.w1[0, idx["young_direction"]] = level(0.667)
+        net.w1[1, idx["young_closeness"]] = level(1.733)
+        net.w1[0, idx["edge_direction"]] = level(-1.2)
+    return net
+
+
 def score(net, x, t):
     return agree_mask(net.forward(x)[1], t).mean()
 
@@ -201,12 +230,19 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--write", action="store_true")
     parser.add_argument("--seconds", type=float, default=240.0, help="search time")
+    parser.add_argument("--seed", type=int, default=0, help="seed of the search's random kicks")
+    parser.add_argument(
+        "--warm",
+        action="store_true",
+        help="start from the table now in seed_brain.py (padded and given prey) and not from the "
+        "hand-designed network",
+    )
     args = parser.parse_args()
     x, t = dataset(6000, 1)
     xv, tv = dataset(8000, 2)
-    best = designed_net()
+    best = warm_net() if args.warm else designed_net()
     print(f"designed: train {score(best, x, t):.4f}, held out {score(best, xv, tv):.4f}")
-    best = refine(best, x, t, args.seconds)
+    best = refine(best, x, t, args.seconds, args.seed)
     print(f"refined: train {score(best, x, t):.4f}, held out {score(best, xv, tv):.4f}")
     slots = tuple(
         tuple(int(v) for v in (best.b1[j], *best.w1[j], *best.w2[:, j])) for j in range(H)

@@ -59,7 +59,7 @@ To place organisms yourself: `world.add_animal(dna, Vec.of(x, y), heading)` and
    (`REPRO.3`); a plant seeds only after its cooldown is over and at most `seed_capacity` seeds at once. A
    plant's age and cooldown also run on the reference-tick clock (`TRAIT.8`: it lives `longevity` days, a
    month for a first generation, and can first seed at 6% of that).
-5. The dead are removed and the tick counter goes up by one.
+5. Corpses rot, every animal that died leaves one, the dead are removed and the tick counter goes up by one.
 
 Aging (plants too), energy burn, healing, the mating cooldown and the pregnancy run per **reference tick** (an hour of
 simulated time) and are scaled by `World.dt = seconds_per_tick / 3600`. So are movement (`dt` times the
@@ -79,8 +79,41 @@ tick in world units. Walls stop an animal at the edge; its heading is unchanged.
 A run is pure: the same `WorldConfig` (including `seed`), the same organisms added in the same order
 and the same calls give the same world. One `random.Random(seed)` feeds everything, organisms are
 visited in id order, neighbour searches return ids in order, ties break on id, and no clock or global
-state is read. `World.state_digest()` hashes the whole state (including the random generator) so a
+state is read. `World.state_digest()` hashes the state that decides what happens next (the random generator, and each organism's place,
+energy, health, age, sleep, pregnancy, learned changes and genome; `UX.9` widened it) so a
 test or a user can check two runs match.
+
+## Saving and loading (UX.9)
+
+`world/persistence.py` saves a whole world and loads it back so that it runs on exactly as the saved one would
+have: `save_world(world, "run.json.gz")` and `load_world("run.json.gz")` (gzip when the name ends in
+`.gz`), or `world_to_dict` and `world_from_dict` for the JSON-ready document. It is independent of any window
+and is what the run store (`UX.10`) and the save and load screen (`UX.18`) will call.
+
+- **What is written.** The `WorldConfig` tree (every rule, read back by type, so a rule added later takes
+  its default from an older save), the clock, the next id, the random generator's state, the largest body
+  and canopy seen, this tick's calls, and every animal, plant and corpse: genome, position and the numbers
+  that change over a life (energy, health, damage, age, cooldowns), the cached decision and wander turn,
+  the learner (the day log, the open decisions and the learned offsets), the learned-brain flag and the
+  pregnancy with its litter's genomes and its father. The body itself (traits, brain, costs) is rebuilt from the
+  genome, the rules and the tick length by the same constructors that made it, and the spatial indexes
+  are rebuilt from positions in id order.
+- **Checked on load.** The document names its format and version, the gene-layout versions and the
+  `state_digest` taken at save time; a file of another kind, from a newer program, from other gene layouts or
+  with a restored state that does not reproduce the digest raises `SaveFormatError` instead of loading
+  something almost right.
+- **Versioned.** `FORMAT_VERSION` counts changes to the document's layout. When a change keeps old saves
+  readable (a field renamed or moved) add a function to `_MIGRATIONS` that turns version `n` into `n + 1`;
+  loading runs the chain. A change to a gene layout makes older genomes unreadable, which the layout check reports.
+- **Keeping it current.** Whoever adds state to the world, an organism or the learner adds it to
+  `persistence.py` (the scalar fields of organisms are name tables, so a new number is one line). The
+  test `tests/test_persistence.py` is the guard: it saves a world holding every kind of state at several moments (asleep, mid-day, with litters on the way and
+  fathers dead), compares every attribute of the restored world with the original (`tests/persistence_support.py`,
+  not only what `state_digest` hashes), and runs both on and against an uninterrupted run.
+- **Not saved.** The `Senses` object (a `WorldSenses` is saved by its settings; anything else is passed
+  to `load_world(senses=...)`) and sleep listeners beyond the default learning one
+  (`load_world(sleep_listeners=...)`). A father who has died and left the world is not kept: a missing father pays nothing at the birth,
+  the same as a dead one.
 
 ## Time (WORLD.3)
 
@@ -211,12 +244,19 @@ neighbours, the world finds and classifies the neighbours.
 - **What can be heard and smelled.** Loudness is 0.1 for a still or sleeping animal and rises to 1
   at full speed. A plant makes no sound; its scent is its biomass over 100, capped at 1. Animals
   have full scent. A faint plant is therefore found by smell only close up.
-- **Calls.** With `WorldConfig.calls_enabled` (off by default), an awake animal whose last decision
-  called, and that has a call radius and the energy, pays `call_energy_cost` for each call and is
-  heard this tick (`World.calls`) by animals whose hearing reaches it. Off by default because a
-  call costs about seven times the basal rate and random founder brains call on most ticks, which
-  killed them before they could do anything else; `BRAIN.9` and `BRAIN.10` decide the real rule.
+- **Calls.** With `WorldConfig.calls_enabled` (on by default since `BRAIN.10`), an awake animal
+  whose last decision called, and that has a call radius (the encoder gene) and more energy than
+  the call costs, pays `call_energy_cost` for each call and is heard this tick (`World.calls`) by
+  animals whose hearing reaches it. A call costs about seven times the basal rate, so a brain that
+  calls on every tick starves itself and calling pays only for a brain that does it when it
+  matters. Seeded founders (`BRAIN.9`) do not call at all; calling is left to evolve. That is the
+  whole call rule: the brain decides, the world charges and delivers.
 - **Touch** sees the world's edge as well as other bodies (`World.edge_distance`).
+- **Family, wall, clock and tiredness** (`SENSE.14`). `classify` calls a viewer's own child *young* while it has lived less
+  than the viewer's `dependence_ticks`; for a possible mate `perceive` hands `sense()` a function that compares the two
+  genomes (`DNA.distance`, only when the answer is read); `World.edge_vector` gives the unit vector to the nearest wall
+  for the edge bearing; `World.day_phase` gives the clock (`None` without a day cycle); `_update_tiredness` counts each
+  animal's time awake (`Animal.awake_time`, cleared by sleep) as a share of a day and hands it to its traits.
 - **Size and light.** Each animal neighbour carries its mass and the step gets the viewer's mass,
   for the relative-size input (`SENSE.9`); the daylight input is the world's daylight.
 
@@ -248,15 +288,37 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   juveniles for 6% of their lifespan, and the founders `populate` creates are juveniles too, so a first
   generation cannot breed until it has lived about three weeks of simulated time; random founders still starve
   before then (`BRAIN.9`).
-- **Acting on the brain is partial.** Only turn, speed, eat and seek-mating are used. Attacking
-  prey, meat, calls and retiring the fixed rule are `BRAIN.10`. Animals do not eat each other yet.
+- **Acting on the brain** (`BRAIN.10`). Turn and speed move the animal. "Eat or attack" above 0.5
+  eats the plant the animal overlaps, or, if it overlaps none, bites the nearest animal it touches
+  that it counts as prey (`classify`: a meat eater at most 0.8 times its mass; code in
+  `world/combat.py`, constants in `AttackRules` on `WorldConfig`). A bite does
+  `damage` (30) × carnivore efficiency × √(attacker mass / prey mass) × `dt` (damage is per reference tick, like grazing) and wakes a sleeper. What a kill is worth is
+  the corpse it leaves (next item).
+- **Corpses** (`WORLD.12`, `world/corpses.py`, `CorpseRules` on `WorldConfig`). Every animal that
+  dies, by a bite or by starving, leaves a `Corpse` where it fell, with `meat_share` (half) of its
+  maximum energy as meat. The meat rots (half-life 72 reference ticks, so three days at the hourly
+  tick) and the corpse goes when under 1 is left. An animal that can digest meat and whose brain
+  says "eat or attack" with no plant underfoot eats from a corpse it touches (25 meat per
+  reference tick, times `dt`, through `feed(..., is_meat=True)`, so its carnivore efficiency decides
+  how much it gains); only then does it bite a live animal. For the senses a corpse is prey that
+  cannot hide: a meat eater reports it as the nearest prey, seen in its field of view or smelled at
+  the full smell range (live prey is smelled weakly), scaled by how much meat is left like a
+  plant's scent grows with its biomass. Corpses make no sound, do not crowd and are in
+  `state_digest`. The optional scent field (`SENSE.20`) and visibility properties (`SENSE.21`) are
+  not built.
+  Seek-mating and the two call outputs are acted on as described above. `AnimalTraits` keeps no
+  behaviour flags any more (no "wants food", "in fear" or "wants to attack"): the brain is the
+  only source of behaviour, and a body only offers `wants_mate` and `mating_energy_threshold` as
+  facts the brain's `ready_to_mate` and `energy_ratio` inputs show it.
 - **Sex.** One of each sex is needed (`DNA.9`), decided in `may_mate`. The reading of the sex digit (value
   modulo 2, with 2 and 3 changing the drive) is the default for question 1 on
   [#69](https://github.com/dwhagar/evolutionSimulator/issues/69).
 - **Time.** See the reference tick above. Everything is scaled by `dt` (`WORLD.7`); the defaults are an hour a
-  tick and a 24-hour day. Two things still count in ticks, not time: the brain's `decision_interval` (1 to 4
-  ticks, so 1 to 4 hours at the default) and the learning rules' `reward_window` (10 ticks). A world with a
-  one-second tick keeps those numbers of ticks, so its animals decide every few seconds.
+  tick and a 24-hour day. The brain's decision interval (the `reaction_time` gene, 1 to 4
+  reference ticks, hours) and the learning rules' `reward_window` (10 reference ticks) are times too
+  (`WORLD.16`): the world gives each animal its `dt` and the animal turns them into ticks (at
+  least one), so a world with a one-second tick decides every 1 to 4 hours, not every few
+  seconds, and brain upkeep per hour does not change with the tick.
 - **The hourly default exposes the plant ecology.** Founder plants in an hourly world mostly die before they
   seed (growth is below upkeep at seedling health, a lone plant's own biomass fills the soil limit of
   0.015 per unit of ground before it reaches 85% of its size, and seedlings burn upkeep all night): that is
@@ -279,8 +341,8 @@ there. Pairing is greedy in id order, so an animal can lose its first choice to 
   and 300), because three senses are now searched and reported instead of one, over a wider reach.
   `WORLD.13` brought it to about 44 ms (5 ms at 60 and 300) with three changes (the first alters only what the learning log
   records, the others nothing an animal perceives):
-  - **Sense only when the brain will look.** The brain runs every `decision_interval` ticks (1 to
-    4) and repeats its last decision in between, so the world asks `AnimalTraits.cached_decision`
+  - **Sense only when the brain will look.** The brain runs every `decision_interval` ticks (1 to 4 hours,
+    that many ticks at the hourly default) and repeats its last decision in between, so the world asks `AnimalTraits.cached_decision`
     first and calls the senses only when it returns nothing. An animal that is logging its day
     (`BRAIN.24`) logs the threat it saw when the brain last looked instead of re-sensing every tick.
   - **Search by surfaces.** The grid stores each item's radius (`SpatialIndex.within_reach`,

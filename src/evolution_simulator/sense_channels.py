@@ -29,7 +29,7 @@ ROLES: tuple[str, ...] = ("level", "flag", "bearing", "closeness", "strength")
 ``flag`` is 0 or 1; ``strength`` is a signal loudness; ``level`` is anything else. A bearing with
 no target (the direction of the loudest call) stands alone."""
 
-TARGETS: tuple[str, ...] = ("plant", "prey", "threat", "mate")
+TARGETS: tuple[str, ...] = ("plant", "prey", "threat", "mate", "young")
 """The classes of thing the brain is told about by nearest member."""
 
 
@@ -127,6 +127,14 @@ INPUT_CHANNELS: tuple[InputChannel, ...] = (
     InputChannel("pain", 0.0, 1.0, "body", description="Health lost since the last decision; 20% of maximum or more reads 1."),
     InputChannel("daylight", 0.0, 1.0, "world", "level", ambient=True, description="0 full night, 1 full day."),
     InputChannel("relative_size", -1.0, 1.0, "world", "level", ("vision", "hearing"), description="Size of the nearest prey or threat against its own: log2(mass ratio) / 2."),
+    # Added with SENSE.14 (animal layout v8), after the rows above so their order is unchanged.
+    *_pair("young", ("vision", "hearing", "smell"), "parenting", "own young still dependent on it"),
+    InputChannel("mate_similarity", 0.0, 1.0, "world", "level", ("vision", "hearing", "smell"), description="How alike the nearest possible mate's genome is to its own: 1 identical, 0 as different as strangers."),
+    InputChannel("tiredness", 0.0, 1.0, "body", description="Time awake as a share of a day; 0 just woken, 1 a whole day without sleep."),
+    InputChannel("edge_direction", -1.0, 1.0, "world", "bearing", ("vision", "touch"), description="Bearing to the nearest edge of the world, -1 hard left to +1 hard right."),
+    InputChannel("edge_closeness", 0.0, 1.0, "world", "level", ("vision", "touch"), description="Closeness of the nearest edge of the world: 1 in contact, 0 out of reach."),
+    InputChannel("clock_sin", -1.0, 1.0, "world", "level", ambient=True, description="Sine of the position in the day (0 midnight): with the cosine it tells dawn from dusk."),
+    InputChannel("clock_cos", -1.0, 1.0, "world", "level", ambient=True, description="Cosine of the position in the day (1 midnight, -1 noon)."),
 )  # fmt: skip
 
 

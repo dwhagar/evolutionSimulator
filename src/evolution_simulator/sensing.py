@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import math
 import random
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -150,10 +150,14 @@ class SensingConditions:
     daylight: float = 1.0
     """0 (full night) to 1 (full day)."""
     asleep: bool = False
+    clock: float | None = None
+    """Position in the day from 0 (midnight) up to 1, or ``None`` when the world has no day."""
 
     def __post_init__(self) -> None:
         if not 0.0 <= self.daylight <= 1.0:
             raise ValueError(f"daylight must be between 0 and 1, got {self.daylight}.")
+        if self.clock is not None and not 0.0 <= self.clock <= 1.0:
+            raise ValueError(f"clock must be between 0 and 1, got {self.clock}.")
 
 
 @dataclass(frozen=True)
@@ -177,6 +181,12 @@ class Neighbour:
     """How far its mating call carries, 0 when it is not calling."""
     mass: float = 0.0
     """Its body mass, for the relative-size input; 0 when not known."""
+    similarity: float | Callable[[], float] = 0.0
+    """For a possible mate: how alike its genome is to the creature's (0 to 1), or a function that
+    works it out, called only for the mate that is reported."""
+    carrion: bool = False
+    """A corpse, reported as prey: it is smelled at the full range (it is not hiding), makes no
+    sound and does not count towards crowding."""
 
     def __post_init__(self) -> None:
         if self.role not in ROLES:
@@ -230,6 +240,7 @@ def sense(
     rng: random.Random | None = None,
     edge_distance: float | None = None,
     mass: float = 0.0,
+    edge_direction: tuple[float, float] | None = None,
 ) -> Percepts:
     """What a creature at ``position`` facing ``heading`` (radians, 0 is +x, counterclockwise) with
     a body of ``radius`` perceives of ``neighbours``.
@@ -237,7 +248,9 @@ def sense(
     ``rng`` supplies the noise; without it every report is exact, which is the zero-noise setting
     for tests. Draws happen in a fixed order, so equal seeds give equal reports.
     ``edge_distance`` is the distance from the creature's surface to the nearest edge of the world,
-    if it knows it; touch reports the edge as it does anything else in contact.
+    if it knows it; touch reports the edge as it does anything else in contact. ``edge_direction``
+    is the direction to that edge in world coordinates (a vector of any length): with it, vision
+    (inside the field of view) and touch also report where the edge is and how close.
     """
     if position.dimensions != 2:
         raise ValueError("The sensing step supports 2D positions only for now.")
@@ -273,11 +286,11 @@ def sense(
                 abs(math.atan2(dy * fx - dx * fy, dx * fx + dy * fy)) <= half_fov
             )
         hears = reach_hearing > 0.0 and distance <= reach_hearing * n.loudness
-        smell_limit = weak_smell if role in ("prey", "threat") else reach_smell
+        smell_limit = weak_smell if role in ("prey", "threat") and not n.carrion else reach_smell
         smells = smell_limit > 0.0 and distance <= smell_limit * n.scent
         if n.alarm_call_radius > 0.0 or n.mating_call_radius > 0.0:
             callers.append((distance, n, dx, dy))
-        if role == "plant":
+        if role == "plant" or n.carrion:
             crowded = False
         else:
             crowded = (sees and "vision" in _CROWDING_SENSES) or (
@@ -322,17 +335,28 @@ def sense(
     sizeable: list[tuple[float, int, Neighbour, str]] = []  # prey and threats found, for size
     for target in TARGETS:
         direction_row, closeness_row, reporters = _TARGET_PLAN[target]
-        class_range = max(
-            (weak_smell if k == "smell" and target in ("prey", "threat") else reach[k])
-            for k in reporters
-        )
         found = best.get(target)
-        if found is None or class_range <= 0.0:
+        if found is None:
             continue
         distance, ident, neighbour, flags, dx, dy = found
+        class_range = max(
+            (
+                weak_smell
+                if k == "smell" and target in ("prey", "threat") and not neighbour.carrion
+                else reach[k]
+            )
+            for k in reporters
+        )
+        if class_range <= 0.0:
+            continue
         by = next(k for k in reporters if flags[k])
         if target in ("prey", "threat"):
             sizeable.append((distance, ident, neighbour, by))
+        if target == "mate":
+            similarity = neighbour.similarity
+            if callable(similarity):
+                similarity = similarity()
+            reported["mate_similarity"] = _clamp(similarity, 0.0, 1.0)
         reported[direction_row] = direction(by, bearing_of(dx, dy))
         reported[closeness_row] = _clamp(
             1.0 - distance / class_range + noise("vision", closeness_noise),
@@ -372,13 +396,35 @@ def sense(
         direction("hearing", bearing_of(loudest[2], loudest[3])) if loudest is not None else 0.0
     )
 
+    # The world's edge: seen inside the field of view (or touched), with its bearing and closeness.
+    if edge_distance is not None and edge_direction is not None:
+        ex, ey = edge_direction
+        edge_distance = max(0.0, edge_distance)
+        bearing = bearing_of(ex, ey)
+        felt = reach_touch > 0.0 and edge_distance <= reach_touch
+        seen = (
+            reach_vision > 0.0
+            and edge_distance <= reach_vision
+            and (edge_distance == 0.0 or abs(bearing) <= half_fov)
+        )
+        if seen or felt:
+            by = "vision" if seen else "touch"
+            edge_range = reach_vision if seen else reach_touch
+            reported["edge_direction"] = direction(by, bearing)
+            reported["edge_closeness"] = _clamp(
+                1.0 - edge_distance / edge_range + noise("vision", closeness_noise), 0.0, 1.0
+            )
+
     # Touch: anything in contact, or the world's edge.
     touching = nearest <= reach_touch or (
         edge_distance is not None and edge_distance <= reach_touch
     )
 
+    clock = conditions.clock
     return Percepts(
         **reported,
+        clock_sin=0.0 if clock is None else math.sin(math.tau * clock),
+        clock_cos=0.0 if clock is None else math.cos(math.tau * clock),
         touching=touching,
         alarm_strength=alarm,
         mating_call_strength=mating,

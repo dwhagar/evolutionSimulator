@@ -317,7 +317,7 @@ means no code does it yet.
 | --- | --- | --- |
 | Things that smell | `Neighbour.scent` (0 to 1) exists | The world must supply it: plants from biomass (available in `PlantTraits`), animals from mass |
 | A decay or drift of scent over time and space (trails) | No | A scent field with decay if trails are wanted (`SENSE.20`) |
-| Dead bodies as a scent source | No: the dead are removed at once | Needs corpses; part of the predation work |
+| Dead bodies as a scent source | Yes (`WORLD.12`): a corpse is reported to meat eaters as prey, smelled at the full range, and rots | Built: `world/corpses.py` |
 | Wind or water currents | No | Not planned |
 
 ### Touch

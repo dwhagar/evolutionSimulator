@@ -77,12 +77,12 @@ class BrainShape:
 
 
 DEFAULT_SHAPE = BrainShape(
-    inputs=20,
+    inputs=28,
     hidden=8,
     outputs=6,
     signed_outputs=(True, False, False, False, False, False),
 )
-"""The first animal brain (design note): 20 inputs, 8 hidden neurons, 6 actions, 222 numbers.
+"""The animal brain: 28 inputs (the sense-channel table, 20 until `SENSE.14`), 8 hidden neurons, 6 actions.
 Output 0 is the signed turn; the other five run from 0 to 1. It is the shape a seeded brain has; the
 genome holds up to ``DEFAULT_BLUEPRINT.max_hidden`` neurons and switches some of them off."""
 
@@ -321,4 +321,4 @@ DEFAULT_BLUEPRINT = BrainBlueprint(
     outputs=DEFAULT_SHAPE.outputs,
     signed_outputs=DEFAULT_SHAPE.signed_outputs,
 )
-"""The genome's brain: up to 16 hidden neurons of 28 values each, 454 values in all."""
+"""The genome's brain: up to 16 hidden neurons of 36 values each, 582 values in all."""

@@ -1,6 +1,6 @@
 """Brain adapter: the seam between the world and the brain.
 
-The brain only sees a list of numbers (17 now) and returns 6. This module owns what they mean (the
+The brain only sees a list of numbers (one per row of the sense-channel table) and returns 6. This module owns what they mean (the
 contract in ``docs/design/brain.md``, the table in ``sense_channels.py``) so that the world model can
 change how it measures things without touching the brain: it fills in a ``Percepts`` and reads a
 ``BrainDecision``.
@@ -60,8 +60,10 @@ class Temperament:
     - ``aggression`` scales how close prey looks: bold animals are drawn to it harder.
     - ``fear`` scales how close a threat looks: timid animals react to it sooner and harder.
     - ``repro_drive`` scales how close a possible mate looks (``REPRO.5``): a driven animal feels
-      pulled toward a mate harder. The other reproduction genes act on energy and timing, not on
-      what the brain perceives.
+      pulled toward a mate harder.
+    - ``parenting`` scales how close its own dependent young look (``SENSE.14``): a caring parent
+      is drawn to them harder. The other reproduction genes act on energy and timing, not on what
+      the brain perceives.
 
     More behaviour genes are added as more fields here, each bending the input it concerns.
     """
@@ -69,9 +71,10 @@ class Temperament:
     aggression: float = 0.5
     fear: float = 0.5
     repro_drive: float = 0.5
+    parenting: float = 0.5
 
     def __post_init__(self) -> None:
-        for name in ("aggression", "fear", "repro_drive"):
+        for name in ("aggression", "fear", "repro_drive", "parenting"):
             value = getattr(self, name)
             if not (math.isfinite(value) and 0.0 <= value <= 1.0):
                 raise ValueError(f"Temperament {name} must be between 0 and 1, got {value}.")

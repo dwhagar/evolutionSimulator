@@ -500,7 +500,7 @@ ANIMAL_TRAITS = TraitSet(
             1,
             4,
             kind=Kind.INTEGER,
-            description="Ticks between brain decisions; a slower thinker is cheaper (BRAIN.11).",
+            description="Reference ticks (hours) between brain decisions; a slower thinker is cheaper (BRAIN.11, WORLD.16).",
         ),
         TraitDef("curiosity", ("curiosity",), 0.0, 0.5, description="Size of random output nudge."),
         TraitDef(

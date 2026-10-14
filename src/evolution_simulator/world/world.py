@@ -42,10 +42,18 @@ from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
+from evolution_simulator.world.combat import AttackRules
+from evolution_simulator.world.corpses import Corpse, CorpseRules
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
-from evolution_simulator.world.senses import Senses, WorldSenses, wrap_angle
+from evolution_simulator.world.senses import (
+    MEAT_EATER,
+    Senses,
+    WorldSenses,
+    classify,
+    wrap_angle,
+)
 from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
@@ -108,11 +116,15 @@ class WorldConfig:
     day_cycle: DayCycle | None = field(default_factory=DayCycle)
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     sleep: SleepRules = field(default_factory=SleepRules)
-    calls_enabled: bool = False
+    attack: AttackRules = field(default_factory=AttackRules)
+    """Bites (``BRAIN.10``)."""
+    corpses: CorpseRules = field(default_factory=CorpseRules)
+    """What the dead leave: meat that rots and that meat eaters smell and eat (``WORLD.12``)."""
+    calls_enabled: bool = True
     """Whether animals can call (their brains' call outputs, paid for with ``call_energy_cost``).
-    Off by default: a random founder's brain calls on most ticks, a call costs several times an
-    animal's basal metabolism, and every call wakes sleepers, so founders die out or never
-    sleep. Turn it on once seeded brains (BRAIN.9) and the call rules (BRAIN.10) exist."""
+    A call is made only by an animal with a call radius (the encoder gene) that can afford it,
+    so a brain that calls on every tick starves itself; seeded founders do not call at all and
+    calling has to be evolved. Turn it off to study a silent world."""
     learning: LearningRules | None = field(default_factory=LearningRules)
     """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
     ``None`` turns it off."""
@@ -169,6 +181,8 @@ class World:
         self._plants: dict[int, Plant] = {}
         self._animal_index = SpatialIndex(INDEX_CELL_SIZE)
         self._plant_index = SpatialIndex(INDEX_CELL_SIZE)
+        self._corpses: dict[int, Corpse] = {}
+        self._corpse_index = SpatialIndex(INDEX_CELL_SIZE)
         self.max_canopy: float = 0.0
         """Largest canopy radius of any plant added so far; bounds the plant search radius."""
         self.max_body: float = 0.0
@@ -222,6 +236,23 @@ class World:
         cycle = self.config.day_cycle
         return 0 if cycle is None else cycle.day_number(self.simulated_seconds)
 
+    @property
+    def day_phase(self) -> float | None:
+        """The position in the day from 0 (midnight) up to 1, or ``None`` without a day cycle."""
+        cycle = self.config.day_cycle
+        return None if cycle is None else cycle.phase(self.simulated_seconds)
+
+    def edge_vector(self, position: Vec) -> tuple[float, float]:
+        """A unit vector from ``position`` toward the nearest wall (the lowest axis, then the low
+        side, wins a tie)."""
+        best = (math.inf, 0, 0.0)
+        for axis, (c, size) in enumerate(zip(position.coords, self.bounds.size)):
+            for gap, sign in ((c, -1.0), (size - c, 1.0)):
+                if gap < best[0]:
+                    best = (gap, axis, sign)
+        _, axis, sign = best
+        return (sign, 0.0) if axis == 0 else (0.0, sign)
+
     def edge_distance(self, position: Vec) -> float:
         """Distance from ``position`` to the nearest wall."""
         return min(min(c, size - c) for c, size in zip(position.coords, self.bounds.size))
@@ -239,6 +270,17 @@ class World:
     def plants(self) -> list[Plant]:
         """Living plants in id order."""
         return [self._plants[i] for i in sorted(self._plants)]
+
+    @property
+    def corpses(self) -> list[Corpse]:
+        """Corpses in id order."""
+        return [self._corpses[i] for i in sorted(self._corpses)]
+
+    def corpses_in_reach(self, position: Vec, reach: float) -> list[tuple[Corpse, float, float]]:
+        """Corpses within ``reach`` of ``position``, unordered, each with its centre distance and
+        radius."""
+        corpses = self._corpses
+        return [(corpses[i], d, r) for i, d, r in self._corpse_index.within_reach(position, reach)]
 
     def animals_near(self, position: Vec, radius: float) -> list[Animal]:
         """Animals whose position is within ``radius`` of ``position`` (as of the last index
@@ -300,7 +342,7 @@ class World:
         place = self._place(position)
         facing = self.rng.uniform(-math.pi, math.pi) if heading is None else wrap_angle(heading)
         return self._insert_animal(
-            AnimalTraits(dna, rules=self.config.traits), place, facing, parents
+            AnimalTraits(dna, rules=self.config.traits, dt=self.dt), place, facing, parents
         )
 
     def _insert_animal(
@@ -397,8 +439,12 @@ class World:
             animal.position = self.bounds.clamp(
                 animal.position + Vec.from_angle(animal.heading, step_length)
             )
-            if decision.eats_or_attacks:
-                self._graze(animal, dt)
+            if (
+                decision.eats_or_attacks
+                and not self._graze(animal, dt)
+                and not self._scavenge(animal, dt)
+            ):
+                self._attack(animal, dt)
 
         # 3. Mate, then deliver the litters that are due.
         self._refresh_animal_index()
@@ -413,6 +459,8 @@ class World:
                 plant_births += self._seed(plant)
 
         # 5. Remove the dead and advance the clock.
+        self._rot_corpses(dt)
+        self._leave_corpses()
         animal_deaths = self._remove_dead(self._animals, self._animal_index)
         plant_deaths = self._remove_dead(self._plants, self._plant_index)
         self.tick += 1
@@ -517,6 +565,7 @@ class World:
         """Put animals to sleep at night and wake them in the morning, when starving, or when an
         alarm call disturbs them."""
         night = self.is_night
+        self._update_tiredness(animals)
         starving_below = self.config.sleep.starving_below
         if night:
             self._wake_by_alarm()
@@ -539,6 +588,23 @@ class World:
                 for listener in self._sleep_listeners:
                     listener.woke(self, animal)
 
+    def _update_tiredness(self, animals: list[Animal]) -> None:
+        """Count the time each animal has been awake and hand it to the brain as a share of a day
+        (``SENSE.14``). Without a day cycle nobody sleeps, so nobody is tired."""
+        cycle = self.config.day_cycle
+        day = (
+            0.0
+            if cycle is None
+            else cycle.length_seconds / self.config.traits.time.reference_tick_seconds
+        )
+        dt = self.dt
+        for animal in animals:
+            if animal.asleep:
+                animal.awake_time = 0.0
+            else:
+                animal.awake_time += dt
+            animal.traits.tiredness = min(1.0, animal.awake_time / day) if day > 0.0 else 0.0
+
     def _rest(self, animal: Animal) -> None:
         """One tick of sleep: age as usual, burn less energy and regain some."""
         rules = self.config.sleep
@@ -556,7 +622,9 @@ class World:
         for animal in self.animals:
             self._animal_index.insert(animal.id, animal.position, animal.radius)
 
-    def _graze(self, animal: Animal, dt: float) -> None:
+    def _graze(self, animal: Animal, dt: float) -> bool:
+        """Eat from the plant the animal touches, if any. Returns whether it touched one (even if
+        it refused the poison), so the brain's "eat or attack" is spent on the plant."""
         reach = animal.radius + self.max_canopy
         best: Plant | None = None
         best_distance = math.inf
@@ -565,11 +633,80 @@ class World:
             if distance <= animal.radius + plant.radius and (distance < best_distance):
                 best, best_distance = plant, distance
         if best is None:
-            return
+            return False
         if animal.traits.inspect_food(best.traits.toxicity, self.rng):
-            return  # it tasted the poison and refused
+            return True  # it tasted the poison and refused
         eaten, toxicity = best.traits.graze(self.config.graze_amount * dt)
         animal.traits.feed(eaten, is_meat=False, toxicity=toxicity, dt=dt)
+        return True
+
+    def _attack(self, animal: Animal, dt: float) -> None:
+        """Bite the nearest animal in contact that this one counts as prey. A sleeper is woken by
+        the bite; the one that kills eats the meat. A bite does its damage per reference tick, so a
+        tick of ``dt`` reference ticks does ``dt`` times as much."""
+        rules = self.config.attack
+        reach = animal.radius + self.max_body
+        target: Animal | None = None
+        best_distance = math.inf
+        for other, _ in self.animals_within(animal.position, reach):
+            if other is animal or not other.is_alive:
+                continue
+            distance = animal.position.distance_to(other.position)
+            if (
+                distance <= animal.radius + other.radius
+                and distance < best_distance
+                and classify(animal, other) == "prey"
+            ):
+                target, best_distance = other, distance
+        if target is None:
+            return
+        traits = animal.traits
+        target.traits.apply_damage(
+            rules.bite(traits.effective_carn_eff, traits.mass, target.traits.mass) * dt
+        )
+        target.disturbed = True
+
+    def _scavenge(self, animal: Animal, dt: float) -> bool:
+        """Eat from the nearest corpse the animal touches, if it can digest meat. Returns whether
+        it touched one, so the brain's "eat or attack" is spent on the meal and not on a bite."""
+        if animal.traits.effective_carn_eff <= MEAT_EATER:
+            return False
+        found = [
+            (distance, corpse.id, corpse)
+            for corpse, distance, radius in self.corpses_in_reach(animal.position, animal.radius)
+        ]
+        if not found:
+            return False
+        corpse = min(found, key=lambda item: item[:2])[2]
+        taken = min(corpse.meat, self.config.corpses.bite * dt)
+        corpse.meat -= taken
+        animal.traits.feed(taken, is_meat=True, dt=dt)
+        return True
+
+    def _leave_corpses(self) -> None:
+        """Every animal that died this tick leaves a corpse where it fell."""
+        rules = self.config.corpses
+        for animal in self.animals:
+            if animal.is_alive:
+                continue
+            meat = rules.meat(animal.traits.max_energy)
+            if meat < rules.gone_below:
+                continue
+            corpse = Corpse(
+                self._new_id(), animal.position, animal.radius, animal.traits.mass, meat
+            )
+            self._corpses[corpse.id] = corpse
+            self._corpse_index.insert(corpse.id, corpse.position, corpse.radius)
+
+    def _rot_corpses(self, dt: float) -> None:
+        """Corpses lose meat to rot and are removed when almost nothing is left."""
+        rules = self.config.corpses
+        keep = 0.5 ** (dt / rules.rot_halflife)
+        for corpse in self.corpses:
+            corpse.meat *= keep
+            if corpse.meat < rules.gone_below:
+                del self._corpses[corpse.id]
+                self._corpse_index.remove(corpse.id)
 
     def _mate(self, animals: list[Animal]) -> int:
         """Pair the willing animals off and try each pair. Returns the matings that took."""
@@ -619,7 +756,7 @@ class World:
             if count <= 0:
                 continue
             litter = [
-                AnimalTraits(genome, rules=self.config.traits)
+                AnimalTraits(genome, rules=self.config.traits, dt=self.dt)
                 for genome in pregnancy.children[:count]
             ]
             if not AnimalTraits.give_birth(mother.traits, litter):
@@ -673,18 +810,30 @@ class World:
     # -------------------------------------------------------------------------
 
     def state_digest(self) -> str:
-        """A hash of the whole state: tick, random generator, and every organism's place, energy
-        and genome. Two runs that are really the same give the same digest."""
+        """A hash of the state that decides what happens next: tick, random generator, and every
+        organism's place, energy, health, age, sleep, pregnancy, learned changes and genome. Two
+        runs that are really the same give the same digest. It is a check, not a full copy: whatever
+        else a world holds is saved by ``persistence.py`` (``UX.9``), which has to learn about any
+        new state."""
         parts: list[str] = [str(self.tick), repr(self.rng.getstate())]
         for animal in self.animals:
+            traits = animal.traits
+            pregnancy = traits.pregnancy
+            learner = traits.learner
             parts.append(
                 f"A{animal.id}|{animal.position.coords!r}|{animal.heading!r}|"
-                f"{animal.traits.current_energy!r}|{animal.traits.current_health!r}|"
-                f"{animal.traits.dna}"
+                f"{traits.current_energy!r}|{traits.current_health!r}|{traits.dna}|"
+                f"{animal.asleep}|{animal.disturbed}|{animal.awake_time!r}|{animal.partner}|{traits.age_ticks}|"
+                f"{traits.matings}|{traits.mating_cooldown!r}|"
+                f"{None if pregnancy is None else (pregnancy.litter, pregnancy.remaining)!r}|"
+                f"{None if learner is None else (learner.offsets, learner.open_decisions)!r}"
             )
         for plant in self.plants:
+            traits = plant.traits
             parts.append(
-                f"P{plant.id}|{plant.position.coords!r}|{plant.traits.current_biomass!r}|"
-                f"{plant.traits.dna}"
+                f"P{plant.id}|{plant.position.coords!r}|{traits.current_biomass!r}|{traits.dna}|"
+                f"{traits.lived_ticks!r}|{traits.seed_cooldown!r}"
             )
+        for corpse in self.corpses:
+            parts.append(f"C{corpse.id}|{corpse.position.coords!r}|{corpse.meat!r}")
         return hashlib.sha256("\n".join(parts).encode()).hexdigest()

@@ -29,11 +29,15 @@ Still to build, now that the owner has answered the open questions:
 ## Next: world, senses and the thinking brain
 
 Not yet given a version; the owner sets milestones.
-- The world: built (`WORLD.2` to `WORLD.4`, [#53](https://github.com/dwhagar/evolutionSimulator/pull/53)): bounds, time scales, a spatial index, stand-in senses and the step loop. To come: the day-night cycle (`WORLD.5`), per-second physics for fast speeds (`WORLD.7`, waits on the owner's answer about time scales, question 8 on [#36](https://github.com/dwhagar/evolutionSimulator/issues/36)), plant balance (`WORLD.8`) and speed (`WORLD.9`, `WORLD.13`).
-- Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14`; the sense genes (field of vision, acuity) are built (`SENSE.16`, [#103](https://github.com/dwhagar/evolutionSimulator/pull/103)).
-- The brain acting and learning: design notes for a shape that evolves and for nightly learning are done (`BRAIN.13`, `BRAIN.15`, [#60](https://github.com/dwhagar/evolutionSimulator/pull/60)); the builds are done (`BRAIN.23`, `BRAIN.24`), and the first generation now carries a seeded brain (`BRAIN.9`, [#106](https://github.com/dwhagar/evolutionSimulator/pull/106)). Next: acting on the decisions, `BRAIN.10`, and a world calibrated so that founders breed, `WORLD.15`.
+- The world: built (`WORLD.2` to `WORLD.4`, [#53](https://github.com/dwhagar/evolutionSimulator/pull/53)): bounds, time scales, a spatial index, stand-in senses and the step loop. Also built: the day-night cycle (`WORLD.5`), an hourly default tick with a 24-hour day and physics that follows the tick (`WORLD.7`, [#116](https://github.com/dwhagar/evolutionSimulator/pull/116)), plant balance (`WORLD.8`) and speed (`WORLD.9`, `WORLD.13`). To come: a world where founders breed (`WORLD.15`) and seedling survival (`WORLD.11`).
+- Senses: research is done (`SENSE.1`, `docs/design/senses.md`); the build items are `SENSE.8` to `SENSE.14` (the extra brain inputs of `SENSE.14` are built, [#139](https://github.com/dwhagar/evolutionSimulator/pull/139)); the sense genes (field of vision, acuity) are built (`SENSE.16`, [#103](https://github.com/dwhagar/evolutionSimulator/pull/103)).
+- The brain acting and learning: design notes for a shape that evolves and for nightly learning are done (`BRAIN.13`, `BRAIN.15`, [#60](https://github.com/dwhagar/evolutionSimulator/pull/60)); the builds are done (`BRAIN.23`, `BRAIN.24`), and the first generation now carries a seeded brain (`BRAIN.9`, [#106](https://github.com/dwhagar/evolutionSimulator/pull/106)). The world now acts on every brain decision (`BRAIN.10`, [#118](https://github.com/dwhagar/evolutionSimulator/pull/118)). Next: a world calibrated so that founders breed, `WORLD.15`.
+
+## Next: the interface
+
+Asked for by the owner on 2026-10-14 (task area `UX`): a graphical viewer with a world view, speed and time controls, a creature inspector, population and gene charts, run setup and save and load. The design note is done (`UX.1`, [docs/design/ux.md](design/ux.md), [#135](https://github.com/dwhagar/evolutionSimulator/pull/135)): a native desktop program (PySide6, pyqtgraph) with the simulation kept as a headless core in its own process. Owner questions are [#123](https://github.com/dwhagar/evolutionSimulator/issues/123) to [#126](https://github.com/dwhagar/evolutionSimulator/issues/126) and [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) to [#134](https://github.com/dwhagar/evolutionSimulator/issues/134). The builds (`UX.6` to `UX.22`) run in four waves, starting with the simulation session (`UX.6`).
 
 ## Later
 
 A first runnable simulation: organisms in the world with a step loop that feeds, ages, senses, thinks and
-reproduces them, with seeded runs that repeat. Needs the world, senses and `BRAIN.10`.
+reproduces them, with seeded runs that repeat. Needs the world, senses and the founders breeding (`WORLD.15`).
