@@ -14,7 +14,7 @@ import logging
 import pkgutil
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Any, Literal
 
 from PySide6.QtCore import QSettings
 from PySide6.QtGui import QAction
@@ -58,6 +58,9 @@ class ViewerContext:
         self.settings = settings
         """Where the window keeps its settings, for a screen that has some of its own to remember
         (keep to your own key prefix); ``None`` when the window has none."""
+        self.services: dict[str, Callable[..., Any]] = {}
+        """What panels offer each other by name (the setup screen's ``start_run_from``): look one up
+        when it is used, not when the panel is built, since the other panel may not exist yet."""
 
     def send(self, command: Request) -> bool:
         return self.controller.send(command)

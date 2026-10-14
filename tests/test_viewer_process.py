@@ -111,10 +111,18 @@ def test_the_window_shows_starting_then_offers_a_restart_after_a_crash(made, tmp
         assert not window.actions["play_pause"].isEnabled()
         [restart] = [b for b in box.buttons() if b.text() == "Restart"]
         old = controller.backend
+        # The restarted simulation is a new process whose start-up takes however long it takes (a
+        # busy event loop can outlast it), so hold the timer's polling back while the window is
+        # looked at, then let it through and watch the text give way.
+        controller.stop()
         restart.click()
         qapp.processEvents()
         assert controller.backend is not old and window.actions["play_pause"].isEnabled()
+        assert controller.starting
         assert window.status_labels["clock"].text() == "Starting the simulation"
+        controller.start()
+        pump(controller, lambda: window.status_labels["clock"].text() != "Starting the simulation")
+        assert not controller.starting
     finally:
         window.close()
 

@@ -180,9 +180,10 @@ def test_the_sense_geometry_matches_what_the_animal_senses(world):
     assert geometry.smell_range == pytest.approx(traits.smell_range)
     assert geometry.touch_range == pytest.approx(traits.tactile_range)
     assert geometry.fov_half_degrees == pytest.approx(traits.fov_half_degrees)
-    old = brainview.sense_geometry(replace(detail, vitality=0.0))
-    assert old.vision_range < geometry.vision_range and old.hearing_range < geometry.hearing_range
-    assert old.smell_range == geometry.smell_range  # smell does not weaken with age
+    # the overlay draws the animal's own numbers, never its own guess from the traits
+    given = brainview.sense_geometry(replace(detail, vision_range=12.5, smell_range=3.0))
+    assert given.vision_range == 12.5 and given.smell_range == 3.0
+    assert given.hearing_range == geometry.hearing_range
 
 
 def test_a_detail_without_sense_traits_gives_no_geometry(qapp):

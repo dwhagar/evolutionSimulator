@@ -7,6 +7,8 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `UX.38`: The sense overlays use each animal's real sight, hearing, smell and touch ranges instead of working them out from its traits. [#202](https://github.com/dwhagar/evolutionsimulator/pull/202)
+- `UX.37`: Closing the window on a world that was never saved asks whether to save it; panels can add their own close guard with `ViewerContext.add_close_guard`. [#198](https://github.com/dwhagar/evolutionsimulator/pull/198)
 - `UX.15`: The brain and senses view: a Brain tab in the inspector with the animal's inputs and outputs as labelled bars and its network drawn with connection strengths and live values, and vision, hearing, smell and touch overlays on the world view. [#197](https://github.com/dwhagar/evolutionsimulator/pull/197)
 - `UX.14`: The creature inspector: click an animal to see its body and state, its genes by group against the population average, and its family (parents, children, closest relatives), with Esc to deselect. [#195](https://github.com/dwhagar/evolutionsimulator/pull/195)
 - `WORLD.17`: Two optional speed settings for the brain, `interval_scale` and `idle_interval_factor`, off by default so runs are unchanged; `interval_scale` 2 cuts a tick by about 23% at 300 animals and 3000 plants. [#193](https://github.com/dwhagar/evolutionsimulator/pull/193)

@@ -104,6 +104,11 @@ def test_the_detail_of_an_animal_and_of_nobody():
     assert detail.traits["mass"] == animal.traits.mass
     assert detail.max_energy == animal.traits.max_energy
     assert detail.decision is animal.last_decision
+    traits = animal.traits
+    assert detail.vision_range == traits.current_sight_range > 0.0
+    assert detail.hearing_range == traits.current_hearing_range > 0.0
+    assert detail.smell_range == traits.smell_range > 0.0
+    assert detail.touch_range == traits.tactile_range > 0.0
     assert world.animal_detail(10**9) is None
     assert pickle.loads(pickle.dumps(detail)) == detail
 
@@ -236,3 +241,16 @@ def test_reading_the_detail_changes_nothing_about_the_run():
                     world.animal_detail(animal.id)
         digests.append(world.state_digest())
     assert digests[0] == digests[1]
+
+
+def test_the_ranges_in_the_detail_follow_the_animals_vitality():
+    world = busy_world()
+    animal = world.animals[0]
+    before = world.animal_detail(animal.id)
+    traits = animal.traits
+    traits.current_sight_range *= 0.5
+    traits.current_hearing_range *= 0.5
+    after = world.animal_detail(animal.id)
+    assert after.vision_range == pytest.approx(before.vision_range * 0.5)
+    assert after.hearing_range == pytest.approx(before.hearing_range * 0.5)
+    assert after.smell_range == before.smell_range

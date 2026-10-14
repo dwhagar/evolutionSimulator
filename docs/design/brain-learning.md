@@ -358,7 +358,7 @@ Decisions the owner should make, raised as issues. Each has a default the build 
 | --- | --- | --- |
 | What counts as reward (energy, health, mating, safety) and how much each matters? | [#55](https://github.com/dwhagar/evolutionSimulator/issues/55) (`BRAIN.19`) | Energy gained 1, health lost 2, mating 1, safety 0.5 |
 | How much may one night change a creature? | [#56](https://github.com/dwhagar/evolutionSimulator/issues/56) (`BRAIN.20`) | Medium: no number moves more than 0.5 in one night (an eighth of its range) |
-| Are sleeping creatures vulnerable (cannot sense or flee)? | [#57](https://github.com/dwhagar/evolutionSimulator/issues/57) (`WORLD.6`) | Yes, which makes night a trade-off (belongs to `WORLD.5`) |
+| Are sleeping creatures vulnerable (cannot sense or flee)? | [#57](https://github.com/dwhagar/evolutionSimulator/issues/57) (`WORLD.6`) | Partly (the owner confirmed): a sleeper is slower to sense and to flee but not deaf, which makes night a trade-off (belongs to `WORLD.5`) |
 
 Already asked: whether learned changes are inherited ([#36](https://github.com/dwhagar/evolutionSimulator/issues/36) question 5,
 default no).
