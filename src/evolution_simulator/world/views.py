@@ -129,6 +129,15 @@ class AnimalDetail:
     genome: str
     """The genome as base-4 digits."""
     death_cause: DeathCause | None = None
+    vision_range: float | None = None
+    """How far its eye reaches now, in world units, after acuity and vitality (``None`` when the
+    simulation does not say, as the stand-in simulation does not). The four ranges are what the
+    sense overlays of the viewer draw."""
+    hearing_range: float | None = None
+    """How far its ear reaches now, after vitality."""
+    smell_range: float | None = None
+    touch_range: float | None = None
+    """How far its touch reaches from the middle of its body."""
 
 
 def diet_share(animal: Animal) -> float:
@@ -223,6 +232,10 @@ def animal_detail(world: World, animal: Animal) -> AnimalDetail:
         traits={name: float(value) for name, value in traits.phenotype.items()},
         genome=str(traits.dna),
         death_cause=traits.death_cause,
+        vision_range=traits.current_sight_range,
+        hearing_range=traits.current_hearing_range,
+        smell_range=traits.smell_range,
+        touch_range=traits.tactile_range,
     )
 
 

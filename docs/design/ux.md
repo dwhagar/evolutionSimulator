@@ -766,10 +766,12 @@ the bars and the drawn network, bars first. `viewer/inspector/tab_brain.py` is t
   (`hub_for(controller)`: the tab sets the geometry, the canvas, given the hub by `WorldPanel`, paints it
   between the corpses and the animals around the selected animal's gliding position, and repaints on its
   `changed` signal). Vision is a wedge as wide as the field of view with a solid edge, hearing a dashed
-  circle, smell a dotted circle and touch a thin ring, each labelled. The ranges are worked out from the
-  traits as the animal does (acuity lengthens the eye; low vitality shortens eye and ear, using the default
-  rules' floor, so a world with other `sense_floor` rules draws them slightly off). A detail with no
-  sense traits (the stand-in simulation) draws nothing.
+  circle, smell a dotted circle and touch a thin ring, each labelled. The ranges are the animal's own, carried in
+  `AnimalDetail` (`vision_range`, `hearing_range`, `smell_range`, `touch_range`: `current_sight_range`,
+  `current_hearing_range`, `smell_range`, `tactile_range`, so acuity and vitality are already in them,
+  whatever the world's rules; `UX.38`, they are a view and not state, so nothing is persisted); the width
+  of the wedge is `traits["fov_half_degrees"]`. A detail with no ranges (the stand-in simulation)
+  draws nothing.
 - **Tests.** `tests/test_brain_tab.py`: the data, the wedge pointing the way the animal faces, the hub,
   the tab waiting for and then showing a run, a dead creature, the checkboxes, the canvas painting the
   overlay, and the stand-in simulation.
