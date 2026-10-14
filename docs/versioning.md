@@ -9,7 +9,14 @@ Versions use the format `MAJOR.minor.build`, for example `0.0.23`.
   that happens, update `major`/`minor` in [`version.toml`](../version.toml) and set `base` to the
   commit that starts the new line, which resets the build to 0.
 
-We started at `0.0.0` on commit `c21303d`; the first merge after that is `0.0.1`.
+Lines so far:
+
+| Line | Starts at commit | Set by |
+| --- | --- | --- |
+| 0.0 | `c21303d` | Project start |
+| 0.1 | `9900778` | Owner set milestone 0.1 (data models for DNA and traits) |
+
+The first merge after a line starts is `M.m.1`.
 
 ## Checking the version
 

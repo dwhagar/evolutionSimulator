@@ -4,6 +4,12 @@ All notable changes are recorded here, newest first, grouped by `MAJOR.minor` li
 number changes with every merge, so entries reference the line rather than each build. Each entry
 carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versioning.md](docs/versioning.md).
 
+## 0.1 — Data models for DNA and traits
+
+### Changed
+- `DOCS.4`: Milestone 0.1 set by the owner: data models for traits and DNA, with a document on how they interact. The version line moves from 0.0 to 0.1 ([docs/versioning.md](docs/versioning.md)). [#PRN](https://github.com/dwhagar/evolutionSimulator/pull/PRN)
+- `DOCS.1`: TODO items have `AREA.N` task IDs, and issues and PRs are labelled with them (see [TODO.md](TODO.md)). [#19](https://github.com/dwhagar/evolutionSimulator/pull/19)
+
 ## 0.0 — Pre-release
 
 ### Added
@@ -13,6 +19,3 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 - `DOCS.1`: Docs tree (`docs/design`, `docs/research`, `docs/archive`), roadmap, and TODO list. [#1](https://github.com/dwhagar/evolutionSimulator/pull/1)
 - `INFRA.1`: Automatic `MAJOR.minor.build` versioning: the build counts merges into main. [#1](https://github.com/dwhagar/evolutionSimulator/pull/1)
 - `INFRA.2`: Project scaffold: Python 3.12+ package, pytest, ruff, and weekly scheduled CI (Mondays 07:00 UTC). [#1](https://github.com/dwhagar/evolutionSimulator/pull/1)
-
-### Changed
-- `DOCS.1`: TODO items now have `AREA.N` task IDs, and issues and PRs are labelled with them (see [TODO.md](TODO.md)).
