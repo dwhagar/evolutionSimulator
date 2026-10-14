@@ -534,12 +534,16 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
   run, else on the original recipe. There is no "save" after a crash (the process is gone); what the
   run's autosave kept is what Restart brings back.
 - **Saving and resuming.** `RunManager` works with a hosted world too (`hosted()`): `save_now` sends
-  `StartRun(root, name)` the first time and `SaveNow` after (new request `StartRun`; `Shutdown` gained
-  `save`, first word wins) and waits for the `RunNotice`; the host autosaves. `resume` checks the
-  checkpoint reads in the viewer's process (so a bad one changes nothing), stops the old simulation process
-  first (with a last checkpoint, unless it is the run being gone back into) and starts a new one on
-  `ResumeSpec`. The cost is that a resumed world is loaded twice. `RunManager.detach` only affects a local
-  world; closing a hosted backend is what gives its run the last checkpoint.
+  `StartRun(root, name, token)` (new request: start a run if the world is not in one, else checkpoint it
+  now; `SaveNow` and `StartRun` carry a `token` that comes back as `RunNotice.answers`, so an answer cannot
+  be mistaken for an older notice) and waits for it; the host autosaves. `Shutdown` gained `save` (the
+  first word wins). The setup screen's flow works as it did in process: `detach`, `NewRun` (the host gives
+  the old run its last checkpoint and starts a run for the new world in the same store when the old one
+  was saved), then `save_now`. `resume` checks the checkpoint reads in the viewer's process (so a bad one
+  changes nothing), stops the old simulation process first (with a last checkpoint, unless it is the run
+  being gone back into) and starts a new one on `ResumeSpec`. The cost is that a resumed world is loaded
+  twice. `RunManager.detach` only affects a local world; closing a hosted backend is what gives its run
+  the last checkpoint.
 - **The pipe never stops the world.** A pipe holds only a few KB on Windows (8 KB buffers) and about
   200 KB on Linux, and `Connection.send` does not return until the viewer has read the message. Reproduced
   on Linux: with a world whose frames are 390 KB and a viewer that never reads, the host froze in the

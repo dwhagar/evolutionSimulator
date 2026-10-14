@@ -49,18 +49,23 @@ class RequestHistory:
 
 @dataclass(frozen=True, slots=True)
 class SaveNow:
-    """Write a checkpoint of the attached run now (UX.31). Refused when no run is attached."""
+    """Write a checkpoint of the attached run now (UX.31). Refused when no run is attached.
+    ``token`` comes back as ``RunNotice.answers`` so the sender can tell the answer from older
+    notices."""
+
+    token: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class StartRun:
-    """Save the world as a new run in the run store at ``root`` (the default runs folder when
-    ``None``), named ``name`` (after its seed when ``None``): the first checkpoint is written at once
-    and the host autosaves from then on. Answered with a ``RunNotice``; refused for a made-up world
-    and when a run is already attached."""
+    """Make sure the world is saved into a run, and checkpoint it now: with none attached, start a
+    new run in the run store at ``root`` (the default runs folder when ``None``), named ``name``
+    (after its seed when ``None``) and autosave from then on; with one, just checkpoint it. Answered
+    with a ``RunNotice`` whose ``answers`` is ``token``; refused for a made-up world."""
 
     root: str | None = None
     name: str | None = None
+    token: int = 0
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,6 +129,8 @@ class RunNotice:
     """Checkpoints this host has written since it started."""
     resumed_from: str | None = None
     """The checkpoint the simulation was restored from, when it was resumed."""
+    answers: int = 0
+    """The ``token`` of the newest ``SaveNow`` or ``StartRun`` the host has carried out."""
 
 
 @dataclass(frozen=True, slots=True)

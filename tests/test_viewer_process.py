@@ -220,3 +220,26 @@ def test_resuming_a_different_run_saves_the_one_on_screen(made, store, qapp):
     pump(controller, lambda: controller.frame is not None)
     assert controller.frame.tick == DAY
     assert [c.tick for c in store.open(two).checkpoints()][-1] == 3 * DAY  # saved on the way out
+
+
+def test_a_new_run_in_the_host_is_saved_at_once_through_the_run_manager(made, store, qapp):
+    """The setup screen's flow: NewRun, then Save now, with no wait between (UX.17 and UX.33)."""
+    from evolution_simulator.session import NewRun
+
+    controller = made(hosted_world(store.root))
+    manager = RunManager.install(controller, store)
+    controller.send(Step(DAY))
+    pump(controller, lambda: controller.frame is not None and controller.frame.tick >= DAY)
+    manager.save_now("old")
+    manager.detach()
+    assert controller.send(NewRun(WorldConfig(seed=9), 6, 20, True, "fresh"))
+    info = manager.save_now("fresh")
+    assert info.tick == 0 and manager.current_run.name == "fresh"
+    assert sorted(r.name for r in store.list_runs()) == ["fresh", "old"]
+
+    # a world that was never saved gets its run the same way
+    plain = made(hosted_world(store.root))
+    other = RunManager.install(plain, store)
+    plain.send(NewRun(WorldConfig(seed=3), 6, 20, True, "plain"))
+    assert other.save_now("plain").tick == 0
+    assert "plain" in [r.name for r in store.list_runs()]

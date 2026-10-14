@@ -359,7 +359,7 @@ def test_the_new_messages_pickle():
     assert pickle.loads(pickle.dumps(SaveNow())) == SaveNow()
 
 
-def test_start_run_saves_a_real_world_into_a_new_run_and_refuses_the_rest(tmp_path):
+def test_start_run_saves_a_real_world_into_a_run_and_refuses_a_made_up_one(tmp_path):
     world = World(WorldConfig(seed=4))
     world.populate(5, 20)
     host, clock, _ = make(sim=world)
@@ -368,10 +368,11 @@ def test_start_run_saves_a_real_world_into_a_new_run_and_refuses_the_rest(tmp_pa
     clock.advance(0.3)
     [notice] = [m for m in host.step() if isinstance(m, RunNotice)]
     assert (notice.name, notice.checkpoints) == ("later", 1) and host.run is not None
-    host.receive(StartRun(str(tmp_path), "again"))  # already in a run
+    assert notice.answers == 0
+    host.receive(StartRun(str(tmp_path), "again", token=7))  # already in a run: it is checkpointed
     clock.advance(0.3)
-    [rejected] = [m for m in host.step() if isinstance(m, CommandRejected)]
-    assert "already saved" in rejected.reason
+    [again] = [m for m in host.step() if isinstance(m, RunNotice)]
+    assert (again.run_id, again.name, again.answers, again.saved) == (notice.run_id, "later", 7, 1)
     host.receive(Shutdown(save=False))
     host.receive(Shutdown())  # the first word is the one that counts
     assert host.step() == [Stopped()]

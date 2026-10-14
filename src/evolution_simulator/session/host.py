@@ -157,6 +157,7 @@ class Host:
         self._manual_saves = 0
         self._noticed_saves: int | None = None
         self._save_on_shutdown = True
+        self._answered = 0
 
     # -------------------------------------------------------------------------
     # From the viewer
@@ -185,6 +186,8 @@ class Host:
             else:
                 self.run.checkpoint(self.session.simulation, self.recorder)  # type: ignore[arg-type]
                 self._manual_saves += 1
+                self._answered = message.token
+                self._noticed_saves = None
         elif isinstance(message, StartRun):
             self._start_run(message)
         elif isinstance(message, Shutdown):
@@ -268,17 +271,22 @@ class Host:
 
     def _start_run(self, message: StartRun) -> None:
         world = self.session.simulation
-        if self.run is not None:
-            reason = "This simulation is already saved into a run."
-        elif not isinstance(world, World):
-            reason = "This simulation is not a real world, so it cannot be saved."
-        else:
+        if not isinstance(world, World):
+            self._rejected.append(
+                CommandRejected(
+                    message, "This simulation is not a real world, so it cannot be saved."
+                )
+            )
+            return
+        if self.run is None:
             run = RunStore(message.root).create(world, name=message.name, recorder=self.recorder)
             self.run = run
             self._autosaver = run.autosave(world, self.recorder)
-            self._noticed_saves = None  # tell the viewer
-            return
-        self._rejected.append(CommandRejected(message, reason))
+        else:
+            self.run.checkpoint(world, self.recorder)
+            self._manual_saves += 1
+        self._answered = message.token
+        self._noticed_saves = None  # tell the viewer
 
     def _on_sample(self, sample: Sample) -> None:
         self._pending_samples.append(sample)
@@ -310,6 +318,7 @@ class Host:
             checkpoints[-1].name if checkpoints else "",
             self._saves(),
             self._resumed_from,
+            self._answered,
         )
 
     def shutdown(self) -> None:

@@ -31,7 +31,6 @@ from evolution_simulator.session import (
     ProcessClient,
     ResumeSpec,
     RunNotice,
-    SaveNow,
     Shutdown,
     SimClient,
     Simulation,
@@ -83,6 +82,7 @@ class ProcessBackend:
         self._history: HistorySamples | None = None
         self._rejected: list = []
         self._crash_reported = False
+        self._tokens = 0
         self._ready_reported = False
 
     # ---- the Backend face -------------------------------------------------------------------
@@ -181,9 +181,8 @@ class ProcessBackend:
             raise RunError("This simulation is not a real world, so it cannot be saved.")
         if self.crashed is not None:
             raise RunError("The simulation has stopped, so there is nothing to save.")
-        first = self.run_notice is None
-        before = -1 if self.run_notice is None else self.run_notice.saved
-        request = StartRun(None if root is None else str(root), name) if first else SaveNow()
+        self._tokens += 1
+        request = StartRun(None if root is None else str(root), name, self._tokens)
         self.client.send(request)
 
         def refused() -> str | None:
@@ -193,10 +192,8 @@ class ProcessBackend:
             return None
 
         def done() -> bool:
-            if refused() is not None:
-                return True
             notice = self.run_notice
-            return notice is not None and (first or notice.saved > before)
+            return refused() is not None or (notice is not None and notice.answers >= request.token)
 
         self._wait(done, SAVE_WAIT, "saving")
         reason = refused()
