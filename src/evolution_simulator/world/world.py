@@ -32,12 +32,12 @@ from __future__ import annotations
 import hashlib
 import math
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
-from evolution_simulator.config import DEFAULT_RULES, SensingRules, TraitRules
+from evolution_simulator.config import DEFAULT_RULES, LearningRules, SensingRules, TraitRules
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import founder_animal_dna, founder_plant_dna
-from evolution_simulator.learning import LearningRules, NightlyLearning
+from evolution_simulator.learning import NightlyLearning
 from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
@@ -125,9 +125,6 @@ class WorldConfig:
     A call is made only by an animal with a call radius (the encoder gene) that can afford it,
     so a brain that calls on every tick starves itself; seeded founders do not call at all and
     calling has to be evolved. Turn it off to study a silent world."""
-    learning: LearningRules | None = field(default_factory=LearningRules)
-    """Learning during life (``BRAIN.24``): animals log their day and learn when they fall asleep;
-    ``None`` turns it off."""
     plants: PlantRules = field(default_factory=PlantRules)
     traits: TraitRules = DEFAULT_RULES
     """The tuning constants of the organisms' formulas (``TRAIT.3``): body, behaviour, brain costs,
@@ -140,6 +137,17 @@ class WorldConfig:
     def sensing(self) -> SensingRules:
         """The constants of the sensing step: light and sleep factors, weak smell, noise."""
         return self.traits.sensing
+
+    @property
+    def learning(self) -> LearningRules | None:
+        """Learning during life (``BRAIN.24``): animals log their day and learn when they fall
+        asleep; ``None`` turns it off. Part of the trait rules (``TRAIT.10``)."""
+        return self.traits.learning
+
+    def with_rules(self, **sections: object) -> WorldConfig:
+        """This config with some sections of its trait rules replaced, e.g.
+        ``config.with_rules(learning=None)``."""
+        return replace(self, traits=replace(self.traits, **sections))
 
     def __post_init__(self) -> None:
         for name in ("graze_amount", "mating_reach", "birth_scatter"):
@@ -348,7 +356,6 @@ class World:
     def _insert_animal(
         self, traits: AnimalTraits, place: Vec, facing: float, parents: tuple[int, ...]
     ) -> Animal:
-        traits.learning_rules = self.config.learning
         animal = Animal(self._new_id(), traits, place, facing, parents)
         self._animals[animal.id] = animal
         self._animal_index.insert(animal.id, animal.position, animal.radius)

@@ -346,9 +346,11 @@ def test_damage_and_matings_are_counted_over_a_life():
 # --- the world ---------------------------------------------------------------
 
 
-def world_with_animals(seed=5, count=8, **config):
+def world_with_animals(seed=5, count=8, **rules):
     world = World(
-        WorldConfig(seed=seed, day_cycle=DayCycle(length_seconds=100.0 * 3600.0), **config)
+        WorldConfig(seed=seed, day_cycle=DayCycle(length_seconds=100.0 * 3600.0)).with_rules(
+            **rules
+        )
     )
     rng = random.Random(seed)
     for _ in range(count):
@@ -384,3 +386,22 @@ def test_learning_is_repeatable():
         return [a.traits.brain.to_values() for a in world.animals]
 
     assert run() == run()
+
+
+def test_learning_is_part_of_the_trait_rules():
+    from dataclasses import replace
+
+    from evolution_simulator.config import DEFAULT_RULES, TraitRules
+
+    assert isinstance(DEFAULT_RULES.learning, LearningRules)
+    assert TraitRules().learning == LearningRules()
+    config = WorldConfig()
+    assert config.learning is config.traits.learning
+    off = config.with_rules(learning=None)
+    assert off.learning is None and config.learning is not None  # the original is untouched
+    dna = DNA.random(ANIMAL_LAYOUT, random.Random(1))
+    assert AnimalTraits(dna).learning_rules == LearningRules()
+    assert AnimalTraits(dna, rules=replace(DEFAULT_RULES, learning=None)).learning_rules is None
+    custom = LearningRules(night_cap=0.1)
+    world = World(WorldConfig().with_rules(learning=custom))
+    assert world.add_animal(dna).traits.learning_rules is custom

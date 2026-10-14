@@ -229,8 +229,8 @@ class AnimalTraits(BaseTraits):
         self.brain: Brain = self.innate_brain
         self.curiosity: float = t["curiosity"]
         self.learning_rate: float = t["learning_rate"]
-        self.learning_rules: LearningRules | None = LearningRules()
-        """The world's learning settings; ``None`` turns learning off."""
+        self.learning_rules: LearningRules | None = self.rules.learning
+        """The run's learning settings (``TraitRules.learning``); ``None`` turns learning off."""
         self.learner: Learner | None = None
         self.matings: int = 0
         self.wanderer: Wanderer = Wanderer()
