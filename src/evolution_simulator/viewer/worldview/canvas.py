@@ -32,6 +32,7 @@ from evolution_simulator.session.snapshot import ANIMAL_FLAGS, PLANT_FLAGS, Bloc
 from evolution_simulator.viewer.worldview import glide, palette
 from evolution_simulator.viewer.worldview.camera import Camera, nice_step
 from evolution_simulator.viewer.worldview.layers import Layer
+from evolution_simulator.viewer.worldview.overlays import OverlayHub, SelectedPose
 
 MIN_ANIMAL_PX = 9.0
 """Animals are never drawn smaller than this, tip to back, so a zoomed-out world stays readable."""
@@ -78,6 +79,8 @@ class WorldCanvas(QWidget):
         self.drawing = True
         """False while the world is not being drawn (fast-forwarding with drawing switched off)."""
         self.selected: int | None = None
+        self.overlays: OverlayHub | None = None
+        """What the selected animal's senses cover, drawn under the animals (UX.15)."""
 
         self._frame: Frame | None = None
         self._animals: Layer | None = None
@@ -156,6 +159,15 @@ class WorldCanvas(QWidget):
         if animal_id != self.selected:
             self.selected = animal_id
             self.update()
+
+    def set_overlays(self, hub: OverlayHub | None) -> None:
+        """Draw this hub's overlays, and repaint when it changes."""
+        if self.overlays is not None:
+            self.overlays.changed.disconnect(self.update)
+        self.overlays = hub
+        if hub is not None:
+            hub.changed.connect(self.update)
+        self.update()
 
     def available_modes(self) -> list[palette.ColourMode]:
         columns = self._animals.columns if self._animals is not None else ()
@@ -324,6 +336,7 @@ class WorldCanvas(QWidget):
             self._plant_layer(painter, size)
         if self.show_corpses and self._corpses is not None:
             self._paint_corpses(painter, size)
+        self._paint_overlays(painter, size)
         if self.show_animals:
             self._paint_animals(painter, size)
         self._paint_wall(painter, size)
@@ -492,6 +505,23 @@ class WorldCanvas(QWidget):
         painter.setBrush(QColor(255, 255, 255, 245))
         painter.drawPath(dots)
         self._paint_selection(painter, sx, sy, length)
+
+    def _paint_overlays(self, painter: QPainter, size) -> None:
+        pose = self._shown
+        if self.overlays is None or not self.overlays.active or self.selected is None:
+            return
+        if pose is None:
+            return
+        found = np.flatnonzero(pose.ids == self.selected)
+        if len(found) == 0:
+            return
+        i = int(found[0])
+        self.overlays.paint(
+            painter,
+            self.camera,
+            size,
+            SelectedPose(float(pose.x[i]), float(pose.y[i]), float(pose.heading[i])),
+        )
 
     def _paint_selection(self, painter: QPainter, sx, sy, length) -> None:
         pose = self._shown

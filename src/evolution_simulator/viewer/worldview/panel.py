@@ -36,6 +36,7 @@ from evolution_simulator.viewer.panels.controls import KEY_MAP, NO_DRAW, world_d
 from evolution_simulator.viewer.registry import ViewerContext
 from evolution_simulator.viewer.worldview import palette
 from evolution_simulator.viewer.worldview.canvas import WorldCanvas
+from evolution_simulator.viewer.worldview.overlays import hub_for
 
 NORMAL_HZ = 30.0
 """Frames a second asked of the session while the world is drawn (the session's own default)."""
@@ -62,6 +63,7 @@ class WorldPanel(QWidget):
         # owns something the panel also owns (freed twice, the heap is corrupted).
         self.canvas = canvas if canvas is not None else WorldCanvas(parent=self)
         self.canvas.setParent(self)
+        self.canvas.set_overlays(hub_for(context.controller))  # the Brain tab's sense overlays
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
         bar = QHBoxLayout()
