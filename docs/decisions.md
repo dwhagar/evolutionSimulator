@@ -2,7 +2,7 @@
 
 A log of the owner's design decisions, with the date, the issue where each was answered, and the
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
-Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section below the first one replaces any "to confirm" in an older one.
+Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
 ## 2026-10-14: answers to the clarification issues
 
