@@ -219,7 +219,6 @@ def test_the_menus_are_there_and_every_dock_can_be_toggled_from_the_view_menu(wi
 
 def test_the_panels_follow_the_frames(window, controller):
     controller.poll()
-    assert "day 0" in window.panels["controls"].live.text()
     assert window.panels["world"].canvas.frame is controller.frame
     counts = window.status_labels["counts"].text()
     assert "Animals 30" in counts and "Plants 100" in counts

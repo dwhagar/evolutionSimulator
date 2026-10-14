@@ -41,6 +41,9 @@ TIMER_MS = 16
 ZOOM_PER_NOTCH = 1.0015
 """Zoom factor for each unit of wheel angle (a notch is 120: about 1.2 times)."""
 PLANT_BUCKETS = 8
+CACHE_MARGIN = 0.25
+"""The plant pixmap is painted this fraction of the window larger on every side, so a pan (or
+following a creature) slides the same painting until it runs out of margin."""
 
 
 def _qcolor(rgb, alpha: int = 255) -> QColor:
@@ -56,6 +59,8 @@ def _path() -> QPainterPath:
 class WorldCanvas(QWidget):
     animal_clicked = Signal(object)
     """The id of the animal clicked, or ``None`` for a click on nothing."""
+    follow_changed = Signal(bool)
+    """Following was switched off by dragging the view."""
 
     def __init__(self, clock: Callable[[], float] = time.monotonic, parent=None) -> None:
         super().__init__(parent)
@@ -68,6 +73,10 @@ class WorldCanvas(QWidget):
         self.show_corpses = True
         self.show_animals = True
         self.show_grid = False
+        self.follow = False
+        """Keep the selected animal in the middle of the view."""
+        self.drawing = True
+        """False while the world is not being drawn (fast-forwarding with drawing switched off)."""
         self.selected: int | None = None
 
         self._frame: Frame | None = None
@@ -84,6 +93,7 @@ class WorldCanvas(QWidget):
         self._auto_fit = True
         self._cache_key: tuple | None = None
         self._cache: QPixmap | None = None
+        self._cache_centre = (0.0, 0.0)
         self._press: QPointF | None = None
         self._last: QPointF | None = None
         self._dragged = False
@@ -172,6 +182,18 @@ class WorldCanvas(QWidget):
             mode = palette.MODES_BY_ID[palette.DEFAULT_MODE]
         return mode.colours(self._animals)
 
+    def set_drawing(self, drawing: bool) -> None:
+        """Stop painting the world (and the glide timer with it), or start again."""
+        if drawing != self.drawing:
+            self.drawing = drawing
+            self.update()
+
+    def set_follow(self, follow: bool) -> None:
+        self.follow = follow
+        if follow:
+            self._auto_fit = False
+        self.update()
+
     def set_option(self, name: str, value: bool) -> None:
         if name not in ("show_plants", "show_corpses", "show_animals", "show_grid"):
             raise ValueError(f"No view option {name!r}.")
@@ -216,6 +238,9 @@ class WorldCanvas(QWidget):
             self._dragged = True
         if self._dragged:
             self._auto_fit = False
+            if self.follow:
+                self.follow = False
+                self.follow_changed.emit(False)
             self.camera.pan_pixels(here.x() - self._last.x(), here.y() - self._last.y(), self.world)
             self.update()
         self._last = here
@@ -283,18 +308,35 @@ class WorldCanvas(QWidget):
                 self.rect(), Qt.AlignmentFlag.AlignCenter, "Waiting for the simulation"
             )
             return
+        if not self.drawing:
+            painter.setPen(_qcolor((200, 200, 200)))
+            painter.drawText(
+                self.rect(), Qt.AlignmentFlag.AlignCenter, "Not drawing while fast-forwarding"
+            )
+            return
         self._shown = self._shown_pose()
+        self._follow_selected()
         self._paint_ground(painter, frame, size)
         if self.show_grid:
             self._paint_grid(painter, size)
         if self.show_plants and self._plants is not None:
-            painter.drawPixmap(0, 0, self._plant_pixmap(size))
+            self._plant_layer(painter, size)
         if self.show_corpses and self._corpses is not None:
             self._paint_corpses(painter, size)
         if self.show_animals:
             self._paint_animals(painter, size)
         self._paint_wall(painter, size)
         self._paint_scale_bar(painter, size)
+
+    def _follow_selected(self) -> None:
+        """Centre the view on the selected animal, if asked to and it is there."""
+        pose = self._shown
+        if not self.follow or self.selected is None or pose is None:
+            return
+        found = np.flatnonzero(pose.ids == self.selected)
+        if len(found):
+            self.camera.cx, self.camera.cy = float(pose.x[found[0]]), float(pose.y[found[0]])
+            self.camera.clamp(self.world)
 
     def _world_rect(self, size) -> QRectF:
         w, h = self.world
@@ -318,13 +360,28 @@ class WorldCanvas(QWidget):
             _, sy = self.camera.to_screen(0.0, gy, size)
             painter.drawLine(QPointF(rect.left(), sy), QPointF(rect.right(), sy))
 
-    def _plant_pixmap(self, size) -> QPixmap:
-        """The plants, painted once and reused until they, the camera or the window change."""
+    def _plant_layer(self, painter: QPainter, size) -> None:
+        """Draw the plants from the pixmap, painting it again only when they, the zoom or the
+        window change or the view has slid past the margin."""
         ratio = self.devicePixelRatioF()
-        key = (self._plants_version, self.camera.key(), size, ratio)
+        margin = (size[0] * CACHE_MARGIN, size[1] * CACHE_MARGIN)
+        key = (self._plants_version, self.camera.scale, size, ratio)
+        camera = self.camera
         if key == self._cache_key and self._cache is not None:
-            return self._cache
-        pixmap = QPixmap(int(size[0] * ratio), int(size[1] * ratio))
+            shift_x = (self._cache_centre[0] - camera.cx) * camera.scale
+            shift_y = (camera.cy - self._cache_centre[1]) * camera.scale
+            if abs(shift_x) <= margin[0] and abs(shift_y) <= margin[1]:
+                painter.drawPixmap(QPointF(shift_x - margin[0], shift_y - margin[1]), self._cache)
+                return
+        self._cache = self._paint_plants(size, margin, ratio)
+        self._cache_key = key
+        self._cache_centre = (camera.cx, camera.cy)
+        painter.drawPixmap(QPointF(-margin[0], -margin[1]), self._cache)
+
+    def _paint_plants(self, size, margin, ratio) -> QPixmap:
+        """The plants on a transparent pixmap the size of the window plus the margin."""
+        wide = (size[0] + 2.0 * margin[0], size[1] + 2.0 * margin[1])
+        pixmap = QPixmap(int(wide[0] * ratio), int(wide[1] * ratio))
         pixmap.setDevicePixelRatio(ratio)
         pixmap.fill(Qt.GlobalColor.transparent)
         painter = QPainter(pixmap)
@@ -333,9 +390,10 @@ class WorldCanvas(QWidget):
         plants = self._plants
         assert plants is not None
         sx, sy = self.camera.to_screen(plants.col("x"), plants.col("y"), size)
+        sx, sy = sx + margin[0], sy + margin[1]
         radius = np.maximum(plants.col("radius") * self.camera.scale, 1.2)
         on_screen = (
-            (sx >= -radius) & (sx <= size[0] + radius) & (sy >= -radius) & (sy <= size[1] + radius)
+            (sx >= -radius) & (sx <= wide[0] + radius) & (sy >= -radius) & (sy <= wide[1] + radius)
         )
         bucket = np.minimum(
             (np.clip(plants.col("biomass_ratio"), 0.0, 1.0) * (PLANT_BUCKETS - 1)).astype(int),
@@ -358,7 +416,6 @@ class WorldCanvas(QWidget):
         ):
             painter.drawEllipse(QPointF(x, y), r * 0.35, r * 0.35)
         painter.end()
-        self._cache_key, self._cache = key, pixmap
         return pixmap
 
     def _paint_corpses(self, painter: QPainter, size) -> None:

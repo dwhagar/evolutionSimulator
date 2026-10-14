@@ -651,8 +651,9 @@ no Qt, so they are tested without a window.
   along the heading, never under 9 pixels, drawn in one path per colour; females have a notch at the
   back (so sex does not rest on colour), a sleeping animal is dimmed and ringed, a pregnant one has a
   white dot, the selected one a white ring.
-- **Plant layer.** Painted into a pixmap reused until the plants, the camera or the size change (a
-  frame without a plants block costs nothing for them). On this sandbox's software renderer: 1,000
+- **Plant layer.** Painted into a pixmap a quarter of the window larger on every side, reused until the
+  plants, the zoom or the size change, and slid (not repainted) as the view pans or follows a creature
+  until it runs out of margin (a frame without a plants block costs nothing for them). On this sandbox's software renderer: 1,000
   animals and 3,000 plants take about 20 ms a paint with the plants cached, 45 ms when they are repainted.
 - **Colour modes** (`palette.MODES`, the menu in the toolbar): diet (blue plant eaters to vermillion meat
   eaters, the default), sex, energy, age and family. The colours are Okabe-Ito blue and reddish purple and
@@ -668,9 +669,14 @@ no Qt, so they are tested without a window.
 - **Selecting.** A click selects the nearest animal within reach through `Select` (a click on bare ground
   sends `Deselect`); the ring follows the session's selection, so it follows the inspector too. A drag
   is a pan, not a click.
-- **Not built yet.** The overview map when zoomed in, the selected creature's sense overlays and trail
-  (UX.15 draws those; the canvas paints in screen pixels from `camera.to_screen`, so an overlay is
-  one more painting step after the animals), and the "hide the world while fast-forwarding" switch (UX.13).
+- **Follow (`F`).** A checkable action `follow_selected` (key `F`, in `KEY_MAP`, the View menu and
+  `context.actions`) keeps the selected creature in the middle; dragging the view switches it off.
+- **Not drawing.** The panel asks `controls.world_drawing_paused(context.actions, status)` on every
+  frame, status change and flip of the controls' switch, and tells the canvas, which then paints only
+  a note.
+- **Not built yet.** The overview map when zoomed in, and the selected creature's sense overlays and
+  trail (UX.15 draws those; the canvas paints in screen pixels from `camera.to_screen`, so an overlay is
+  one more painting step after the animals).
 
 ## Speed and what the window shows
 

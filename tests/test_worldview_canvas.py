@@ -18,6 +18,7 @@ from evolution_simulator.session import (
     ANIMAL_COLUMNS,
     FakeSimulation,
     Play,
+    Select,
     Session,
     SetSpeed,
 )
@@ -384,3 +385,111 @@ def test_the_view_keeps_up_with_a_playing_fake_world(panel, clock):
         panel.canvas.grab()
     assert panel.canvas.frame.tick > 0
     assert np.isfinite(panel.canvas._shown.x).all()
+
+
+# --- panning without repainting the plants, following, not drawing -----------------
+
+
+def test_a_pan_inside_the_margin_slides_the_plant_painting_and_a_long_one_repaints_it(canvas):
+    plants = [PlantView(5, 20.0, 80.0, 6.0, 1.0, False)]
+    frame = make_frame([animal()], plants=plants)
+    canvas.set_frame(frame, frame.plants)
+    canvas.grab()
+    first = canvas._cache
+    canvas.camera.pan_pixels(60.0, 0.0, WORLD)  # under a quarter of the window
+    canvas.grab()
+    assert canvas._cache is first
+    plant_at = canvas.camera.to_screen(20.0, 80.0, (400.0, 400.0))
+    assert near(pixel(canvas, *plant_at), palette.PLANT_FULL, 40)  # still where the plant is
+    canvas.camera.pan_pixels(200.0, 0.0, WORLD)
+    canvas.grab()
+    assert canvas._cache is not first
+
+
+def test_following_keeps_the_selected_animal_in_the_middle_until_the_view_is_dragged(canvas):
+    running = status(running=True, selected=1)
+    show(canvas, animal(1, x=30.0, y=40.0), tick=0, seconds=0.0, status=running)
+    canvas.set_follow(True)
+    canvas.grab()
+    assert (canvas.camera.cx, canvas.camera.cy) == pytest.approx((30.0, 40.0))
+    show(canvas, animal(1, x=35.0, y=45.0), tick=1, seconds=0.0, status=status(selected=1))
+    canvas.grab()
+    assert (canvas.camera.cx, canvas.camera.cy) == pytest.approx((35.0, 45.0))
+    changes = []
+    canvas.follow_changed.connect(changes.append)
+    button = QtCore.Qt.MouseButton.LeftButton
+    QtTest.QTest.mousePress(canvas, button, pos=QtCore.QPoint(100, 100))
+    QtTest.QTest.mouseMove(canvas, QtCore.QPoint(140, 100))
+    QtTest.QTest.mouseRelease(canvas, button, pos=QtCore.QPoint(140, 100))
+    assert not canvas.follow and changes == [False]
+
+
+def test_following_with_nothing_selected_leaves_the_view_alone(canvas):
+    show(canvas, animal(1, x=30.0, y=40.0))
+    canvas.set_follow(True)
+    before = canvas.camera.key()
+    canvas.grab()
+    assert canvas.camera.key() == before
+
+
+def test_not_drawing_paints_only_a_note(canvas):
+    show(canvas, animal())
+    canvas.set_drawing(False)
+    assert pixel(canvas, 30, 30) == palette.OUTSIDE
+    assert near(pixel(canvas, 100, 100), palette.OUTSIDE, 1)  # no ground, plants or animals
+    canvas.set_drawing(True)
+    assert near(pixel(canvas, 100, 100), palette.GROUND_DAY, 3)
+
+
+@pytest.fixture
+def window(controller_for_window, tmp_path, qapp):
+    from evolution_simulator.viewer.window import MainWindow
+
+    settings = QtCore.QSettings(str(tmp_path / "v.ini"), QtCore.QSettings.Format.IniFormat)
+    win = MainWindow(controller_for_window, settings=settings)
+    win.show()
+    yield win
+    win.close()
+
+
+@pytest.fixture
+def controller_for_window(qapp, clock):
+    backend = LocalBackend(Session(FakeSimulation(25, 80, seed=4), clock=clock))
+    yield ViewerController(backend)
+    backend.close()
+
+
+def test_the_controls_switch_stops_the_drawing_only_while_fast_forwarding(window, clock):
+    controller = window.controller
+    panel = window.panels["world"]
+    controller.poll()
+    assert panel.canvas.drawing
+    window.actions["no_draw_fast_forward"].setChecked(True)
+    assert panel.canvas.drawing  # switched on, but the world is not running fast
+    controller.send(SetSpeed("century"))
+    controller.send(Play())
+    assert not panel.canvas.drawing
+    window.actions["no_draw_fast_forward"].setChecked(False)
+    assert panel.canvas.drawing
+    window.actions["no_draw_fast_forward"].setChecked(True)
+    assert not panel.canvas.drawing
+    controller.send(SetSpeed("day"))
+    assert panel.canvas.drawing
+
+
+def press_f(window):
+    window.activateWindow()
+    QtTest.QTest.qWaitForWindowActive(window)
+    QtTest.QTest.keyClick(window, QtCore.Qt.Key.Key_F)
+
+
+def test_the_f_key_follows_the_selected_creature_and_is_in_the_view_menu(window):
+    controller = window.controller
+    controller.poll()
+    controller.send(Select(int(window.panels["world"].canvas._animals.ids[0])))
+    assert [k.toString() for k in window.actions["follow_selected"].shortcuts()] == ["F"]
+    press_f(window)
+    assert window.panels["world"].canvas.follow and window.actions["follow_selected"].isChecked()
+    assert window.actions["follow_selected"] in window.view_menu.actions()
+    press_f(window)
+    assert not window.panels["world"].canvas.follow
