@@ -31,7 +31,7 @@ def test_the_rules_are_checked():
     with pytest.raises(ValueError):
         AttackRules(damage=-1.0)
     with pytest.raises(ValueError):
-        AttackRules(meat_share=float("nan"))
+        AttackRules(damage=float("nan"))
 
 
 def test_a_bite_grows_with_the_hunters_skill_and_size():
@@ -61,31 +61,6 @@ def test_a_hunter_keeps_biting_until_the_prey_dies_and_then_eats_it():
     assert p.id not in {a.id for a in world.animals}
     assert h.traits.current_energy > before
     assert h.traits.damage_taken == 0.0
-
-
-def test_meat_is_worth_a_share_of_the_victims_energy_store():
-    world = make(attack=AttackRules(damage=10_000.0, meat_share=0.5))
-    h, p = hunter(world), victim(world, Vec.of(501, 500))
-    h.traits.current_energy = 0.1 * h.traits.max_energy
-    start = h.traits.current_energy
-    prey_max = p.traits.max_energy
-    world.run(1)
-    gained = h.traits.current_energy - start
-    assert not p.is_alive
-    # The hunter also paid the tick's metabolism, so the gain is just under the meat's value.
-    assert 0.2 * prey_max < gained <= 0.5 * prey_max
-
-
-def test_the_hunters_meat_efficiency_decides_how_much_it_gains():
-    def gain(carnivore_eff):
-        world = make(attack=AttackRules(damage=10_000.0))
-        h = hunter(world, carnivore_eff=carnivore_eff)
-        victim(world, Vec.of(501, 500))
-        h.traits.current_energy = 0.1 * h.traits.max_energy
-        world.run(1)
-        return h.traits.current_energy
-
-    assert gain("3333") > gain("2222")
 
 
 def test_no_bite_without_the_brain_asking():

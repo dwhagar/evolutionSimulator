@@ -43,10 +43,17 @@ from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RA
 from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.combat import AttackRules
+from evolution_simulator.world.corpses import Corpse, CorpseRules
 from evolution_simulator.world.daycycle import DayCycle
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
-from evolution_simulator.world.senses import Senses, WorldSenses, classify, wrap_angle
+from evolution_simulator.world.senses import (
+    MEAT_EATER,
+    Senses,
+    WorldSenses,
+    classify,
+    wrap_angle,
+)
 from evolution_simulator.world.sleep import SleepListener, SleepRules
 from evolution_simulator.world.spatial import SpatialIndex
 from evolution_simulator.world.timescale import TimeScale, format_duration
@@ -110,7 +117,9 @@ class WorldConfig:
     """Light and night over simulated time; ``None`` means permanent full daylight and no sleep."""
     sleep: SleepRules = field(default_factory=SleepRules)
     attack: AttackRules = field(default_factory=AttackRules)
-    """Bites and meat (``BRAIN.10``)."""
+    """Bites (``BRAIN.10``)."""
+    corpses: CorpseRules = field(default_factory=CorpseRules)
+    """What the dead leave: meat that rots and that meat eaters smell and eat (``WORLD.12``)."""
     calls_enabled: bool = True
     """Whether animals can call (their brains' call outputs, paid for with ``call_energy_cost``).
     A call is made only by an animal with a call radius (the encoder gene) that can afford it,
@@ -172,6 +181,8 @@ class World:
         self._plants: dict[int, Plant] = {}
         self._animal_index = SpatialIndex(INDEX_CELL_SIZE)
         self._plant_index = SpatialIndex(INDEX_CELL_SIZE)
+        self._corpses: dict[int, Corpse] = {}
+        self._corpse_index = SpatialIndex(INDEX_CELL_SIZE)
         self.max_canopy: float = 0.0
         """Largest canopy radius of any plant added so far; bounds the plant search radius."""
         self.max_body: float = 0.0
@@ -242,6 +253,17 @@ class World:
     def plants(self) -> list[Plant]:
         """Living plants in id order."""
         return [self._plants[i] for i in sorted(self._plants)]
+
+    @property
+    def corpses(self) -> list[Corpse]:
+        """Corpses in id order."""
+        return [self._corpses[i] for i in sorted(self._corpses)]
+
+    def corpses_in_reach(self, position: Vec, reach: float) -> list[tuple[Corpse, float, float]]:
+        """Corpses within ``reach`` of ``position``, unordered, each with its centre distance and
+        radius."""
+        corpses = self._corpses
+        return [(corpses[i], d, r) for i, d, r in self._corpse_index.within_reach(position, reach)]
 
     def animals_near(self, position: Vec, radius: float) -> list[Animal]:
         """Animals whose position is within ``radius`` of ``position`` (as of the last index
@@ -400,7 +422,11 @@ class World:
             animal.position = self.bounds.clamp(
                 animal.position + Vec.from_angle(animal.heading, step_length)
             )
-            if decision.eats_or_attacks and not self._graze(animal, dt):
+            if (
+                decision.eats_or_attacks
+                and not self._graze(animal, dt)
+                and not self._scavenge(animal, dt)
+            ):
                 self._attack(animal, dt)
 
         # 3. Mate, then deliver the litters that are due.
@@ -416,6 +442,8 @@ class World:
                 plant_births += self._seed(plant)
 
         # 5. Remove the dead and advance the clock.
+        self._rot_corpses(dt)
+        self._leave_corpses()
         animal_deaths = self._remove_dead(self._animals, self._animal_index)
         plant_deaths = self._remove_dead(self._plants, self._plant_index)
         self.tick += 1
@@ -602,8 +630,48 @@ class World:
             rules.bite(traits.effective_carn_eff, traits.mass, target.traits.mass) * dt
         )
         target.disturbed = True
-        if not target.is_alive:
-            traits.feed(rules.meat(target.traits.max_energy), is_meat=True)
+
+    def _scavenge(self, animal: Animal, dt: float) -> bool:
+        """Eat from the nearest corpse the animal touches, if it can digest meat. Returns whether
+        it touched one, so the brain's "eat or attack" is spent on the meal and not on a bite."""
+        if animal.traits.effective_carn_eff <= MEAT_EATER:
+            return False
+        found = [
+            (distance, corpse.id, corpse)
+            for corpse, distance, radius in self.corpses_in_reach(animal.position, animal.radius)
+        ]
+        if not found:
+            return False
+        corpse = min(found, key=lambda item: item[:2])[2]
+        taken = min(corpse.meat, self.config.corpses.bite * dt)
+        corpse.meat -= taken
+        animal.traits.feed(taken, is_meat=True, dt=dt)
+        return True
+
+    def _leave_corpses(self) -> None:
+        """Every animal that died this tick leaves a corpse where it fell."""
+        rules = self.config.corpses
+        for animal in self.animals:
+            if animal.is_alive:
+                continue
+            meat = rules.meat(animal.traits.max_energy)
+            if meat < rules.gone_below:
+                continue
+            corpse = Corpse(
+                self._new_id(), animal.position, animal.radius, animal.traits.mass, meat
+            )
+            self._corpses[corpse.id] = corpse
+            self._corpse_index.insert(corpse.id, corpse.position, corpse.radius)
+
+    def _rot_corpses(self, dt: float) -> None:
+        """Corpses lose meat to rot and are removed when almost nothing is left."""
+        rules = self.config.corpses
+        keep = 0.5 ** (dt / rules.rot_halflife)
+        for corpse in self.corpses:
+            corpse.meat *= keep
+            if corpse.meat < rules.gone_below:
+                del self._corpses[corpse.id]
+                self._corpse_index.remove(corpse.id)
 
     def _mate(self, animals: list[Animal]) -> int:
         """Pair the willing animals off and try each pair. Returns the matings that took."""
@@ -721,4 +789,6 @@ class World:
                 f"P{plant.id}|{plant.position.coords!r}|{plant.traits.current_biomass!r}|"
                 f"{plant.traits.dna}"
             )
+        for corpse in self.corpses:
+            parts.append(f"C{corpse.id}|{corpse.position.coords!r}|{corpse.meat!r}")
         return hashlib.sha256("\n".join(parts).encode()).hexdigest()

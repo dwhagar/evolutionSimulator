@@ -173,6 +173,21 @@ class WorldSenses:
                         mass=other.traits.mass,
                     )
                 )
+        if farthest > 0.0 and traits.effective_carn_eff > MEAT_EATER:
+            # Corpses are food for a meat eater: reported as prey that cannot hide or run.
+            for corpse, _, _ in world.corpses_in_reach(position, farthest + animal.radius):
+                neighbours.append(
+                    Neighbour(
+                        ident=corpse.id,
+                        role="prey",
+                        position=corpse.position,
+                        radius=corpse.radius,
+                        loudness=0.0,
+                        scent=min(1.0, corpse.meat / world.config.corpses.scent_meat),
+                        mass=corpse.mass,
+                        carrion=True,
+                    )
+                )
         return sense(
             position,
             animal.heading,
