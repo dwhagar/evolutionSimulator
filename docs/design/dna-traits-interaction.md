@@ -27,13 +27,28 @@ Information flows one way for an organism's life: **DNA, then trait table, then 
 and state.** Inheritance goes the other way round the loop: only DNA is copied to the next generation,
 never phenotype or state.
 
+## The brain: a third piece
+
+The animal's brain is not a trait. It is a block of 198 weights in the genome (`BlockSpec`, read with
+`dna.values("brain")`) that `AnimalTraits` turns into a `Brain` object at birth, the same moment it expresses the
+body. The trait table does not read it (`unread_genes()` skips gene blocks), and `Brain` knows nothing about
+DNA: it receives plain numbers. The animal's energy cost of thinking is added to `basal_metabolism`.
+See [brain.md](brain.md#as-built) for the layout, the cost and what is not built.
+
+```
+ DNA --body genes--> TraitSet --> phenotype --> formulas, state
+  |
+  +---brain block--> Brain  <-- inputs from the world (brain_adapter) and the animal's own state
+```
+
 ## The three layers
 
 ### 1. Layout: where the genes are (`dna.py`, `layouts.py`)
 
 A `GenomeLayout` is an ordered list of `GeneSpec(id, length)`. Order fixes positions, so reordering or
-resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (65 digits:
-16 four-digit genes and one single-digit gene) and `PLANT_LAYOUT` (24 digits) are plain data.
+resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (461 digits:
+65 body digits, that is 16 four-digit genes and one single-digit gene, then a 396-digit brain block) and
+`PLANT_LAYOUT` (24 digits) are plain data.
 
 A `DNA` pairs a layout with an immutable digit string. It offers four reads and nothing else:
 
@@ -140,8 +155,9 @@ formulas work.
 
 These wait on the owner's answers or on other tasks and are tracked in [TODO.md](../../TODO.md).
 
-- `mutation_step` is data; mutation is still per digit, so no operator reads the step. Per-position weights
-  and mutation as expected changes per genome (`DNA.8`) are blocked on the encoding decision
+- `mutation_step` is data; body mutation is still per digit, so no operator reads the step. Mutation as
+  expected changes is built per segment (`DNA.12`, used for the brain); per-position weights and expected
+  changes per whole genome (`DNA.8`) are blocked on the encoding decision
   ([#15](https://github.com/dwhagar/evolutionSimulator/issues/15)).
 - Crossover is still per digit by default; whole-gene crossover exists but is not the default (`DNA.7`,
   [#14](https://github.com/dwhagar/evolutionSimulator/issues/14)).

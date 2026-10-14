@@ -5,6 +5,10 @@ table of genes; a gene is a run of consecutive digits decoded as a big-endian ba
 only knows gene IDs and positions. It has no idea what any gene means: traits declare which gene
 IDs they read (see ``trait_defs``), and the layouts in ``layouts`` are plain data.
 
+A ``BlockSpec`` is a gene that holds an array of numbers (the brain's weights) instead of one value.
+Genes belong to named segments (body, brain) so mutation can be set per segment, and recombination can
+treat every gene, and every group of values inside a block, as one unit.
+
 Every random operation takes a ``random.Random`` so runs can be seeded and tests are repeatable.
 Operations return new DNA and never change the parent.
 """
@@ -12,7 +16,7 @@ Operations return new DNA and never change the parent.
 from __future__ import annotations
 
 import random
-from collections.abc import Callable, Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Self
 
@@ -22,6 +26,9 @@ BASE_COUNT: int = len(BASES)
 DEFAULT_MUTATION_RATE: float = 0.01
 """Chance that any one digit changes per reproduction (per digit, not per organism)."""
 
+DEFAULT_SEGMENT: str = "body"
+"""Segment a gene belongs to unless it names another."""
+
 
 @dataclass(frozen=True)
 class GeneSpec:
@@ -29,12 +36,102 @@ class GeneSpec:
 
     id: str
     length: int = 4
+    segment: str = DEFAULT_SEGMENT
+    """The part of the genome this gene belongs to; the genes of a segment must be consecutive."""
 
     def __post_init__(self) -> None:
         if not self.id:
             raise ValueError("A gene needs a non-empty ID.")
         if self.length < 1:
             raise ValueError(f"Gene {self.id!r} must be at least 1 digit long.")
+        if not self.segment:
+            raise ValueError(f"Gene {self.id!r} needs a non-empty segment name.")
+
+
+@dataclass(frozen=True)
+class BlockSpec:
+    """A gene that is an array of ``count`` numbers, each ``digits_per_value`` digits long.
+
+    Each value decodes onto ``low``..``high``: with ``levels`` possible values the level ``n`` maps to
+    ``low + (high - low) * n / (levels - 1)``, so the end points are exactly ``low`` and ``high``.
+    Two digits over -2 to 2 gives 16 levels and no exact zero (the closest are about +-0.13).
+
+    ``groups`` splits the values into consecutive blocks of the given sizes that recombination keeps
+    together (the brain uses one block per hidden neuron). The default is one block.
+    """
+
+    id: str
+    count: int
+    digits_per_value: int = 2
+    low: float = 0.0
+    high: float = 1.0
+    groups: tuple[int, ...] = ()
+    segment: str = DEFAULT_SEGMENT
+
+    def __post_init__(self) -> None:
+        if not self.id:
+            raise ValueError("A gene block needs a non-empty ID.")
+        if self.count < 1:
+            raise ValueError(f"Gene block {self.id!r} needs at least one value.")
+        if self.digits_per_value < 1:
+            raise ValueError(f"Gene block {self.id!r} needs at least one digit per value.")
+        if not self.low < self.high:
+            raise ValueError(
+                f"Gene block {self.id!r} needs low < high, got {self.low}, {self.high}."
+            )
+        if not self.segment:
+            raise ValueError(f"Gene block {self.id!r} needs a non-empty segment name.")
+        groups = tuple(self.groups) or (self.count,)
+        if any(size < 1 for size in groups) or sum(groups) != self.count:
+            raise ValueError(
+                f"Gene block {self.id!r}: group sizes {groups} must be positive and add up to "
+                f"{self.count}."
+            )
+        object.__setattr__(self, "groups", groups)
+
+    @property
+    def length(self) -> int:
+        """Digits the block occupies."""
+        return self.count * self.digits_per_value
+
+    @property
+    def levels(self) -> int:
+        """Distinct values one entry can take."""
+        return BASE_COUNT**self.digits_per_value
+
+    def decode(self, digits: Sequence[int]) -> tuple[float, ...]:
+        """Decode this block's digits (``length`` of them) into its values."""
+        if len(digits) != self.length:
+            raise ValueError(
+                f"Gene block {self.id!r} takes {self.length} digits, got {len(digits)}."
+            )
+        step = (self.high - self.low) / (self.levels - 1)
+        size = self.digits_per_value
+        values: list[float] = []
+        for i in range(0, self.length, size):
+            level = 0
+            for digit in digits[i : i + size]:
+                level = level * BASE_COUNT + digit
+            values.append(self.low + step * level)
+        return tuple(values)
+
+    def encode(self, values: Sequence[float]) -> tuple[int, ...]:
+        """The digits that decode closest to ``values`` (each clamped to the range)."""
+        if len(values) != self.count:
+            raise ValueError(
+                f"Gene block {self.id!r} takes {self.count} values, got {len(values)}."
+            )
+        top = self.levels - 1
+        step = (self.high - self.low) / top
+        digits: list[int] = []
+        for value in values:
+            level = min(top, max(0, round((value - self.low) / step)))
+            chunk: list[int] = []
+            for _ in range(self.digits_per_value):
+                level, digit = divmod(level, BASE_COUNT)
+                chunk.append(digit)
+            digits.extend(reversed(chunk))
+        return tuple(digits)
 
 
 @dataclass(frozen=True)
@@ -44,10 +141,27 @@ class Gene:
     id: str
     start: int
     end: int
+    segment: str = DEFAULT_SEGMENT
+    block: BlockSpec | None = None
+    """Set when the gene is an array of values rather than one value."""
 
     @property
     def length(self) -> int:
         return self.end - self.start
+
+    @property
+    def units(self) -> tuple[tuple[int, int], ...]:
+        """Digit ranges (start, end) that recombination keeps whole: the gene itself, or for a
+        block each of its groups."""
+        if self.block is None:
+            return ((self.start, self.end),)
+        bounds: list[tuple[int, int]] = []
+        position = self.start
+        for size in self.block.groups:
+            width = size * self.block.digits_per_value
+            bounds.append((position, position + width))
+            position += width
+        return tuple(bounds)
 
 
 @dataclass(frozen=True)
@@ -60,11 +174,26 @@ class GenomeLayout:
 
     name: str
     version: int
-    specs: tuple[GeneSpec, ...]
+    specs: tuple[GeneSpec | BlockSpec, ...]
     genes: tuple[Gene, ...] = field(init=False, repr=False, compare=False)
     length: int = field(init=False, compare=False)
+    segments: Mapping[str, tuple[int, int]] = field(init=False, repr=False, compare=False)
+    """Digit range (start, end) of each segment, in layout order."""
+    units: tuple[tuple[int, int], ...] = field(init=False, repr=False, compare=False)
+    """Digit ranges recombination keeps whole: every gene, or every group inside a block."""
+    default_mutations: Mapping[str, float] = field(init=False, repr=False, compare=False)
+    """Expected changed digits per child for each segment, used when a caller sets no rate."""
 
-    def __init__(self, name: str, version: int, specs: Iterable[GeneSpec]) -> None:
+    def __init__(
+        self,
+        name: str,
+        version: int,
+        specs: Iterable[GeneSpec | BlockSpec],
+        segment_mutations: Mapping[str, float] | None = None,
+    ) -> None:
+        """``segment_mutations`` sets the expected changed digits per child for the segments it
+        names (a segment left out gets ``DEFAULT_MUTATION_RATE`` per digit). It is a default for
+        callers, not part of the layout's identity."""
         specs = tuple(specs)
         if not specs:
             raise ValueError("A layout needs at least one gene.")
@@ -72,15 +201,44 @@ class GenomeLayout:
         if len(set(ids)) != len(ids):
             raise ValueError(f"Duplicate gene IDs in layout {name!r}.")
         placed: list[Gene] = []
+        segments: dict[str, tuple[int, int]] = {}
         position = 0
+        previous = ""
         for spec in specs:
-            placed.append(Gene(spec.id, position, position + spec.length))
-            position += spec.length
+            block = spec if isinstance(spec, BlockSpec) else None
+            gene = Gene(spec.id, position, position + spec.length, spec.segment, block)
+            placed.append(gene)
+            position = gene.end
+            if spec.segment != previous and spec.segment in segments:
+                raise ValueError(
+                    f"Layout {name!r}: genes of segment {spec.segment!r} must be consecutive."
+                )
+            first = segments.get(spec.segment, (gene.start, gene.start))[0]
+            segments[spec.segment] = (first, gene.end)
+            previous = spec.segment
+        wanted = dict(segment_mutations or {})
+        unknown = set(wanted) - set(segments)
+        if unknown:
+            raise ValueError(
+                f"Layout {name!r} sets mutation for unknown segments {sorted(unknown)}."
+            )
+        if any(value < 0 for value in wanted.values()):
+            raise ValueError(f"Layout {name!r} sets a negative mutation count.")
         object.__setattr__(self, "name", name)
         object.__setattr__(self, "version", version)
         object.__setattr__(self, "specs", specs)
         object.__setattr__(self, "genes", tuple(placed))
         object.__setattr__(self, "length", position)
+        object.__setattr__(self, "segments", segments)
+        object.__setattr__(self, "units", tuple(unit for gene in placed for unit in gene.units))
+        object.__setattr__(
+            self,
+            "default_mutations",
+            {
+                segment: wanted.get(segment, DEFAULT_MUTATION_RATE * (end - start))
+                for segment, (start, end) in segments.items()
+            },
+        )
 
     def gene(self, gene_id: str) -> Gene:
         for gene in self.genes:
@@ -229,6 +387,13 @@ class DNA:
             raise ValueError(f"Gene {gene_id!r} is {gene.length} digits long, not a single digit.")
         return self._sequence[gene.start]
 
+    def values(self, gene_id: str) -> tuple[float, ...]:
+        """The numbers in a gene block (the brain's weights), decoded onto the block's range."""
+        gene = self._layout.gene(gene_id)
+        if gene.block is None:
+            raise ValueError(f"Gene {gene_id!r} is not a gene block; use value() or digit().")
+        return gene.block.decode(self._sequence[gene.start : gene.end])
+
     def get_slice(self, start: int, end: int) -> tuple[int, ...]:
         """Digits in [start, end)."""
         if start < 0 or end > self.length or start >= end:
@@ -259,17 +424,50 @@ class DNA:
     # Genetic operations
     # -------------------------------------------------------------------------
 
-    def mutated(self, rng: random.Random, mutation_rate: float = DEFAULT_MUTATION_RATE) -> Self:
-        """Point mutation: each digit changes with probability ``mutation_rate``.
+    def mutated(
+        self,
+        rng: random.Random,
+        mutation_rate: float | None = None,
+        mutations_per_segment: Mapping[str, float] | None = None,
+    ) -> Self:
+        """Point mutation. A changed digit moves to one of the other three digits with equal chance.
 
-        A changed digit moves to one of the other three digits with equal chance. Returns a new
-        genome; this one is unchanged.
+        With ``mutation_rate`` every digit changes with that probability, whatever segment it is in
+        (the original behaviour). With ``mutations_per_segment`` each named segment gets that
+        expected number of changed digits per child, spread evenly over its digits, and segments
+        left out keep the layout's ``default_mutations``. This stops a long segment (the brain's
+        hundreds of digits) from swamping the mutation count. With neither, the layout's
+        ``default_mutations`` apply to every segment (0.01 per digit unless the layout says
+        otherwise). The two settings cannot be combined. Returns a new genome; this one is
+        unchanged.
         """
-        if not 0.0 <= mutation_rate <= 1.0:
-            raise ValueError(f"Mutation rate must be between 0 and 1, got {mutation_rate}.")
+        if mutation_rate is not None and mutations_per_segment is not None:
+            raise ValueError("Set a mutation rate per digit or mutations per segment, not both.")
+        probabilities = [0.0] * self.length
+        if mutation_rate is not None:
+            if not 0.0 <= mutation_rate <= 1.0:
+                raise ValueError(f"Mutation rate must be between 0 and 1, got {mutation_rate}.")
+            probabilities = [mutation_rate] * self.length
+        else:
+            expected = dict(self._layout.default_mutations)
+            for name, value in (mutations_per_segment or {}).items():
+                if name not in self._layout.segments:
+                    raise ValueError(
+                        f"Unknown segment {name!r}; layout {self._layout.name!r} has "
+                        f"{sorted(self._layout.segments)}."
+                    )
+                if value < 0:
+                    raise ValueError(
+                        f"Mutations for segment {name!r} must not be negative, got {value}."
+                    )
+                expected[name] = value
+            for name, (start, end) in self._layout.segments.items():
+                probabilities[start:end] = [min(1.0, expected[name] / (end - start))] * (
+                    end - start
+                )
         digits = list(self._sequence)
         for i, digit in enumerate(digits):
-            if rng.random() < mutation_rate:
+            if rng.random() < probabilities[i]:
                 digits[i] = (digit + rng.choice((1, 2, 3))) % BASE_COUNT
         return type(self)(self._layout, digits)
 
@@ -302,29 +500,59 @@ class DNA:
             digits.extend(source[gene.start : gene.end])
         return type(self)(self._layout, digits)
 
+    def crossover_by_unit(self, partner: DNA, rng: random.Random) -> Self:
+        """Block-aware crossover: each whole unit comes from either parent with equal chance.
+
+        A unit is a gene, or one group of values inside a gene block. For the brain that is one hidden
+        neuron with its incoming and outgoing weights, so a child gets whole neurons from either
+        parent and never a blend inside one (the "competing conventions" problem in the brain
+        design note). On a layout with no blocks this is the same as ``crossover_by_gene``.
+        """
+        self._require_compatible(partner)
+        digits: list[int] = []
+        for start, end in self._layout.units:
+            source = self._sequence if rng.random() < 0.5 else partner._sequence
+            digits.extend(source[start:end])
+        return type(self)(self._layout, digits)
+
     def clone_with_mutation(
-        self, rng: random.Random, mutation_rate: float = DEFAULT_MUTATION_RATE
+        self,
+        rng: random.Random,
+        mutation_rate: float | None = None,
+        mutations_per_segment: Mapping[str, float] | None = None,
     ) -> Self:
         """Asexual reproduction: a copy of this genome subject only to point mutation."""
-        return self.mutated(rng, mutation_rate)
+        return self.mutated(rng, mutation_rate, mutations_per_segment)
 
     def reproduce(
         self,
         partner: DNA | None,
         rng: random.Random,
-        mutation_rate: float = DEFAULT_MUTATION_RATE,
+        mutation_rate: float | None = None,
         crossover: Crossover | None = None,
+        mutations_per_segment: Mapping[str, float] | None = None,
     ) -> Self:
         """Single reproduction entry point.
 
         With no partner this clones and mutates. With a partner it crosses over (uniform per-digit
-        unless ``crossover`` supplies another strategy) and then mutates.
+        unless ``crossover`` supplies another strategy, for example ``DNA.crossover_by_unit``) and
+        then mutates. Mutation settings are as for ``mutated``.
         """
         if partner is None:
-            return self.clone_with_mutation(rng, mutation_rate)
+            return self.clone_with_mutation(rng, mutation_rate, mutations_per_segment)
         strategy = crossover if crossover is not None else type(self).crossover
         child = strategy(self, partner, rng)
-        return child.mutated(rng, mutation_rate)
+        return child.mutated(rng, mutation_rate, mutations_per_segment)
+
+    def replaced(self, gene_id: str, digits: Iterable[int] | str) -> Self:
+        """A copy with the digits of one gene replaced (for example with ``BlockSpec.encode``)."""
+        gene = self._layout.gene(gene_id)
+        new = tuple(int(d) for d in digits)
+        if len(new) != gene.length:
+            raise ValueError(f"Gene {gene_id!r} takes {gene.length} digits, got {len(new)}.")
+        return type(self)(
+            self._layout, self._sequence[: gene.start] + new + self._sequence[gene.end :]
+        )
 
     # -------------------------------------------------------------------------
     # Internals

@@ -140,9 +140,11 @@ class TraitSet:
         return tuple(trait for trait in self.defs if gene_id in trait.genes)
 
     def unread_genes(self) -> tuple[str, ...]:
-        """Layout genes that no trait reads."""
+        """Layout genes that no trait reads. Gene blocks are left out: the brain reads those."""
         read = {gene_id for trait in self.defs for gene_id in trait.genes}
-        return tuple(gene_id for gene_id in self.layout.gene_ids if gene_id not in read)
+        return tuple(
+            gene.id for gene in self.layout.genes if gene.id not in read and gene.block is None
+        )
 
 
 def _level(gene_id: str, description: str = "") -> TraitDef:

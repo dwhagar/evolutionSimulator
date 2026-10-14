@@ -13,9 +13,20 @@ from __future__ import annotations
 import random
 from collections.abc import Mapping
 
+from evolution_simulator.brain import DEFAULT_SHAPE, Brain
+from evolution_simulator.brain_adapter import BrainDecision, Percepts, build_inputs, decode_outputs
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.trait_defs import ANIMAL_TRAITS, PLANT_TRAITS
+
+# Energy cost of thinking per tick, added to basal metabolism. Placeholders for the first brain
+# (BRAIN.5, issue #25): they put a typical random brain at a few percent of the basal budget and are
+# meant to move into the shared config object (TRAIT.3).
+BRAIN_NEURON_COST: float = 0.0005
+"""Per hidden or output neuron."""
+BRAIN_CONNECTION_COST: float = 0.0001
+"""Per active connection, a weight whose absolute value is above ``BRAIN_ACTIVE_THRESHOLD``."""
+BRAIN_ACTIVE_THRESHOLD: float = 0.25
 
 # =============================================================================
 # Base Traits: Shared Organism Physiology, Vitality & Mortality
@@ -124,11 +135,18 @@ class AnimalTraits(BaseTraits):
             + (t["taste"] ** 2)
         )
         self.gut_maintenance: float = 0.06 * ((t["herbivore_eff"] ** 2) + (t["carnivore_eff"] ** 2))
+        # The brain is read from the genome once at birth, like the body.
+        self.brain: Brain = Brain.from_values(DEFAULT_SHAPE, dna.values("brain"))
+        self.brain_upkeep: float = (
+            BRAIN_NEURON_COST * self.brain.neuron_count
+            + BRAIN_CONNECTION_COST * self.brain.active_connections(BRAIN_ACTIVE_THRESHOLD)
+        )
         self.basal_metabolism = (
             (0.18 * (self.mass**0.75))
             + (0.12 * t["somatic_maint"])
             + sensory_overhead
             + self.gut_maintenance
+            + self.brain_upkeep
         )
 
         # Acoustic signaling
@@ -234,6 +252,22 @@ class AnimalTraits(BaseTraits):
 
         if self.is_alive:
             self._update_needs_and_drives()
+
+    def think(self, percepts: Percepts) -> BrainDecision:
+        """Ask the brain what to do given what the world reports.
+
+        Adds this animal's own state (energy, health, vitality, readiness to mate) to the world's
+        ``percepts`` and returns the brain's decision. It only reads state: acting on the decision
+        (and replacing the fixed-rule flags with it) belongs to the world loop.
+        """
+        inputs = build_inputs(
+            energy_ratio=self.current_energy / self.max_energy,
+            health_ratio=self.current_health / self.max_damage_capacity,
+            vitality=self.vitality,
+            ready_to_mate=self.mating_cooldown == 0,
+            percepts=percepts,
+        )
+        return decode_outputs(self.brain.decide(inputs))
 
     def _update_needs_and_drives(self) -> None:
         energy_ratio = self.current_energy / self.max_energy

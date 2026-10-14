@@ -4,7 +4,7 @@ Gene IDs are the stable names that traits refer to. Positions follow from the or
 so reordering, resizing, adding or removing a row changes every later position: bump the layout's
 ``version`` when you do, since saved genomes carry it.
 
-Positions match the original prototype digit for digit.
+Body positions match the original prototype digit for digit; the brain block follows them.
 """
 
 from __future__ import annotations
@@ -12,11 +12,23 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
+from evolution_simulator.brain import DEFAULT_SHAPE
+from evolution_simulator.dna import DNA, BlockSpec, GeneSpec, GenomeLayout
+
+BRAIN_GENE = BlockSpec(
+    "brain",
+    count=DEFAULT_SHAPE.weight_count,
+    digits_per_value=2,
+    low=-2.0,
+    high=2.0,
+    groups=DEFAULT_SHAPE.group_sizes,
+    segment="brain",
+)
+"""The brain's 198 weights and biases, two digits each (396 digits), one group per hidden neuron."""
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=1,
+    version=2,
     specs=(
         # body
         GeneSpec("speed"),
@@ -39,7 +51,12 @@ ANIMAL_LAYOUT = GenomeLayout(
         GeneSpec("encoder_fidelity"),
         # one digit read as a category
         GeneSpec("sex_strategy", length=1),
+        # the brain: read by the Brain object, not by the trait table
+        BRAIN_GENE,
     ),
+    # The body keeps the prototype's 0.01 per digit (0.65 changes per child). The brain is about
+    # one change per child however long it is, about 0.0025 per brain digit.
+    segment_mutations={"body": 0.01 * 65, "brain": 1.0},
 )
 
 PLANT_LAYOUT = GenomeLayout(
