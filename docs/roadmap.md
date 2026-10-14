@@ -30,7 +30,7 @@ and variable-length genomes `DNA.4` ([#5](https://github.com/dwhagar/evolutionSi
 
 ## Next: brain
 
-A simple neural network that can drive behaviour (`BRAIN.1` research is done, [#29](https://github.com/dwhagar/evolutionSimulator/pull/29); owner decisions `BRAIN.3` to `BRAIN.8` are issues [#23](https://github.com/dwhagar/evolutionSimulator/issues/23) to [#28](https://github.com/dwhagar/evolutionSimulator/issues/28); then the `BRAIN.2` build with `DNA.11` and `DNA.12` as groundwork). It has not
+A simple neural network that can drive behaviour (`BRAIN.1` research is done, [#29](https://github.com/dwhagar/evolutionSimulator/pull/29); owner decisions `BRAIN.3` to `BRAIN.8` are issues [#23](https://github.com/dwhagar/evolutionSimulator/issues/23) to [#28](https://github.com/dwhagar/evolutionSimulator/issues/28); the `BRAIN.2` build with `DNA.11` and `DNA.12` is done, [#34](https://github.com/dwhagar/evolutionSimulator/pull/34); acting on the brain's decisions, `BRAIN.10`, waits on the world, `WORLD.1`). It has not
 been given a version yet; the owner sets milestones.
 
 ## Later
