@@ -325,6 +325,33 @@ default and the real world with `--world` (in this process, until UX.7 and UX.17
   builds the panel with `MainWindow(controller, specs=[...])` over a `LocalBackend(Session(FakeSimulation(...),
   clock=...))` and calls `controller.poll()` to deliver frames without a timer.
 
+### As built: the process host and `SimClient` (`UX.7`)
+
+- **`Host`** (`session/host.py`) is a `Session` plus the rules of talking to a viewer, with no transport:
+  `receive(message)` and `step()` (returns the messages to send). It runs inside the simulation process
+  (`run_host`, the target of the spawned process) and inside the viewer's own process
+  (`InProcessClient`), so both behave the same and the logic is tested without a process.
+- **Back-pressure.** Frames, details and event batches count as in flight until the viewer sends
+  `Ack(received)`; with `HostRules.max_in_flight` (4) unacknowledged, no frame is built
+  (`Session.update(frames=False)`) and event batches wait. A dead animal's last detail is always sent.
+  `HostInfo` (about once a second) reports frames sent and dropped. Events are capped at
+  `max_events_per_second` and buffered at most `max_buffered_events`; what is left out is counted in
+  `EventBatch.dropped`.
+- **Messages** (`session/messages.py`, plain frozen values): viewer to simulation `Command`s plus
+  `Ack`, `SetFrameRate(hz)` (0 stops frames), `RequestPlants`, `Shutdown`; simulation to viewer
+  `Ready(frame)`, `Frame`, `AnimalDetail`, `EventBatch`, `CommandRejected`, `HostInfo`, `Crashed(report)`,
+  `Stopped`. A refused command comes back as `CommandRejected`, never as an exception in the viewer.
+- **`SimClient`** has `send(request)`, `poll() -> Inbox`, `close()` and `crashed`. `poll` is the
+  acknowledgement and never blocks; frames that piled up are folded into the newest, keeping the plants
+  of the last frame that had them. `ProcessClient(recipe)` spawns the process (`multiprocessing`
+  `spawn`; a frozen `.exe` must call `multiprocessing.freeze_support()` first in `__main__`),
+  `InProcessClient(simulation_or_recipe)` runs the host from `poll`, and `fake_client(animals=...)` is an
+  `InProcessClient` on a `FakeSimulation`.
+- **Recipes.** A spawned process is handed a picklable callable that builds the simulation there:
+  `WorldSpec(config, animals, plants)` and `FakeSpec(...)`.
+- **Failures.** An exception while building or running becomes `Crashed(traceback)` and exit code 1; a
+  process killed from outside is noticed when the pipe ends ("ended without a word", with the exit code).
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these
