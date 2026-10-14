@@ -250,7 +250,42 @@ dependencies (a test checks that no core module names Qt or numpy).
 - **Saved.** `HistorySamples.to_dict()` / `from_dict()` and `recorder.to_dict()` / `Recorder.restore(world, data)`
   (the latter also keeps the counters since the last sample, so a restored world and recorder carry on
   exactly as an uninterrupted pair; tested with `save_world`). `save_history(path)` writes JSON, gzip by
-  suffix. The run store (`UX.10`) puts this file beside the world checkpoints.
+  suffix. The run store (`UX.10`, below) puts this file beside the world checkpoints.
+
+### As built: the run store (`UX.10`)
+
+`evolution_simulator.runs` (no dependencies, no window code):
+
+```
+<runs folder>/<run id>/            id = <UTC date-time>-<name slug>
+    run.json                       manifest: format, name, seed, program version, created/updated,
+                                   config (readable), summary for the run list
+    history.json.gz                the recorded history as of the latest checkpoint (for charts)
+    checkpoints/checkpoint-<tick>/ meta.json, world.json.gz, history.json.gz (the recorder's state)
+```
+
+- **The folder.** `RunStore(root, rules, clock)`; `default_runs_root()` gives the per-user default
+  (`%LOCALAPPDATA%\evolutionSimulator\runs` on Windows, `~/Library/Application Support/...` on macOS,
+  `$XDG_DATA_HOME` or `~/.local/share/...` elsewhere). Everything takes the folder as an argument, so
+  tests and the headless command use any other, and the clock is injectable.
+- **Index and listing.** `run.json` is the history index: `store.list_runs()` reads only manifests and
+  returns `RunSummary` rows (newest first) with seed, versions, simulated age, last animals and plants,
+  checkpoint count and a 60-point population series for a small chart. Unreadable folders are skipped.
+- **Checkpoints.** `run.checkpoint(world, recorder)` writes a hidden folder and renames it into place, so a
+  crash leaves the previous checkpoint whole. Each checkpoint holds the world and the recorder's state
+  taken together, so resuming from any of them is consistent. `store.create(world, recorder=...)` writes
+  the first one at once.
+- **Autosave.** `run.autosave(world, recorder)` listens to every step and checkpoints once
+  `checkpoint_every_days` simulated days (default 10) **and** `min_wall_seconds` real seconds (default
+  60) have passed. `saver.finish()` writes a last one. Retention (`RunStoreRules`): the newest
+  `keep_newest` (3) plus the first checkpoint of every simulated year (`year_days`, 365.25), so the start
+  always stays. These numbers are rules fields.
+- **Resume.** `run.resume()` returns `Resumed(world, recorder, checkpoint)` from the newest checkpoint that
+  reads (older ones if it is damaged), or a named one. A test runs a world straight through and, in
+  parallel, the same world checkpointed, resumed and continued, and requires the same `state_digest` and
+  the same history.
+- **Space (`UX.25`).** Runs are never deleted unless asked (`store.delete(id)`); `store.space_warning()` returns
+  a sentence once the folder holds more than `warn_bytes` (5 GB).
 
 ### As built: the shell (`UX.11`)
 

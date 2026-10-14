@@ -461,6 +461,24 @@ def _senses_from_data(data: Mapping[str, Any], given: Senses | None) -> Senses:
     return WorldSenses(_decode(SensingRules | None, data["rules"]), _decode(bool, data["noisy"]))
 
 
+def config_to_dict(config: WorldConfig) -> dict[str, Any]:
+    """A ``WorldConfig`` as a JSON-ready dict (the form a save and a run's manifest hold)."""
+    return _encode(config)
+
+
+def config_from_dict(data: Mapping[str, Any]) -> WorldConfig:
+    """The ``WorldConfig`` ``config_to_dict`` wrote; a setting the save lacks takes its default and
+    one the rules no longer have is refused (``SaveFormatError``)."""
+    try:
+        return _decode(WorldConfig, dict(data))
+    except SaveFormatError:
+        raise
+    except (KeyError, TypeError, ValueError) as error:
+        raise SaveFormatError(
+            f"The saved settings are damaged or incomplete: {error!r}."
+        ) from error
+
+
 def world_to_dict(world: World) -> dict[str, Any]:
     """The whole world as a JSON-ready document (see the module docstring)."""
     animals = world.animals
@@ -657,6 +675,8 @@ __all__ = [
     "FORMAT",
     "FORMAT_VERSION",
     "SaveFormatError",
+    "config_from_dict",
+    "config_to_dict",
     "load_world",
     "save_world",
     "world_from_dict",
