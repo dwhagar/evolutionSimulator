@@ -1,9 +1,9 @@
 name: CI
 
-# Runs only on the daily schedule: 07:00 UTC. No push, pull request, or manual triggers.
+# Runs only on the weekly schedule: Mondays at 07:00 UTC. No push, pull request, or manual triggers.
 on:
   schedule:
-    - cron: "0 7 * * *"
+    - cron: "0 7 * * 1"
 
 # Never queue more than one run; a newer scheduled run replaces a stuck one.
 concurrency:
@@ -16,6 +16,8 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # full history: the build number counts commits
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
