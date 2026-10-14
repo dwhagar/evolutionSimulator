@@ -34,6 +34,10 @@ BRAIN_NEURON_COST: float = 0.0005
 BRAIN_CONNECTION_COST: float = 0.0001
 """Per active connection, a weight whose absolute value is above ``BRAIN_ACTIVE_THRESHOLD``."""
 BRAIN_ACTIVE_THRESHOLD: float = 0.25
+DECISION_INTERVAL: int = 1
+"""Ticks between brain decisions (``BRAIN.11``); between them the animal keeps its last decision.
+Thinking costs are charged per tick divided by this, so a slower thinker is cheaper. Meant to move
+into the shared config object (TRAIT.3), and later perhaps to become a gene (reaction time)."""
 
 # =============================================================================
 # Base Traits: Shared Organism Physiology, Vitality & Mortality
@@ -107,9 +111,11 @@ class AnimalTraits(BaseTraits):
     metabolic trade-offs, senescence degradation, and environmental drive flags.
     """
 
-    def __init__(self, dna: DNA) -> None:
+    def __init__(self, dna: DNA, decision_interval: int = DECISION_INTERVAL) -> None:
         if dna.layout != ANIMAL_LAYOUT:
             raise TypeError("AnimalTraits requires DNA with the animal layout.")
+        if decision_interval < 1:
+            raise ValueError(f"Decision interval must be at least 1 tick, got {decision_interval}.")
         t = ANIMAL_TRAITS.express(dna)
         super().__init__(dna, t)
 
@@ -145,10 +151,13 @@ class AnimalTraits(BaseTraits):
         # The brain is read from the genome once at birth, like the body.
         self.brain: Brain = Brain.from_values(DEFAULT_SHAPE, dna.values("brain"))
         self.wanderer: Wanderer = Wanderer()
+        self.decision_interval: int = decision_interval
+        self._decision: BrainDecision | None = None
+        self._ticks_since_decision: int = 0
         self.brain_upkeep: float = (
             BRAIN_NEURON_COST * self.brain.neuron_count
             + BRAIN_CONNECTION_COST * self.brain.active_connections(BRAIN_ACTIVE_THRESHOLD)
-        )
+        ) / self.decision_interval
         self.basal_metabolism = (
             (0.18 * (self.mass**0.75))
             + (0.12 * t["somatic_maint"])
@@ -274,9 +283,15 @@ class AnimalTraits(BaseTraits):
         looks and fear scales how close a threat looks (``BRAIN.14``). Pass ``rng`` to turn on the wander fallback
         (``BRAIN.16``): when the animal senses nothing or its brain outputs are all quiet, the
         decision comes back with a random turn and ``wandering`` set. Without ``rng`` the brain's
-        decision is returned as is. It only reads state, apart from the wander turn it remembers:
-        acting on the decision (and replacing the fixed-rule flags with it) belongs to the world loop.
+        decision is returned as is. Call it once per tick: the brain only runs every
+        ``decision_interval`` calls (``BRAIN.11``) and the calls in between return the last decision
+        (including its wander turn) without looking at the new percepts. It only reads state, apart
+        from that and the wander turn it remembers: acting on the decision (and replacing the
+        fixed-rule flags with it) belongs to the world loop.
         """
+        if self._decision is not None and self._ticks_since_decision < self.decision_interval:
+            self._ticks_since_decision += 1
+            return self._decision
         inputs = build_inputs(
             energy_ratio=self.current_energy / self.max_energy,
             health_ratio=self.current_health / self.max_damage_capacity,
@@ -290,6 +305,8 @@ class AnimalTraits(BaseTraits):
         decision = decode_outputs(self.brain.decide(inputs))
         if rng is not None:
             decision = self.wanderer.apply(decision, percepts, rng)
+        self._decision = decision
+        self._ticks_since_decision = 1
         return decision
 
     def _update_needs_and_drives(self) -> None:
