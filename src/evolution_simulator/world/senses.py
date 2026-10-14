@@ -37,14 +37,20 @@ class Senses(Protocol):
 
 
 def wrap_angle(angle: float) -> float:
-    """``angle`` brought into -pi to pi."""
-    return math.atan2(math.sin(angle), math.cos(angle))
+    """``angle`` brought into -pi to pi (a half turn can come back as either)."""
+    return (angle + math.pi) % math.tau - math.pi
 
 
 def relative_direction(heading: float, origin: Vec, target: Vec) -> float:
     """-1 to 1: where ``target`` lies from ``origin`` when facing ``heading`` (+1 hard right)."""
-    bearing = (target - origin).angle()
-    return -wrap_angle(bearing - heading) / math.pi
+    return -wrap_angle(_bearing(origin, target) - heading) / math.pi
+
+
+def _bearing(origin: Vec, target: Vec) -> float:
+    """The direction from ``origin`` to ``target`` in radians (2D)."""
+    ox, oy = origin.coords
+    tx, ty = target.coords
+    return math.atan2(ty - oy, tx - ox)
 
 
 def _closeness(distance: float, sense_range: float) -> float:
@@ -66,34 +72,37 @@ class BasicSenses:
         half_view = math.radians(traits.fov_degrees) / 2.0
         touch_range = traits.tactile_range if traits.phenotype["touch"] > 0.1 else 0.0
 
-        def in_view(position: Vec) -> bool:
-            if animal.position == position:
+        position = animal.position
+        heading = animal.heading
+
+        def in_view(other: Vec, distance: float) -> bool:
+            if distance == 0.0:
                 return True
-            bearing = (position - animal.position).angle()
-            return abs(wrap_angle(bearing - animal.heading)) <= half_view
+            return abs(wrap_angle(_bearing(position, other) - heading)) <= half_view
 
         best_plant: tuple[float, int, Plant] | None = None
         touching = False
-        for plant in world.plants_near(animal.position, max(sight, touch_range + world.max_canopy)):
-            distance = animal.position.distance_to(plant.position)
+        plant_reach = max(sight, touch_range + world.max_canopy)
+        for plant, distance in world.plants_within(position, plant_reach):
             if touch_range and distance <= touch_range + plant.radius:
                 touching = True
             if (
                 distance <= sight
-                and in_view(plant.position)
                 and (best_plant is None or (distance, plant.id) < best_plant[:2])
+                and in_view(plant.position, distance)
             ):
                 best_plant = (distance, plant.id, plant)
 
         nearest: dict[str, tuple[float, int, Animal]] = {}
         crowd = 0
-        for other in world.animals_near(animal.position, max(sight, touch_range + world.max_body)):
+        for other, distance in world.animals_within(
+            position, max(sight, touch_range + world.max_body)
+        ):
             if other is animal:
                 continue
-            distance = animal.position.distance_to(other.position)
             if touch_range and distance <= touch_range + other.radius:
                 touching = True
-            if distance > sight or not in_view(other.position):
+            if distance > sight or not in_view(other.position, distance):
                 continue
             crowd += 1
             if other.traits.mass < PREY_MASS_RATIO * traits.mass:

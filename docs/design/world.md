@@ -105,9 +105,16 @@ the nearest possible mate. Calls are not heard yet, so those inputs stay 0.
 - **Sex and species.** Any two willing animals of the same layout may mate; mate choice by genetic
   closeness is `REPRO.4`.
 - **Population caps** (1000 animals, 5000 plants) exist so a run cannot grow without limit.
-- **Speed.** Neighbour searches use a grid. Measured on one run: 300 animals and 3000 plants step in
-  about 60 ms per tick in plain Python (about 5 ms per tick at 60 animals), so the faster time
-  presets cannot be met at that size. Profiling the senses and the brain is a later job.
+- **Speed** (`WORLD.9`). Measured with `cProfile` on 300 animals and 3000 plants: the first version took
+  about 62 ms per tick, mostly in the senses (generic vector arithmetic and the neighbour query
+  building temporary vectors) and the brain pass. Now about 23 ms per tick (about 3 ms at 60
+  animals and 300 plants), the same behaviour up to floating-point rounding (`math.sumprod` sums more exactly). What changed: `Vec` skips its checks for results it builds
+  itself and uses `math.dist`; the grid stores plain coordinates and returns distances with the ids
+  (`animals_within`, `plants_within`) so the senses do not measure twice; the bearing test uses
+  coordinates directly; the brain's dot products use `math.sumprod`. What is left is spread thinly:
+  the senses 30%, the brain and input building 35% (`sense_channels.build_inputs` and its
+  clamps are the biggest single piece), plant growth 8%. The fast presets still cannot be met at
+  this size.
 
 ## Follow-ups
 
@@ -117,6 +124,5 @@ Sent to the TODO thread rather than built here:
   physics) or per tick (as now). Needs the `TRAIT.3` config.
 - Plant balance: with the prototype's constants a few hundred random plants reach the 5000 cap within
   about 200 ticks, so the plant growth and seeding numbers need tuning against a food limit.
-- Speed: about 60 ms per tick at 300 animals and 3000 plants; profile the senses and brain pass.
 - Random first-generation animals starve before they breed, as the brain note predicted
   (`BRAIN.9`, `BRAIN.16`).

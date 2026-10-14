@@ -144,6 +144,16 @@ class World:
         refresh: the start of the tick for the senses), in id order."""
         return [self._animals[i] for i in self._animal_index.query(position, radius)]
 
+    def animals_within(self, position: Vec, radius: float) -> list[tuple[Animal, float]]:
+        """Like ``animals_near`` with each animal's distance from ``position``."""
+        found = self._animal_index.query_with_distance(position, radius)
+        return [(self._animals[i], distance) for i, distance in found]
+
+    def plants_within(self, position: Vec, radius: float) -> list[tuple[Plant, float]]:
+        """Like ``plants_near`` with each plant's distance from ``position``."""
+        found = self._plant_index.query_with_distance(position, radius)
+        return [(self._plants[i], distance) for i, distance in found]
+
     def plants_near(self, position: Vec, radius: float) -> list[Plant]:
         return [self._plants[i] for i in self._plant_index.query(position, radius)]
 
