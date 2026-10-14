@@ -20,8 +20,8 @@ from PySide6.QtCore import QSettings
 from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QWidget
 
-from evolution_simulator.session import Command
 from evolution_simulator.viewer import panels
+from evolution_simulator.viewer.backend import Request
 from evolution_simulator.viewer.controller import ViewerController
 
 log = logging.getLogger(__name__)
@@ -57,7 +57,7 @@ class ViewerContext:
         """Where the window keeps its settings, for a screen that has some of its own to remember
         (keep to your own key prefix); ``None`` when the window has none."""
 
-    def send(self, command: Command) -> bool:
+    def send(self, command: Request) -> bool:
         return self.controller.send(command)
 
     def show_message(self, text: str, timeout_ms: int = 5000) -> None:

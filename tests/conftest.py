@@ -1,5 +1,6 @@
 """Shared test fixtures."""
 
+import gc
 import os
 from dataclasses import replace
 
@@ -26,4 +27,10 @@ def qapp():
     Tests that use it skip when the ``gui`` extra (or a library it needs) is not installed."""
     widgets = pytest.importorskip("PySide6.QtWidgets", exc_type=ImportError)
     os.environ["QT_QPA_PLATFORM"] = "offscreen"
-    return widgets.QApplication.instance() or widgets.QApplication(["tests"])
+    app = widgets.QApplication.instance() or widgets.QApplication(["tests"])
+    yield app
+    # Windows still alive here sit in reference cycles; free them while the application exists,
+    # or the interpreter crashes when it frees them at exit.
+    app.closeAllWindows()
+    app.processEvents()
+    gc.collect()

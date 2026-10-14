@@ -50,10 +50,11 @@ KEY_MAP: dict[str, tuple[str, ...]] = {
     "speed_faster": ("+", "="),
     "speed_slower": ("-",),
     "speed_max": ("M",),
+    "follow_selected": ("F",),
 }
 """Every key of the viewer, by action name. ``play_pause`` and ``step`` are made by the window and
-get their keys there (the same ones); the rest are made here. ``F`` (follow the selected creature)
-is the world view's (UX.12) and ``Esc`` (deselect) the inspector's (UX.14)."""
+get their keys there (the same ones); the rest are made here, except ``follow_selected`` (``F``),
+which the world view makes (UX.12). ``Esc`` (deselect) is the inspector's (UX.14)."""
 
 SPEED_ORDER: tuple[str, ...] = (*SPEED_PRESETS, MAX_SPEED)
 """The presets from slowest to fastest, then as fast as possible."""

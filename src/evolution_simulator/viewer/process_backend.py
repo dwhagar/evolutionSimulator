@@ -25,7 +25,6 @@ from pathlib import Path
 from evolution_simulator.history import HistorySamples
 from evolution_simulator.runs import RunError
 from evolution_simulator.session import (
-    Command,
     CommandError,
     HostRules,
     ProcessClient,
@@ -41,7 +40,7 @@ from evolution_simulator.session import (
 from evolution_simulator.session.client import Inbox
 from evolution_simulator.session.snapshot import Frame
 from evolution_simulator.session.specs import Prepared
-from evolution_simulator.viewer.backend import Batch
+from evolution_simulator.viewer.backend import Batch, Request
 from evolution_simulator.world.views import AnimalDetail
 
 STARTING_STATUS = Status(
@@ -96,7 +95,7 @@ class ProcessBackend:
         """The world can be saved into a run (a real one, not the made-up world)."""
         return bool(getattr(self.recipe, "saveable", False))
 
-    def send(self, command: Command) -> None:
+    def send(self, command: Request) -> None:
         if self.crashed is not None:
             raise CommandError("The simulation has stopped.")
         self.client.send(command)

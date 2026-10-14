@@ -13,6 +13,7 @@ The pieces:
   into Qt signals (frames, details, status, events) for the panels.
 - ``panels``: one module per screen, each exposing a ``PANEL`` (``PanelSpec``) that the window finds
   by itself, so the screens of UX.12 to UX.17 do not edit shared code.
+- ``worldview``: the world view's camera, colours, gliding and canvas (UX.12).
 - ``window``: ``MainWindow``, with the dock slots, menus, status bar and saved layout.
 - ``app``: the command line and ``main``.
 """
