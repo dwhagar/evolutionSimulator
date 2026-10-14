@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `WORLD.17`: Two optional speed settings for the brain, `interval_scale` and `idle_interval_factor`, off by default so runs are unchanged; `interval_scale` 2 cuts a tick by about 23% at 300 animals and 3000 plants. [#193](https://github.com/dwhagar/evolutionsimulator/pull/193)
 - `UX.36`: A plain launch now runs the real world in its own process: it opens the newest saved run, or starts the default founders with the New run panel open. `--fake` shows the made-up world, `--new` starts a new one and `--in-process` keeps it in the window's process. [#191](https://github.com/dwhagar/evolutionsimulator/pull/191)
 - `UX.12`: The world view: pan and zoom, plants cached, animals as triangles along their heading (females notched, sleepers ringed, pregnant dotted), corpses, day and night ground, colour by diet, sex, energy, age or family, click to select, F to follow and a screenshot button; it asks the simulation for fewer frames when drawing is paused. [#187](https://github.com/dwhagar/evolutionsimulator/pull/187)
 - `UX.33`: The window runs the simulation in its own process (`--world`): it says "Starting the simulation" until the host is ready, shows a warning with the traceback and a Restart button if the simulation crashes, and saves and resumes runs through the process. A viewer that stops reading can no longer freeze the simulation (the host sends from a thread). [#188](https://github.com/dwhagar/evolutionsimulator/pull/188)
