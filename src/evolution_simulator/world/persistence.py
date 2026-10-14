@@ -49,6 +49,7 @@ from typing import Any
 from evolution_simulator import __version__
 from evolution_simulator.brain_adapter import BrainDecision, WanderPolicy
 from evolution_simulator.config import SensingRules
+from evolution_simulator.deaths import DeathCause
 from evolution_simulator.diploid import DiploidDNA
 from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import LAYOUTS, dna_from_dict
@@ -242,6 +243,22 @@ def _vec(data: Sequence[float]) -> Vec:
     return Vec(tuple(data))
 
 
+def _death_cause_to_data(traits: AnimalTraits | PlantTraits) -> str | None:
+    return None if traits.death_cause is None else traits.death_cause.value
+
+
+def _death_cause_from_data(data: Mapping[str, Any]) -> DeathCause | None:
+    """The cause of death saved with an organism that is dead but not yet removed (saves from
+    before ``UX.6`` have none)."""
+    value = data.get("death_cause")
+    if value is None:
+        return None
+    try:
+        return DeathCause(value)
+    except ValueError:
+        raise SaveFormatError(f"Unknown cause of death {value!r}.") from None
+
+
 def _animal_traits_to_data(traits: AnimalTraits, animal_ids: Mapping[int, int]) -> dict[str, Any]:
     """``animal_ids`` maps ``id(traits)`` of each animal in the world to its id, so a pregnancy can
     name the father."""
@@ -252,6 +269,7 @@ def _animal_traits_to_data(traits: AnimalTraits, animal_ids: Mapping[int, int]) 
         "decision": _encode(traits._decision),
         "wander_turn": traits.wanderer._turn,
         "wander_policy": _encode(traits.wanderer.policy),
+        "death_cause": _death_cause_to_data(traits),
         "brain_learned": traits.brain is not traits.innate_brain,
         "pregnancy": None,
         "learner": None,
@@ -322,6 +340,7 @@ def _restore_animal_traits(
     traits.learning_rules = world.config.learning
     for name in _ANIMAL_FIELDS:
         setattr(traits, name, _field_like(getattr(traits, name), data["state"][name], name))
+    traits.death_cause = _death_cause_from_data(data)
     traits._decision = _decode(BrainDecision | None, data["decision"])
     traits.wanderer.policy = _decode(WanderPolicy, data["wander_policy"])
     traits.wanderer._turn = _decode(float | None, data["wander_turn"])
@@ -366,6 +385,7 @@ def _animal_to_data(animal: Animal, animal_ids: Mapping[int, int]) -> dict[str, 
         "disturbed": animal.disturbed,
         "awake_time": animal.awake_time,
         "partner": animal.partner,
+        "killed_by": animal.killed_by,
         "last_decision": _encode(animal.last_decision),
         "traits": _animal_traits_to_data(animal.traits, animal_ids),
     }
@@ -382,6 +402,7 @@ def _plant_to_data(plant: Plant) -> dict[str, Any]:
         "traits": {
             "dna": _genome_to_data(traits.dna),
             "state": {name: getattr(traits, name) for name in _PLANT_FIELDS},
+            "death_cause": _death_cause_to_data(traits),
         },
     }
 
@@ -524,6 +545,7 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
         for name in _PLANT_FIELDS:
             saved = plant_data["traits"]["state"][name]
             setattr(traits, name, _field_like(getattr(traits, name), saved, name))
+        traits.death_cause = _death_cause_from_data(plant_data["traits"])
         plant = Plant(
             _decode(int, plant_data["id"]),
             traits,
@@ -559,6 +581,7 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
         animal.disturbed = _decode(bool, animal_data["disturbed"])
         animal.awake_time = _decode(float, animal_data["awake_time"])
         animal.partner = _decode(int | None, animal_data["partner"])
+        animal.killed_by = _decode(int | None, animal_data.get("killed_by"))
         animal.last_decision = _decode(BrainDecision | None, animal_data["last_decision"])
         world._animals[animal.id] = animal
         world._animal_index.insert(animal.id, animal.position, animal.radius)

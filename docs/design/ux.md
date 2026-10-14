@@ -178,6 +178,33 @@ missing or implicit today, and are the content of the first builds (`UX.6` to `U
 | History | Nothing records the population over time | A statistics recorder driven by the day counter |
 | Names for display | Gene ids and brain input and output names exist (`INPUT_NAMES`, `OUTPUT_NAMES`, the layout's gene ids and clusters) | A small catalogue of display names and units, so the inspector does not print `base_fear_weight` |
 
+### As built: the session (`UX.6`)
+
+`evolution_simulator.session` is the contract the screens and the process host build on. It has no
+dependencies (a test checks that no core module names Qt or numpy).
+
+- **Core gaps filled.** `World.animal_views()`, `plant_views()`, `corpse_views()` and
+  `animal_detail(id)` return immutable values from `world/views.py` (read these, never an organism's
+  traits). `World.add_event_listener()` delivers `Born`, `Died` (with a `DeathCause` and the
+  killer's id for a bite) and `Mated` events from `world/events.py`; they are built only while
+  someone listens, and listening changes nothing about a run. `World.trace_brain(id)` keeps the
+  inputs, hidden values and outputs of that animal's last brain run (`AnimalDetail.brain`, filled
+  in once its brain has run since).
+- **Session.** `Session(simulation)` takes `handle(command)` (`Play`, `Pause`, `Step(n)`,
+  `SetSpeed(preset | seconds per second | "max")`, `Select(id)`, `Deselect`; a bad one raises
+  `CommandError`) and `update()`, which runs the ticks real time owes (inside a work budget; the rest
+  are dropped and counted) and returns an `Update` with a `Frame` when one is due and the selected
+  animal's `AnimalDetail`. `subscribe(callback)` hears the world's events and `StatusChanged`.
+  It takes a clock, so tests are exact, and starts paused.
+- **Frame.** Three packed `Block`s (animals, corpses, plants): a `uint32` id array, a `float32`
+  matrix and a flag byte per row, with the column names in the block, so a viewer reads them with
+  `numpy.frombuffer`. About 11 KB for 300 animals; 74 KB when the 3,000 plants ride along, which
+  they do only every half second and when the session settles (paused, steps done), so a paused
+  world is exact. `FRAME_FORMAT` versions the layout. The family colour key of the first sketch is
+  not in the frame yet (it needs a cheap genome distance; it is UX.12's to ask for).
+- **FakeSimulation** has the same face as `World` for the session and the screens, with a scripted
+  population curve and events; the session tests run every case against both.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

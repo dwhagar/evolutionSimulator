@@ -12,7 +12,8 @@ class Animal:
     keeps it between -pi and pi. ``last_decision`` is what its brain chose this tick (``None``
     while it sleeps). ``asleep`` is set by the world's day-night cycle; ``disturbed`` (woken by an alarm call) keeps
     it awake until the next day. ``partner`` is the id of the father while this animal is carrying his
-    litter."""
+    litter. ``killed_by`` is the id of the animal that last bit it (read only if it died of
+    predation)."""
 
     __slots__ = (
         "asleep",
@@ -20,6 +21,7 @@ class Animal:
         "disturbed",
         "heading",
         "id",
+        "killed_by",
         "last_decision",
         "parents",
         "partner",
@@ -48,6 +50,7 @@ class Animal:
         """Reference ticks (hours) since it last slept (``SENSE.14``'s tiredness)."""
         self.disturbed: bool = False
         self.partner: int | None = None
+        self.killed_by: int | None = None
 
     @property
     def is_alive(self) -> bool:
