@@ -81,7 +81,7 @@ ANIMAL_LAYOUT = GenomeLayout(
 
 PLANT_LAYOUT = GenomeLayout(
     name="plant",
-    version=2,
+    version=3,
     specs=(
         GeneSpec("max_biomass"),
         GeneSpec("growth_rate"),
@@ -92,10 +92,12 @@ PLANT_LAYOUT = GenomeLayout(
         # reproduction (REPRO.3): energy per seed and the gap between seed bursts
         GeneSpec("seed_provision", length=3),
         GeneSpec("seeding_interval", length=3),
+        # how long the plant lives; trades against its growth and seed budget (TRAIT.8)
+        GeneSpec("longevity", length=3),
     ),
     # Plants mutate more slowly than animals: half the animals' 0.01 per digit. They evolve slowly,
     # so the changes they do get keep big jumps likelier than the animals' position bias of 0.5.
-    segment_mutations={"body": PLANT_MUTATION_PER_DIGIT * 30},
+    segment_mutations={"body": PLANT_MUTATION_PER_DIGIT * 33},
     position_bias=0.75,
 )
 
@@ -152,6 +154,23 @@ def founder_animal_dna(rng: random.Random) -> DNA:
     for gene_id, level in FOUNDER_LEVELS.items():
         dna = dna.with_value(gene_id, level)
     return seed_sense_genes(dna, rng)
+
+
+FOUNDER_PLANT_LONGEVITY: float = 0.371
+"""Where a first generation's plant lifespan starts: the gene value that gives one simulated month
+(7 to 365 days on a log scale, so 30.4 days). Evolution moves it from there (``TRAIT.8``)."""
+FOUNDER_LONGEVITY_SPREAD: float = 0.1
+"""How far a first generation's plant lifespans stray from the start, either way, so the founders do
+not all die on the same day (a gene value of 0.1 is about 1.7 times longer or shorter)."""
+
+
+def founder_plant_dna(rng: random.Random) -> DNA:
+    """A random plant genome with the lifespan gene at the starting level, give or take the spread."""
+    dna = DNA.random(PLANT_LAYOUT, rng)
+    level = FOUNDER_PLANT_LONGEVITY + rng.uniform(
+        -FOUNDER_LONGEVITY_SPREAD, FOUNDER_LONGEVITY_SPREAD
+    )
+    return dna.with_value("longevity", level)
 
 
 def dna_from_dict(data: Mapping[str, Any]) -> DNA:

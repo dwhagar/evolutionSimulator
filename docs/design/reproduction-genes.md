@@ -16,8 +16,7 @@ The numbers are starting values to tune, not measurements of the running simulat
 > kept on the bearers, not in a separate world list; the protective effect of `parenting` and the "own young"
 > channel wait for `SENSE.14`; a father who has died pays nothing and gives nothing at the birth; the
 > costs of drive (wear, upkeep) follow the gene, while the threshold, boldness and brain input follow the
-> sex-modified drive. The plant genes are `REPRO.3` and `TRAIT.8` (the seed genes are built, the longevity gene
-> is not). See [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity) and the
+> sex-modified drive. The plant genes are `REPRO.3` and `TRAIT.8` (the seed genes and the longevity gene are built; plant layout version 3). See [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity) and the
 > [long-run check](#long-run-check) below.
 
 ## Summary
@@ -226,6 +225,12 @@ month roughly 730.
 ## Plants (REPRO.3 and TRAIT.8)
 
 Plants are asexual, mutate slower (a `DNA.8` setting) and have no brain, so no drive and no sex.
+
+> **Built.** `REPRO.3` built `seed_provision` and `seeding_interval`; `TRAIT.8` built `longevity` (plant layout
+> version 3, 33 digits) as designed below, with `lifespan_days`, `seeding_days` in days, the first seeding at 6%
+> of the lifespan, the growth and seed-budget trade-offs, ageing and the cooldown in reference ticks times the
+> world's `dt`, and a first generation that starts at 0.371 give or take 0.1 (`founder_plant_dna`). Growth and
+> upkeep are still per tick (`WORLD.7`).
 
 | Gene (3 digits) | Trait | Range | Meaning |
 | --- | --- | --- | --- |

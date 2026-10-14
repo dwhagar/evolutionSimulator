@@ -31,7 +31,7 @@ def rng(seed: int = 1) -> random.Random:
 
 def test_layout_lengths_match_prototype():
     assert ANIMAL_LAYOUT.length == 1004  # 96 body digits plus a 908-digit brain
-    assert PLANT_LAYOUT.length == 30
+    assert PLANT_LAYOUT.length == 33
     assert TINY.length == 5
 
 
@@ -139,7 +139,7 @@ def test_equality_and_hash():
     assert tiny("01230") == tiny("01230")
     assert hash(tiny("01230")) == hash(tiny("01230"))
     assert tiny("01230") != tiny("01231")
-    assert tiny("00000") != plant("0" * 30)
+    assert tiny("00000") != plant("0" * 33)
     assert len({tiny("01230"), tiny("01230"), tiny("11230")}) == 2
 
 
@@ -213,7 +213,7 @@ def test_distance():
     assert a.distance(tiny("11111")) == 1.0
     assert a.distance(tiny("01230")) == tiny("01230").distance(a)
     with pytest.raises(TypeError):
-        a.distance(plant("0" * 30))
+        a.distance(plant("0" * 33))
 
 
 def test_dict_round_trip_through_json():
@@ -241,7 +241,7 @@ def test_from_dict_checks_layout_and_version():
 
 
 def test_from_string():
-    assert DNA.from_string(PLANT_LAYOUT, "0" * 30) == plant("0" * 30)
+    assert DNA.from_string(PLANT_LAYOUT, "0" * 33) == plant("0" * 33)
 
 
 # --- mutation ---------------------------------------------------------------
@@ -352,7 +352,7 @@ def test_gene_crossover_mixes_both_parents():
 
 
 def test_crossover_rejects_mismatched_species():
-    a, p = animal("0" * N), plant("0" * 30)
+    a, p = animal("0" * N), plant("0" * 33)
     for op in (a.crossover, a.crossover_one_point, a.crossover_by_gene):
         with pytest.raises(TypeError):
             op(p, rng())
@@ -420,3 +420,18 @@ def test_founders_start_with_large_litters_and_no_parenting():
         assert abs(dna.value(gene_id) - level) <= 0.5 / 63
     assert dna.value("parenting") == 0.0
     assert dna != founder_animal_dna(rng(6))  # the rest of the genome is random
+
+
+def test_founder_plants_start_near_a_month_with_some_spread():
+    from evolution_simulator.layouts import (
+        FOUNDER_LONGEVITY_SPREAD,
+        FOUNDER_PLANT_LONGEVITY,
+        founder_plant_dna,
+    )
+
+    levels = [founder_plant_dna(rng(seed)).value("longevity") for seed in range(30)]
+    assert all(
+        abs(level - FOUNDER_PLANT_LONGEVITY) <= FOUNDER_LONGEVITY_SPREAD + 0.01 for level in levels
+    )
+    assert max(levels) - min(levels) > 0.1
+    assert founder_plant_dna(rng(1)) != founder_plant_dna(rng(2))

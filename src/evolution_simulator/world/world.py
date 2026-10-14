@@ -35,7 +35,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from evolution_simulator.dna import DNA
-from evolution_simulator.layouts import PLANT_LAYOUT, founder_animal_dna
+from evolution_simulator.layouts import founder_animal_dna, founder_plant_dna
 from evolution_simulator.learning import LearningRules, NightlyLearning
 from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
@@ -341,7 +341,7 @@ class World:
         is False, which leaves the brains random: those mostly die before they breed.
         """
         for _ in range(plants):
-            self.add_plant(DNA.random(PLANT_LAYOUT, self.rng))
+            self.add_plant(founder_plant_dna(self.rng))
         for _ in range(animals):
             founder = founder_animal_dna(self.rng)
             self.add_animal(seeded_dna(self.rng, base=founder) if seeded else founder)
@@ -412,7 +412,7 @@ class World:
         # 4. Plants grow and seed.
         plant_births = 0
         for plant in plants:
-            plant.traits.update_growth_and_metabolism()
+            plant.traits.update_growth_and_metabolism(dt)
             if plant.is_alive and plant.traits.flag_ready_to_seed:
                 plant_births += self._seed(plant)
 

@@ -122,7 +122,7 @@ def test_animal_layout_has_the_brain_after_the_body():
 
 
 def test_plant_layout_has_one_body_segment_and_no_blocks():
-    assert dict(PLANT_LAYOUT.segments) == {"body": (0, 30)}
+    assert dict(PLANT_LAYOUT.segments) == {"body": (0, 33)}
     assert all(gene.block is None for gene in PLANT_LAYOUT.genes)
 
 
@@ -148,7 +148,7 @@ def test_segments_must_be_consecutive_and_named():
 def test_layout_mutation_defaults():
     assert ANIMAL_LAYOUT.default_mutations["body"] == pytest.approx(0.96)
     assert ANIMAL_LAYOUT.default_mutations["brain"] == 1.0
-    assert PLANT_LAYOUT.default_mutations["body"] == pytest.approx(0.15)  # 0.005 per digit
+    assert PLANT_LAYOUT.default_mutations["body"] == pytest.approx(0.165)  # 0.005 per digit
     assert BLOCKY.default_mutations["brain"] == 2.0
     assert BLOCKY.default_mutations["body"] == pytest.approx(0.02)  # unlisted: 0.01 per digit
     with pytest.raises(ValueError):

@@ -48,7 +48,7 @@ See [brain.md](brain.md#as-built) for the layout, the cost and what is not built
 A `GenomeLayout` is an ordered list of `GeneSpec(id, length, cluster)`. Order fixes positions, so reordering or
 resizing changes every later position; bump the layout's `version` when you do. `ANIMAL_LAYOUT` (1,004 digits,
 version 7: 96 body digits, that is 15 four-digit genes, five three-digit genes, one single-digit gene and the
-four brain operating genes, then a 908-digit brain block) and `PLANT_LAYOUT` (30 digits) are plain data.
+four brain operating genes, then a 908-digit brain block) and `PLANT_LAYOUT` (33 digits) are plain data.
 
 Genes that feed one trait or one system are tagged with a **cluster** name and sit next to each other
 (`DNA.15`): `frame` (size, speed, agility), `repair`, `sight` (range, field, acuity), `hearing`, `chemical`, `diet`, `temperament`
@@ -195,5 +195,5 @@ These wait on the owner's answers or on other tasks and are tracked in [TODO.md]
   the average) when `value`, `digit` or `values` is read, so the trait table does not change. Which species
   use it is decided when the world creates the first generation.
 - The reproduction genes are built (`REPRO.5`, `TRAIT.6`, `REPRO.8`): `parenting`, `repro_cooldown`, `repro_drive`, `fertility` and `recovery`, with the sex digit giving the sex and a drive modifier, so every body gene is read by a trait and `TraitSet.unread_genes()` is empty (see
-  [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity)). The plant seed genes are built too (`REPRO.3`, plant layout v2). Still to build: the protective effect of
+  [dna-and-traits.md](dna-and-traits.md#reproduction-and-longevity)). The plant seed genes (`REPRO.3`) and the plant lifespan gene (`TRAIT.8`) are built too (plant layout v3). Still to build: the protective effect of
   parenting (needs the `SENSE.1` "young nearby" sense).
