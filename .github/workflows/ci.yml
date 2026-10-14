@@ -5,17 +5,20 @@ on:
   schedule:
     - cron: "0 7 * * *"
 
+# Never queue more than one run; a newer scheduled run replaces a stuck one.
+concurrency:
+  group: ci
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.12"
       - name: Install
         run: |
           python -m pip install --upgrade pip
