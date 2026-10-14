@@ -117,13 +117,25 @@ def test_relatives_get_alike_colours_and_strangers_do_not():
                 animal(1, family_a=0.10, family_b=0.50),
                 animal(2, family_a=0.11, family_b=0.51),
                 animal(3, family_a=0.90, family_b=0.05),
+                animal(4, family_a=0.89, family_b=0.06),
             ]
         )
     )
     colours = palette.MODES_BY_ID["family"].colours(layer).astype(int)
-    assert abs(colours[0] - colours[1]).sum() < 40
+    assert abs(colours[0] - colours[1]).sum() < 60
+    assert abs(colours[2] - colours[3]).sum() < 60
     assert abs(colours[0] - colours[2]).sum() > 150
     assert luminance(colours[0]) != luminance(colours[2])
+
+
+def test_one_far_off_animal_does_not_squash_the_family_colours_of_the_rest():
+    close = [animal(i, family_a=0.30 + 0.002 * i) for i in range(1, 40)]
+    with_stranger = Layer(pack_animals([*close, animal(99, family_a=50.0)]))
+    without = Layer(pack_animals(close))
+    family = palette.MODES_BY_ID["family"]
+    spread = family.colours(with_stranger)[:39].astype(int)
+    assert abs(spread[0] - spread[38]).sum() > 100  # the 39 still use the whole scale
+    assert (family.colours(with_stranger)[:39] == family.colours(without)).mean() > 0.5
 
 
 def test_the_family_colours_cope_with_one_family_and_with_no_animals():

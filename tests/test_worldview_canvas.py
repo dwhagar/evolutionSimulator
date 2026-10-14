@@ -17,6 +17,7 @@ from worldview_support import WORLD, animal, make_frame, status
 from evolution_simulator.session import (
     ANIMAL_COLUMNS,
     FakeSimulation,
+    Pause,
     Play,
     Select,
     Session,
@@ -496,3 +497,23 @@ def test_the_f_key_follows_the_selected_creature_and_is_in_the_view_menu(window)
     assert window.actions["follow_selected"] in window.view_menu.actions()
     press_f(window)
     assert not window.panels["world"].canvas.follow
+
+
+def test_while_the_world_is_not_drawn_the_session_is_asked_for_fewer_frames_and_then_for_plants(
+    window,
+):
+    controller = window.controller
+    session = controller.backend.session
+    controller.poll()
+    assert session.rules.frame_interval == pytest.approx(1 / 30)
+    window.actions["no_draw_fast_forward"].setChecked(True)
+    controller.send(SetSpeed("century"))
+    controller.send(Play())
+    assert not window.panels["world"].canvas.drawing
+    assert session.rules.frame_interval == pytest.approx(0.5)  # a couple a second, not thirty
+    controller.send(SetSpeed("day"))
+    assert window.panels["world"].canvas.drawing
+    assert session.rules.frame_interval == pytest.approx(1 / 30)
+    controller.send(Pause())
+    controller.poll()
+    assert controller.frame.plants is not None  # the plants missed while away came back

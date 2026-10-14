@@ -54,20 +54,22 @@ def _sex(layer: Layer) -> Colours:
 
 
 def _unit(values: np.ndarray) -> np.ndarray:
-    """``values`` stretched over 0 to 1 by the range found in the frame (all 0 when it has none),
-    which is how the frame's family key is meant to be read (``lineage.family_key``)."""
+    """``values`` stretched over 0 to 1 by the range of the middle 90% of the frame (5th to 95th
+    percentile, the rest clipped, so one far-off animal does not squash everyone else's colours;
+    all 0 when there is no spread), which is how the frame's family key is meant to be read
+    (``lineage.family_key``)."""
     if len(values) == 0:
         return values.astype(np.float64)
-    low, high = float(values.min()), float(values.max())
+    low, high = (float(v) for v in np.percentile(values, [5.0, 95.0]))
     if high - low < 1e-9:
         return np.zeros(len(values))
-    return (values.astype(np.float64) - low) / (high - low)
+    return np.clip((values.astype(np.float64) - low) / (high - low), 0.0, 1.0)
 
 
 def _family(layer: Layer) -> Colours:
     """Relatives get alike colours: the first family number sets the hue, the second the lightness
     (so two lineages of the same hue still differ, also without colour vision)."""
-    hue = 0.9 * _unit(layer.col("family_a"))  # stops short of a full turn, so the ends differ
+    hue = 0.8 * _unit(layer.col("family_a"))  # stops short of a full turn, so the ends differ
     value = 0.6 + 0.4 * _unit(layer.col("family_b"))
     rgb = [colorsys.hsv_to_rgb(float(h), 0.7, float(v)) for h, v in zip(hue, value, strict=True)]
     return np.rint(np.asarray(rgb, dtype=np.float64).reshape(-1, 3) * 255).astype(np.uint8)

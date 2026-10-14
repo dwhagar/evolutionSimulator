@@ -24,11 +24,24 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from evolution_simulator.session import Deselect, Frame, Select, Status
+from evolution_simulator.session import (
+    Deselect,
+    Frame,
+    RequestPlants,
+    Select,
+    SetFrameRate,
+    Status,
+)
 from evolution_simulator.viewer.panels.controls import KEY_MAP, NO_DRAW, world_drawing_paused
 from evolution_simulator.viewer.registry import ViewerContext
 from evolution_simulator.viewer.worldview import palette
 from evolution_simulator.viewer.worldview.canvas import WorldCanvas
+
+NORMAL_HZ = 30.0
+"""Frames a second asked of the session while the world is drawn (the session's own default)."""
+PAUSED_HZ = 2.0
+"""While the world is not drawn the other panels still read the clock and the counts from the frames,
+so a few a second are kept; the session stops packing the whole world thirty times a second."""
 
 FOLLOW = "follow_selected"
 """Name of the checkable action (key ``F``) that keeps the selected creature in the middle."""
@@ -138,7 +151,15 @@ class WorldPanel(QWidget):
             action.toggled.connect(
                 lambda _on: self._refresh_drawing(self.context.controller.status)
             )
-        self.canvas.set_drawing(not world_drawing_paused(self.context.actions, status))
+        drawing = not world_drawing_paused(self.context.actions, status)
+        if drawing == self.canvas.drawing:
+            return
+        self.canvas.set_drawing(drawing)
+        if drawing:  # the plants it missed come with the next frame
+            self.context.send(SetFrameRate(NORMAL_HZ))
+            self.context.send(RequestPlants())
+        else:
+            self.context.send(SetFrameRate(PAUSED_HZ))
 
     def _on_frame(self, frame: Frame) -> None:
         self._refresh_drawing(frame.status)

@@ -13,7 +13,16 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from evolution_simulator.history import HistorySamples, Recorder
-from evolution_simulator.session import Command, Frame, RunStarted, Session, SessionEvent, Status
+from evolution_simulator.session import (
+    Command,
+    Frame,
+    RequestPlants,
+    RunStarted,
+    Session,
+    SessionEvent,
+    SetFrameRate,
+    Status,
+)
 from evolution_simulator.world.views import AnimalDetail
 
 NOTHING_PUBLISHED = -1
@@ -50,8 +59,13 @@ class Batch:
         )
 
 
+Request = Command | SetFrameRate | RequestPlants
+"""What a window sends: a command, or one of the two messages about its own frames (``SetFrameRate``
+to ask for fewer or none, ``RequestPlants`` for the plants in the next frame)."""
+
+
 class Backend(Protocol):
-    def send(self, command: Command) -> None:
+    def send(self, command: Request) -> None:
         """Hand a command over. A command that cannot be carried out raises ``CommandError``."""
         ...
 
@@ -94,8 +108,13 @@ class LocalBackend:
             self.recorder = Recorder(self.session.simulation)
             self._published = NOTHING_PUBLISHED
 
-    def send(self, command: Command) -> None:
-        self.session.handle(command)
+    def send(self, command: Request) -> None:
+        if isinstance(command, SetFrameRate):
+            self.session.set_frame_rate(command.hz)
+        elif isinstance(command, RequestPlants):
+            self.session.request_plants()
+        else:
+            self.session.handle(command)
 
     def poll(self) -> Batch:
         update = self.session.update()

@@ -658,7 +658,7 @@ no Qt, so they are tested without a window.
 - **Colour modes** (`palette.MODES`, the menu in the toolbar): diet (blue plant eaters to vermillion meat
   eaters, the default), sex, energy, age and family. The colours are Okabe-Ito blue and reddish purple and
   ramps that change in lightness, so they survive the common colour blindness. Family reads UX.30's two
-  family numbers (`family_a`, `family_b`), stretched over the range found in the frame: the first sets the
+  family numbers (`family_a`, `family_b`), stretched over the 5th to 95th percentile of the frame: the first sets the
   hue, the second the lightness, so relatives look alike. A frame without those columns (an old one)
   greys the mode out and the view falls back to diet.
 - **One tick behind.** The canvas keeps the previous pose and shows each animal a fraction of the way from
@@ -673,7 +673,9 @@ no Qt, so they are tested without a window.
   `context.actions`) keeps the selected creature in the middle; dragging the view switches it off.
 - **Not drawing.** The panel asks `controls.world_drawing_paused(context.actions, status)` on every
   frame, status change and flip of the controls' switch, and tells the canvas, which then paints only
-  a note.
+  a note. It also asks the session for 2 frames a second (`SetFrameRate`) while the world is not drawn
+  and, when drawing resumes, for 30 and the plants it missed (`RequestPlants`), so the session stops
+  packing the whole world thirty times a second (`LocalBackend.send` and the pipe client take both).
 - **Not built yet.** The overview map when zoomed in, and the selected creature's sense overlays and
   trail (UX.15 draws those; the canvas paints in screen pixels from `camera.to_screen`, so an overlay is
   one more painting step after the animals).

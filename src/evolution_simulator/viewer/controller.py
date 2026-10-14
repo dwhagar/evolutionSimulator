@@ -12,7 +12,6 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 from evolution_simulator.history import HistorySamples
 from evolution_simulator.session import (
-    Command,
     CommandError,
     Frame,
     RunStarted,
@@ -20,7 +19,7 @@ from evolution_simulator.session import (
     StatusChanged,
 )
 from evolution_simulator.session.snapshot import Block
-from evolution_simulator.viewer.backend import Backend
+from evolution_simulator.viewer.backend import Backend, Request
 from evolution_simulator.world.views import AnimalDetail
 
 POLL_MS = 16
@@ -114,7 +113,7 @@ class ViewerController(QObject):
         old.close()  # type: ignore[attr-defined]
         return True
 
-    def send(self, command: Command) -> bool:
+    def send(self, command: Request) -> bool:
         """Hand a command to the backend; ``False`` (and ``command_failed``) if it was refused."""
         try:
             self.backend.send(command)
