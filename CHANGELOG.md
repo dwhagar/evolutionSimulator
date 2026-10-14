@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `DOCS.6`: Decisions log (`docs/decisions.md`) recording the owner's answers to the first round of issues and the tasks they created. Open clarifications are in [#36](https://github.com/dwhagar/evolutionSimulator/issues/36).
 - `BRAIN.2`, `DNA.11`, `DNA.12`: The animal brain. A pure 17-8-6 feedforward `Brain` (198 weights) with an adapter from percepts to decisions, a `BlockSpec` gene block for weight arrays stored in the DNA (the animal genome is now 461 digits, layout version 2), per-segment expected-change mutation, whole-neuron crossover (`crossover_by_unit`), and brain upkeep added to basal metabolism. `AnimalTraits.think()` returns the decision; acting on it is not built yet. [#34](https://github.com/dwhagar/evolutionSimulator/pull/34)
 - `DOCS.5`: Document on how DNA and traits interact (`docs/design/dna-traits-interaction.md`). [#32](https://github.com/dwhagar/evolutionSimulator/pull/32)
 - `TRAIT.4`, `DNA.10`: Traits as data. A genome layout (`GenomeLayout`, `GeneSpec`) lists the genes by ID, with a name and version that saved genomes check on load; trait definitions (`TraitDef`, `TraitSet`) say how each trait reads genes. DNA is now one generic class and no longer knows trait names. [#31](https://github.com/dwhagar/evolutionSimulator/pull/31)
