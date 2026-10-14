@@ -3,7 +3,7 @@
 Everything here is a plain value (frozen dataclasses of numbers, strings, bytes and the frames and
 details of ``snapshot`` and ``world.views``) so it pickles over a ``multiprocessing`` pipe today and
 could go over a socket tomorrow. Viewer to simulation: a ``Command`` of ``commands.py`` or one of
-``Ack``, ``SetFrameRate``, ``RequestPlants``, ``RequestHistory``, ``SaveNow`` and ``Shutdown`` below. Simulation to viewer: a
+``Ack``, ``SetFrameRate``, ``RequestPlants``, ``RequestHistory``, ``SaveNow``, ``StartRun`` and ``Shutdown`` below. Simulation to viewer: a
 ``Frame``, an ``AnimalDetail`` or one of the messages below.
 """
 
@@ -53,11 +53,27 @@ class SaveNow:
 
 
 @dataclass(frozen=True, slots=True)
+class StartRun:
+    """Save the world as a new run in the run store at ``root`` (the default runs folder when
+    ``None``), named ``name`` (after its seed when ``None``): the first checkpoint is written at once
+    and the host autosaves from then on. Answered with a ``RunNotice``; refused for a made-up world
+    and when a run is already attached."""
+
+    root: str | None = None
+    name: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class Shutdown:
-    """Stop cleanly (the attached run, if any, gets a last checkpoint)."""
+    """Stop cleanly. The attached run, if any, gets a last checkpoint unless ``save`` is false (a
+    viewer that is about to go back to an earlier checkpoint of the same run)."""
+
+    save: bool = True
 
 
-Request = Command | Ack | SetFrameRate | RequestPlants | RequestHistory | SaveNow | Shutdown
+Request = (
+    Command | Ack | SetFrameRate | RequestPlants | RequestHistory | SaveNow | StartRun | Shutdown
+)
 
 # --- simulation to viewer -----------------------------------------------------------------------
 

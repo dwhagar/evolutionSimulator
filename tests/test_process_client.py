@@ -185,3 +185,35 @@ def test_a_process_that_dies_without_a_word_is_noticed(client):
 def test_the_inbox_knows_when_it_is_empty():
     assert Inbox().empty
     assert not Inbox(ready=True).empty
+
+
+# --- a viewer that does not read (the pipe-block finding of UX.19) -------------------------
+
+
+def test_a_viewer_that_never_reads_cannot_stop_the_simulation():
+    """A pipe holds a few KB on Windows and about 200 KB on Linux, and a send waits for the reader.
+    Frames here are 390 KB, so the first one already fills it. The host sends from its own thread:
+    the world keeps ticking, and closing the client still ends the process."""
+    import multiprocessing
+
+    from session_support import TickCounter
+
+    from evolution_simulator.session import Play, SetSpeed
+
+    tick = multiprocessing.get_context("spawn").Value("q", 0)
+    client = ProcessClient(TickCounter(tick))
+    try:
+        client.send(SetSpeed("max"))
+        client.send(Play())  # and never poll: nothing is acknowledged or read
+        deadline = time.monotonic() + TIMEOUT
+        while tick.value == 0 and time.monotonic() < deadline:
+            time.sleep(0.02)
+        first = tick.value
+        assert first > 0, "the simulation never started"
+        time.sleep(1.0)
+        assert tick.value > first + 10, "the simulation stopped while the viewer was not reading"
+    finally:
+        started = time.monotonic()
+        client.close()
+        assert time.monotonic() - started < 10.0
+    assert not client.process.is_alive()

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from typing import ClassVar
 
 from evolution_simulator.history import Recorder
 from evolution_simulator.runs import Run, RunStore
@@ -41,6 +42,9 @@ class WorldSpec:
     plants: int = 0
     seeded: bool = True
 
+    saveable: ClassVar[bool] = True
+    """Whether the world it makes can be saved into a run (a real ``World``)."""
+
     def __call__(self) -> Simulation:
         world = World(self.config)
         world.populate(self.animals, self.plants, self.seeded)
@@ -57,6 +61,8 @@ class FakeSpec:
     size: tuple[float, float] = (1000.0, 1000.0)
     seconds_per_tick: float = 3600.0
     period: int = 600
+
+    saveable: ClassVar[bool] = False
 
     def __call__(self) -> Simulation:
         return FakeSimulation(
@@ -81,6 +87,8 @@ class NewRunSpec:
     seeded: bool = True
     name: str | None = None
 
+    saveable: ClassVar[bool] = True
+
     def __call__(self) -> Prepared:
         world = World(self.config)
         world.populate(self.animals, self.plants, self.seeded)
@@ -97,6 +105,8 @@ class ResumeSpec:
     root: str | os.PathLike[str] | None = None
     run_id: str = "latest"
     checkpoint: str | None = None
+
+    saveable: ClassVar[bool] = True
 
     def __call__(self) -> Prepared:
         store = RunStore(self.root)

@@ -30,11 +30,23 @@ class Batch:
     history: HistorySamples | None = None
     """The statistics so far, whenever a new sample has been taken since the last poll (once per
     simulated day), so the charts redraw on a new point and not on every frame."""
+    rejected: tuple[str, ...] = ()
+    """Why commands sent earlier were refused (a backend in another process learns this later)."""
+    crash: str | None = None
+    """The traceback, once the simulation (in another process) has failed."""
+    ready: bool = False
+    """The simulation came up in this batch (a backend in another process takes a moment)."""
 
     @property
     def empty(self) -> bool:
         return (
-            self.frame is None and self.detail is None and not self.events and self.history is None
+            self.frame is None
+            and self.detail is None
+            and not self.events
+            and self.history is None
+            and not self.rejected
+            and self.crash is None
+            and not self.ready
         )
 
 

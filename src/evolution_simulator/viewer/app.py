@@ -1,9 +1,11 @@
 """The command line and ``main`` (UX.11).
 
-``evolution-simulator-gui`` (or ``python -m evolution_simulator.viewer``) opens the window. Until the
-process host (UX.7) exists the simulation runs in this process, and by default it is the made-up
-``FakeSimulation``; ``--world`` runs the real one. File > New run (the setup screen, UX.17) replaces
-either with a real world of the user's choosing.
+``evolution-simulator-gui`` (or ``python -m evolution_simulator.viewer``) opens the window. By
+default it shows the made-up ``FakeSimulation`` in this process, which needs nothing to start;
+``--world`` runs the real one in its own process (UX.33), so the window stays responsive however fast
+the simulation runs. ``--in-process`` keeps the real world in this process (for debugging) and
+``--process`` puts the made-up one in a process too (to try the path without waiting for a world).
+File > New run (the setup screen, UX.17) replaces either with a real world of the user's choosing.
 """
 
 from __future__ import annotations
@@ -22,7 +24,17 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--world",
         action="store_true",
-        help="run the real simulation, in this process (default: the made-up FakeSimulation)",
+        help="run the real simulation, in its own process (default: the made-up FakeSimulation)",
+    )
+    parser.add_argument(
+        "--in-process",
+        action="store_true",
+        help="run the simulation in the window's process instead of its own (for debugging)",
+    )
+    parser.add_argument(
+        "--process",
+        action="store_true",
+        help="run the made-up simulation in its own process too (to try that path)",
     )
     parser.add_argument("--seed", type=int, default=0, help="seed of the world (default 0)")
     parser.add_argument("--animals", type=int, default=120, help="animals to start with")
@@ -59,6 +71,21 @@ def build_simulation(args: argparse.Namespace):
     return FakeSimulation(args.animals, args.plants, seed=args.seed)
 
 
+def build_recipe(args: argparse.Namespace):
+    """The picklable recipe the simulation process builds its world from (``--world`` or
+    ``--process``)."""
+    from evolution_simulator.session import FakeSpec, WorldSpec
+    from evolution_simulator.world import WorldConfig
+
+    if args.world:
+        return WorldSpec(WorldConfig(seed=args.seed), args.animals, args.plants)
+    return FakeSpec(args.animals, args.plants, seed=args.seed)
+
+
+def uses_process(args: argparse.Namespace) -> bool:
+    return (args.world and not args.in_process) or args.process
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(sys.argv[1:] if argv is None else argv)
     try:
@@ -77,7 +104,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     app.setApplicationName(APP_NAME)
     app.setOrganizationName("evolutionSimulator")
 
-    backend = LocalBackend(Session(build_simulation(args)))
+    if uses_process(args):
+        from evolution_simulator.viewer.process_backend import ProcessBackend
+
+        backend = ProcessBackend(build_recipe(args))
+    else:
+        backend = LocalBackend(Session(build_simulation(args)))
     controller = ViewerController(backend)
     from evolution_simulator.runs import RunStore
     from evolution_simulator.viewer.run_manager import RunManager
@@ -91,5 +123,5 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.quit_after is not None:
         QTimer.singleShot(args.quit_after, window.close)
     code = app.exec()
-    backend.close()
+    controller.backend.close()  # not `backend`: a resumed run may have replaced it
     return code

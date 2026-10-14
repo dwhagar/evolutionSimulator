@@ -20,6 +20,12 @@ The rules that keep the window alive (``docs/design/ux.md``, "Frame pacing"):
   single-day samples at most every ``history_interval``. They wait, never get lost, while the viewer
   is behind. With a ``Run`` (a ``Prepared`` recipe) the host also autosaves checkpoints into the run
   folder, saves on ``SaveNow`` and once more when it shuts down, and says so in ``RunNotice``.
+- **The pipe never stops the simulation.** In the simulation process every message is handed to a
+  sender thread (``_Sender``) that does the blocking ``Connection.send``. A pipe holds only a few
+  kilobytes on Windows and about 200 KB on Linux, and a send does not return until the viewer has
+  read the message, so a viewer that is busy or hung would otherwise freeze the world in the middle of
+  a frame. What can be waiting is bounded by ``max_in_flight`` (the host builds nothing while that
+  many are unacknowledged), and a window that is gone ends the process.
 - **Failures are reported, not swallowed.** An exception in the simulation becomes a ``Crashed``
   message with the traceback, then the host stops. A command the session refuses becomes a
   ``CommandRejected``.
@@ -28,6 +34,8 @@ The rules that keep the window alive (``docs/design/ux.md``, "Frame pacing"):
 from __future__ import annotations
 
 import logging
+import queue
+import threading
 import time
 import traceback
 from collections.abc import Callable
@@ -35,7 +43,7 @@ from dataclasses import dataclass, field
 from multiprocessing.connection import Connection
 
 from evolution_simulator.history import Recorder, Sample
-from evolution_simulator.runs import Autosaver, Run
+from evolution_simulator.runs import Autosaver, Run, RunStore
 from evolution_simulator.session.commands import CommandError, NewRun
 from evolution_simulator.session.messages import (
     Ack,
@@ -52,6 +60,7 @@ from evolution_simulator.session.messages import (
     SaveNow,
     SetFrameRate,
     Shutdown,
+    StartRun,
     Stopped,
 )
 from evolution_simulator.session.protocol import Simulation
@@ -63,6 +72,7 @@ from evolution_simulator.session.session import (
     StatusChanged,
 )
 from evolution_simulator.session.specs import Prepared
+from evolution_simulator.world import World
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +156,7 @@ class Host:
             self._autosaver = run.autosave(session.simulation, recorder)  # type: ignore[arg-type]
         self._manual_saves = 0
         self._noticed_saves: int | None = None
+        self._save_on_shutdown = True
 
     # -------------------------------------------------------------------------
     # From the viewer
@@ -174,8 +185,11 @@ class Host:
             else:
                 self.run.checkpoint(self.session.simulation, self.recorder)  # type: ignore[arg-type]
                 self._manual_saves += 1
+        elif isinstance(message, StartRun):
+            self._start_run(message)
         elif isinstance(message, Shutdown):
             self._stopping = True
+            self._save_on_shutdown = self._save_on_shutdown and message.save  # first no wins
         elif isinstance(message, NewRun):
             self._new_run(message)
         else:
@@ -252,6 +266,20 @@ class Host:
             return
         self._events.append(event)
 
+    def _start_run(self, message: StartRun) -> None:
+        world = self.session.simulation
+        if self.run is not None:
+            reason = "This simulation is already saved into a run."
+        elif not isinstance(world, World):
+            reason = "This simulation is not a real world, so it cannot be saved."
+        else:
+            run = RunStore(message.root).create(world, name=message.name, recorder=self.recorder)
+            self.run = run
+            self._autosaver = run.autosave(world, self.recorder)
+            self._noticed_saves = None  # tell the viewer
+            return
+        self._rejected.append(CommandRejected(message, reason))
+
     def _on_sample(self, sample: Sample) -> None:
         self._pending_samples.append(sample)
         if len(self._pending_samples) > self.rules.max_pending_samples:
@@ -288,7 +316,10 @@ class Host:
         """Leave the run with a last checkpoint and stop listening. Safe to call twice."""
         autosaver, self._autosaver = self._autosaver, None
         if autosaver is not None:
-            autosaver.finish()
+            if self._save_on_shutdown:
+                autosaver.finish()
+            else:
+                autosaver.close()
         if self.recorder is not None:
             self.recorder.remove_sample_listener(self._on_sample)
 
@@ -380,6 +411,49 @@ def make_host(
     )
 
 
+_END = object()
+
+
+class _Sender:
+    """Sends from its own thread, in order, so the simulation loop never waits for the viewer.
+
+    ``gone`` becomes true when the pipe breaks (the viewer is gone) and ``error`` holds the
+    traceback of anything else that went wrong while sending (a message that cannot be pickled)."""
+
+    def __init__(self, connection: Connection) -> None:
+        self._connection = connection
+        self._queue: queue.SimpleQueue[object] = queue.SimpleQueue()
+        self.gone = False
+        self.error: str | None = None
+        self._thread = threading.Thread(target=self._run, name="host-sender", daemon=True)
+        self._thread.start()
+
+    def send(self, message: object) -> None:
+        if not self.gone and self.error is None:
+            self._queue.put(message)
+
+    def _run(self) -> None:
+        while True:
+            message = self._queue.get()
+            if message is _END:
+                return
+            try:
+                self._connection.send(message)
+            except (EOFError, OSError):
+                self.gone = True
+                return
+            except Exception:  # noqa: BLE001 - reported to the loop, which tells the viewer
+                self.error = traceback.format_exc()
+                return
+
+    def close(self, timeout: float) -> bool:
+        """Send what is queued, for up to ``timeout`` seconds. ``False`` if the viewer is not
+        reading and the thread is still stuck in a send."""
+        self._queue.put(_END)
+        self._thread.join(timeout)
+        return not self._thread.is_alive()
+
+
 def run_host(
     recipe: Callable[[], Simulation | Prepared],
     connection: Connection,
@@ -389,24 +463,39 @@ def run_host(
 
     The target of the spawned process (``ProcessClient``). Anything that goes wrong inside is sent
     to the viewer as a ``Crashed`` message and ends the process with exit code 1; a viewer that has
-    gone away (the pipe closes) ends it quietly.
+    gone away (the pipe closes) ends it quietly. Messages go out through a sender thread, so a
+    viewer that does not read cannot stop the world.
     """
     rules = rules if rules is not None else HostRules()
+    sender = _Sender(connection)
+    flushed = True
     try:
         try:
             host = make_host(recipe(), rules)
-            connection.send(host.first_message())
+            sender.send(host.first_message())
             while not host.stopped:
                 while connection.poll(0):
                     host.receive(connection.recv())
                 for message in host.step():
-                    connection.send(message)
+                    sender.send(message)
+                if sender.error is not None:
+                    raise RuntimeError(f"A message could not be sent:\n{sender.error}")
+                if sender.gone:
+                    return  # the viewer is gone
                 if not host.busy:
                     connection.poll(rules.idle_wait)
         except (EOFError, BrokenPipeError, ConnectionResetError):
             return  # the viewer is gone
         except Exception:  # noqa: BLE001 - the report is the point
-            connection.send(Crashed(traceback.format_exc()))
+            sender.send(Crashed(traceback.format_exc()))
+            flushed = sender.close(FLUSH_SECONDS)
             raise SystemExit(1) from None
+        flushed = sender.close(FLUSH_SECONDS)  # the Stopped message
     finally:
-        connection.close()
+        if flushed:
+            connection.close()  # else a send is stuck on a viewer that is not reading; the process
+            # ends anyway, and closing under it could hang
+
+
+FLUSH_SECONDS = 1.0
+"""How long the process waits, when it ends, for the viewer to read the last messages."""

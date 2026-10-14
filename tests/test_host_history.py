@@ -24,6 +24,7 @@ from evolution_simulator.session import (
     Session,
     SessionRules,
     Shutdown,
+    StartRun,
     Step,
     Stopped,
     make_host,
@@ -356,3 +357,29 @@ def test_the_new_messages_pickle():
     notice = RunNotice("id", "name", "/x", 1, "checkpoint-1", 0)
     assert pickle.loads(pickle.dumps(notice)) == notice
     assert pickle.loads(pickle.dumps(SaveNow())) == SaveNow()
+
+
+def test_start_run_saves_a_real_world_into_a_new_run_and_refuses_the_rest(tmp_path):
+    world = World(WorldConfig(seed=4))
+    world.populate(5, 20)
+    host, clock, _ = make(sim=world)
+    host.first_message()
+    host.receive(StartRun(str(tmp_path), "later"))
+    clock.advance(0.3)
+    [notice] = [m for m in host.step() if isinstance(m, RunNotice)]
+    assert (notice.name, notice.checkpoints) == ("later", 1) and host.run is not None
+    host.receive(StartRun(str(tmp_path), "again"))  # already in a run
+    clock.advance(0.3)
+    [rejected] = [m for m in host.step() if isinstance(m, CommandRejected)]
+    assert "already saved" in rejected.reason
+    host.receive(Shutdown(save=False))
+    host.receive(Shutdown())  # the first word is the one that counts
+    assert host.step() == [Stopped()]
+    assert [c.tick for c in host.run.checkpoints()] == [0]  # no last checkpoint
+
+    fake_host, fake_clock, _ = make()
+    fake_host.first_message()
+    fake_host.receive(StartRun(str(tmp_path)))
+    fake_clock.advance(0.3)
+    [rejected] = [m for m in fake_host.step() if isinstance(m, CommandRejected)]
+    assert "not a real world" in rejected.reason

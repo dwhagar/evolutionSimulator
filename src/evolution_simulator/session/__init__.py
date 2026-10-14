@@ -50,6 +50,7 @@ from evolution_simulator.session.messages import (
     SaveNow,
     SetFrameRate,
     Shutdown,
+    StartRun,
     Stopped,
 )
 from evolution_simulator.session.protocol import Simulation
@@ -122,6 +123,7 @@ __all__ = [
     "Shutdown",
     "SimClient",
     "Simulation",
+    "StartRun",
     "Status",
     "StatusChanged",
     "Step",
