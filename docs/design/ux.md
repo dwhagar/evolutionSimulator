@@ -555,8 +555,8 @@ settings form, a line that says what is wrong (Start is disabled until nothing i
 - **The form is generated.** `viewer/config_form.py` builds a `ConfigForm` from any frozen dataclass
   instance: a check box for a `bool`, a text box for numbers, text and tuples, a collapsible section for
   a nested dataclass, and a section with an *on* box for `X | None` (day cycle, learning). Nothing names
-  a field, so what TRAIT.11 moves into `TraitRules` (or any later field) appears without editing the
-  screen. The tooltip is the one-line text under the field in the source (read by `viewer/configdata.py`
+  a field, so when TRAIT.11 moved the bite, corpse and world settings into `TraitRules` the form picked them
+  up with no change (any later field will too). The tooltip is the one-line text under the field in the source (read by `viewer/configdata.py`
   from the class source, so a frozen build without source shows only the default), a bold label means the
   value differs from the default and a section header counts its changes. `value()` builds the dataclass
   with the classes' own checks and raises `ConfigError` with the dotted path of the bad field. The seed

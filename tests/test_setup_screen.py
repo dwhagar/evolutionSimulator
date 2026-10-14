@@ -190,7 +190,11 @@ def test_the_world_config_form_covers_every_field_and_returns_the_default(qapp):
     form = ConfigForm(WorldConfig(), skip={"seed"})
     assert form.value() == WorldConfig()
     paths = form.fields()
-    assert "traits.life.wear_base" in paths and "bounds.size" in paths and "attack.damage" in paths
+    assert (
+        "traits.life.wear_base" in paths
+        and "bounds.size" in paths
+        and "traits.attack.damage" in paths
+    )
     assert "traits.day_cycle.night_below" in paths
     assert len(paths) > 100
 
@@ -281,12 +285,12 @@ def test_start_sends_a_new_run_and_the_world_is_replaced(qapp, context, controll
     panel.animals.setValue(8)
     panel.plants.setValue(25)
     panel.seed.setText("42")
-    panel.form.fields()["graze_amount"].setText("7.5")
+    panel.form.fields()["traits.world.graze_amount"].setText("7.5")
     assert panel.start() is True
     controller.poll()
     world = controller.backend.session.simulation
     assert isinstance(world, World) and world.tick == 0
-    assert world.config.seed == 42 and world.config.graze_amount == 7.5
+    assert world.config.seed == 42 and world.config.traits.world.graze_amount == 7.5
     assert len(world.animal_views()) == 8 and world.plant_count == 25
     assert controller.frame.animal_count == 8 and controller.plants.count == 25
     assert not controller.status.running
@@ -345,14 +349,14 @@ def test_a_damaged_last_run_is_ignored(qapp, context, settings):
 def test_the_users_own_presets_are_saved_listed_and_deleted(qapp, context, settings):
     panel = make_panel(context, name="Tiny")
     panel.animals.setValue(5)
-    panel.form.fields()["birth_scatter"].setText("2.0")
+    panel.form.fields()["traits.world.birth_scatter"].setText("2.0")
     assert panel.save_preset() is True
     assert panel.presets.currentText() == "Tiny" and panel.delete_button.isEnabled()
     assert PRESETS_KEY in settings.allKeys()
     again = make_panel(context)
     assert "Tiny" in [again.presets.itemText(i) for i in range(again.presets.count())]
     again.choose_preset("Tiny")
-    assert again.animals.value() == 5 and again.setup().config.birth_scatter == 2.0
+    assert again.animals.value() == 5 and again.setup().config.traits.world.birth_scatter == 2.0
     assert again.delete_preset() is True
     assert "Tiny" not in [again.presets.itemText(i) for i in range(again.presets.count())]
     last = make_panel(context)
