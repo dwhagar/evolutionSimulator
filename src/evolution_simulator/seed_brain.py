@@ -12,7 +12,7 @@ Three pieces:
   world does not act on attacking or calling (``BRAIN.10``).
 * ``SEED_SLOTS`` and ``SEED_OUTPUT_BIASES``: the fitted weights, as levels of the genome's brain
   block (0 to 15 of 16, so they survive being written into DNA exactly). The table is made by
-  ``scripts/fit_seed_brain.py``; rerun it when the inputs or the rule change.
+  ``src/evolution_tools/fit_seed_brain.py``; rerun it when the inputs or the rule change.
 * ``seeded_dna``: a random animal genome with the seed written into the first ``SEED_HIDDEN`` (10) hidden slots (gates
   on, the rest of the slots off), the gain gene at the seed's gain and a little variation so founders are not
   clones.
@@ -184,7 +184,7 @@ def level_value(level: int) -> float:
 
 
 # Per seeded hidden neuron, the levels of its bias, 28 incoming weights and 6 outgoing weights, then
-# the levels of the six output biases. Written by scripts/fit_seed_brain.py.
+# the levels of the six output biases. Written by src/evolution_tools/fit_seed_brain.py.
 # fitted: begin
 SEED_SLOTS: tuple[tuple[int, ...], ...] = (
     (

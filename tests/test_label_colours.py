@@ -7,7 +7,9 @@ import json
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location("sync_labels", ROOT / "scripts" / "sync_labels.py")
+spec = importlib.util.spec_from_file_location(
+    "sync_labels", ROOT / "src" / "evolution_tools" / "sync_labels.py"
+)
 assert spec is not None and spec.loader is not None
 sync_labels = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sync_labels)
@@ -20,7 +22,7 @@ def _state() -> dict:
 def test_every_tag_in_the_todo_has_a_colour() -> None:
     text = "\n".join(f.read_text(encoding="utf-8") for f in sync_labels.SOURCES)
     missing = [t for t in sync_labels.tags_in(text) if t not in _state()["colours"]]
-    assert not missing, f"run scripts/sync_labels.py to colour: {missing}"
+    assert not missing, f"run src/evolution_tools/sync_labels.py to colour: {missing}"
 
 
 def test_colours_come_from_the_palette_and_follow_the_rotation() -> None:

@@ -1,6 +1,6 @@
 """Build the downloadable viewer (UX.19): a PyInstaller folder, zipped.
 
-Run from anywhere: ``python scripts/package.py``. Needs the ``gui`` and ``package`` extras
+Run from anywhere: ``python -m evolution_tools.package``. Needs the ``gui`` and ``package`` extras
 (``pip install -e ".[gui,package]"``). The output is ``dist/evolutionSimulator-<version>-<platform>.zip``
 holding one ``evolutionSimulator`` folder. The Windows build is the shipped one; the same spec builds
 on Linux so the packaging can be tested there. ``--no-zip`` stops after the folder.
@@ -16,7 +16,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 SPEC = ROOT / "packaging" / "evolutionSimulator.spec"
 APP = "evolutionSimulator"
 EXTRA_FILES = (
@@ -27,7 +27,9 @@ EXTRA_FILES = (
 
 
 def current_version() -> str:
-    spec = importlib.util.spec_from_file_location("version_script", ROOT / "scripts" / "version.py")
+    spec = importlib.util.spec_from_file_location(
+        "version_script", ROOT / "src" / "evolution_tools" / "version.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module.get_version()

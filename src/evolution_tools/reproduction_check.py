@@ -12,7 +12,7 @@ Two pressures the world will supply are stood in for, or ``recovery`` and ``pare
 nothing to pay for: now and then an animal is injured (so healing matters), and a newborn cannot eat
 for its first 18 hours (so the energy its parents gave it matters).
 
-Run ``python scripts/reproduction_check.py [ticks] [seed] [injury_chance] [newborn_fast_ticks]``. A gene "piles up at an end" when the
+Run ``python -m evolution_tools.reproduction_check [ticks] [seed] [injury_chance] [newborn_fast_ticks]``. A gene "piles up at an end" when the
 population's mean value in the last fifth of the run is within ``EDGE`` of 0 or 1.
 
 ``TRAIT.9`` gave the genes that used to be free a cost (speed, agility, aggression, fear, the sex
@@ -31,7 +31,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from evolution_simulator.config import DEFAULT_RULES, TraitRules

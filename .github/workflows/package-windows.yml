@@ -22,7 +22,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[gui,package]"
       - name: Build
-        run: python scripts/package.py
+        env:
+          PYTHONPATH: src
+        run: python -m evolution_tools.package
       - name: Check the build starts its simulation process
         # --selftest opens no window: it starts the simulation process the way the viewer does,
         # waits for a frame, and exits 0 if it all worked. A windowed program has no console, so

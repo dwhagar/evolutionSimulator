@@ -1,6 +1,6 @@
 """Times genome distance, the digit-by-digit loop of before ``DNA.17`` against the packed integer.
 
-Run ``python scripts/bench_dna_distance.py [genomes] [seed]``. It builds that many random animal
+Run ``python -m evolution_tools.bench_dna_distance [genomes] [seed]``. It builds that many random animal
 genomes, times every pair with each method (the first call of the packed method also makes each
 genome's packed integer, so that cost is included), times a single comparison, and checks that both
 methods give the same answers.
@@ -15,7 +15,7 @@ from itertools import combinations
 from operator import ne
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from evolution_simulator.dna import DNA
 from evolution_simulator.layouts import ANIMAL_LAYOUT

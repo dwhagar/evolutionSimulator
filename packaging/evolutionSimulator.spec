@@ -1,7 +1,7 @@
-# PyInstaller spec for the viewer (UX.19). Build with: python scripts/package.py
+# PyInstaller spec for the viewer (UX.19). Build with: python -m evolution_tools.package
 #
 # One folder, no console window. The same spec builds on Linux for testing; the Windows build is the
-# one that is shipped. Run from the repository root (scripts/package.py does).
+# one that is shipped. Run from the repository root (evolution_tools.package does).
 from pathlib import Path
 
 from PyInstaller.utils.hooks import copy_metadata

@@ -363,7 +363,7 @@ its field. The table below is the design as proposed.)
 
 ## Long-run check
 
-`scripts/reproduction_check.py` (`REPRO.8`) runs the real `AnimalTraits` (upkeep, wear, healing, matings,
+`src/evolution_tools/reproduction_check.py` (`REPRO.8`) runs the real `AnimalTraits` (upkeep, wear, healing, matings,
 pregnancies and paid births, one hour per tick) in a chemostat: 80 founders, a fixed 45 biomass per tick
 shared by everyone alive (3 at most each), a 5% chance per tick that a willing pair meets, a 0.2% chance
 per tick of an injury of 5 to 40 health, and a newborn that cannot eat for its first 18 hours. It has no
@@ -427,7 +427,7 @@ second is a floor on the gene's cost.
 So the result is: nothing runs to the top, and the one gene at the bottom is there because the chemostat
 only stands in for the pressures that should hold it up. Repeat the check in the world once populations
 survive, and read `parenting`, `recovery` and `repro_drive` first. To explore, change the pressures:
-`python scripts/reproduction_check.py [ticks] [seed] [injury_chance] [newborn_fast_ticks]`.
+`python -m evolution_tools.reproduction_check [ticks] [seed] [injury_chance] [newborn_fast_ticks]`.
 
 ## Questions for the owner
 

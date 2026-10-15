@@ -7,8 +7,8 @@ the brain's dead zone so a weight of -0.4 to 0.4 is off), moves single levels wh
 Training a network by gradient descent and rounding it does not work here: the 16 levels and the dead
 zone throw away too much (97% before rounding, 45% after).
 
-    python scripts/fit_seed_brain.py            # print the result
-    python scripts/fit_seed_brain.py --write    # and rewrite the table in seed_brain.py
+    python -m evolution_tools.fit_seed_brain            # print the result
+    python -m evolution_tools.fit_seed_brain --write    # and rewrite the table in seed_brain.py
 
 Rerun it when the inputs, the rule or the brain block change.
 """
@@ -24,7 +24,7 @@ from pathlib import Path
 
 import numpy as np
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 from evolution_simulator import seed_brain as sb

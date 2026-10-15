@@ -1,7 +1,7 @@
 """What the About box says (UX.21): the version, the licence and the third-party notices.
 
 No Qt in here, so it can be tested anywhere. The version is the project's own
-``MAJOR.minor.build`` (``version.toml`` plus the commits since its base, as ``scripts/version.py``
+``MAJOR.minor.build`` (``version.toml`` plus the commits since its base, as ``src/evolution_tools/version.py``
 counts them) when run from a source checkout, the ``VERSION`` file next to the program in the
 downloadable build, and the installed package's version otherwise.
 """
@@ -47,7 +47,7 @@ def frozen_folder() -> Path | None:
 
 
 def _source_version(root: Path) -> str | None:
-    script = root / "scripts" / "version.py"
+    script = root / "src" / "evolution_tools" / "version.py"
     if not (root / "version.toml").is_file() or not script.is_file():
         return None
     try:

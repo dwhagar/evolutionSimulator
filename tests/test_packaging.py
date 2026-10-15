@@ -20,7 +20,7 @@ def load(name: str, path: Path):
 
 
 entry = load("packaging_entry", ROOT / "packaging" / "entry.py")
-package = load("package_script", ROOT / "scripts" / "package.py")
+package = load("package_script", ROOT / "src" / "evolution_tools" / "package.py")
 
 
 def test_selftest_starts_the_simulation_process():

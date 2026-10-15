@@ -43,7 +43,7 @@ Every gene must have, written in the per-gene tables below:
 
 1. For each gene in a layout, set the rest to the founder values, step the gene through 0, 0.125 ... 1 (nine points), and compute a fitness proxy in each reference environment.
 2. **Plant proxy**: expected number of established seedlings over a lifetime (growth minus upkeep and grazing losses, then seeds times establishment). Reference environments: a sparse stand with no grazers; a dense stand (soil limit and shade bite); a grazed stand (a scripted grazer that bites on contact at the effort-adjusted rate); a stand grazed by a toxin-adapted grazer.
-3. **Animal proxy**: net energy per hour, then lifetime offspring in the chemostat of `scripts/reproduction_check.py` (the TRAIT.9 check is the model). Environments: rich and poor plants, with and without toxic plants, with and without prey.
+3. **Animal proxy**: net energy per hour, then lifetime offspring in the chemostat of `src/evolution_tools/reproduction_check.py` (the TRAIT.9 check is the model). Environments: rich and poor plants, with and without toxic plants, with and without prey.
 4. **Report**: for each gene and environment, the best value and whether the proxy rises, falls or peaks as the gene goes up. A gene whose proxy is monotonic in every environment is listed with the reason on record, or fails.
 5. **Fixed budget**: the audit varies one gene with the rest fixed, on purpose (the Y-model warning in the research note: comparing a mixed population hides trade-offs).
 6. **Dead-gene check**: the audit also fails a gene whose sweep changes nothing in any environment. This catches `root_reach`, which `unread_genes()` cannot.

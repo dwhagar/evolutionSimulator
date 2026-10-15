@@ -193,7 +193,7 @@ into clusters, with the five reproduction genes next to each other: layout versi
 - **Constants.** They are fields of the rules tree in `config.py` (`TRAIT.3`; `life.wear_base`, `life.drive_wear`,
   `reproduction.*`, `recovery.*` and so on, listed in [trait-config.md](trait-config.md)), named after the design note's
   table. The gene ranges are in `trait_defs.py`.
-- **Long-run check.** `scripts/reproduction_check.py` runs the real traits in a small food-limited ecology and
+- **Long-run check.** `src/evolution_tools/reproduction_check.py` runs the real traits in a small food-limited ecology and
   reports where the genes settle; see [reproduction-genes.md](reproduction-genes.md#long-run-check).
 
 ## What every gene costs (TRAIT.9)
@@ -217,7 +217,7 @@ test keeps it so). All the numbers are in the rules tree ([trait-config.md](trai
 movement burn is unchanged at average speed; a fast animal moving fast burns several times as much, a slow one a
 fraction.
 
-**Long-run check.** `scripts/reproduction_check.py ... traits` runs the chemostat with stand-ins for what the genes buy
+**Long-run check.** `src/evolution_tools/reproduction_check.py ... traits` runs the chemostat with stand-ins for what the genes buy
 (half-speed foraging every tick; food shared in proportion to `1 + 0.5 speed + 0.2 agility + 0.3 aggression`; fear
 halving injuries at the top). Three seeds, 12,000 ticks, population about 80: with the costs off, `speed` ends at 0.63,
 0.84 and 0.84; with them on, 0.24 to 0.28, so the speed cost holds the gene low where it was running up. `agility`,
