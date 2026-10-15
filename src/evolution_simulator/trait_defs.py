@@ -428,6 +428,10 @@ ANIMAL_TRAITS = TraitSet(
         _level("sight_range"),
         _level("sight_fov"),
         _level("sight_acuity"),
+        _level(
+            "camouflage",
+            "How hard the body is to see: others see it from less far, at a cost in upkeep and speed.",
+        ),
         _level("hearing"),
         _level("smell"),
         _level("touch"),
@@ -517,6 +521,7 @@ ANIMAL_TRAITS = TraitSet(
         "agility upkeep": ("agility",),
         "temperament upkeep": ("aggression", "fear"),
         "learning upkeep": ("learning_rate",),
+        "camouflage upkeep and slowing": ("camouflage",),
         "fertility upkeep": ("fertility",),
         "recovery upkeep": ("recovery",),
         "sensing upkeep": (

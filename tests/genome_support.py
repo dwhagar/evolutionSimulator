@@ -52,7 +52,10 @@ def body_from_v6(digits: str) -> str:
     for gene_id, length in ORDER_V6:
         chunks[gene_id] = digits[at : at + length]
         at += length
-    return "".join(chunks[gene.id] for gene in ANIMAL_LAYOUT.genes if gene.block is None)
+    # Genes added after version 6 (camouflage, SENSE.21) start at zero.
+    return "".join(
+        chunks.get(gene.id, "0" * gene.length) for gene in ANIMAL_LAYOUT.genes if gene.block is None
+    )
 
 
 def dna_from_v6(body: str, brain: str) -> DNA:

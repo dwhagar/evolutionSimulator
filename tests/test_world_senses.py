@@ -96,7 +96,7 @@ def test_a_plant_ahead_is_in_the_middle_and_closeness_follows_the_gap_between_su
     animal = world.add_animal(animal_dna(**NARROW), HERE, heading=0.0)
     plant = world.add_plant(plant_dna(), Vec.of(520, 500))
     seen = seen_by(world, animal)
-    reach = animal.traits.current_sight_range
+    reach = animal.traits.current_sight_range * EXACT.visibility(plant.traits.canopy_radius)
     assert seen.plant_direction == pytest.approx(0.0, abs=0.06)
     assert seen.plant_closeness == pytest.approx(1.0 - surface(animal, plant) / reach)
 
@@ -142,9 +142,8 @@ def test_the_nearest_plant_wins():
     world.add_plant(plant_dna(), Vec.of(520, 500))
     near = world.add_plant(plant_dna(), Vec.of(505, 505))
     seen = seen_by(world, animal)
-    assert seen.plant_closeness == pytest.approx(
-        1.0 - surface(animal, near) / animal.traits.current_sight_range
-    )
+    reach = animal.traits.current_sight_range * EXACT.visibility(near.traits.canopy_radius)
+    assert seen.plant_closeness == pytest.approx(1.0 - surface(animal, near) / reach)
 
 
 def test_a_plant_is_smelled_in_proportion_to_its_biomass():

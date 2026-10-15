@@ -34,7 +34,7 @@ PLANT_MUTATION_PER_DIGIT: float = 0.005
 
 ANIMAL_LAYOUT = GenomeLayout(
     name="animal",
-    version=8,
+    version=9,
     specs=(
         # Genes that feed one trait or one system sit together, tagged as a cluster (DNA.15), so
         # crossover tends to inherit them together (see docs/design/gene-clusters.md).
@@ -71,12 +71,14 @@ ANIMAL_LAYOUT = GenomeLayout(
         GeneSpec("reaction_time"),
         GeneSpec("curiosity"),
         GeneSpec("learning_rate"),
+        # how hard the body is to see (SENSE.21); last in the body so no other gene moved
+        GeneSpec("camouflage"),
         # the brain: read by the Brain object, not by the trait table
         BRAIN_GENE,
     ),
-    # The body keeps the prototype's 0.01 per digit (0.96 changes per child over its 96 digits). The
+    # The body keeps the prototype's 0.01 per digit (1.0 changes per child over its 100 digits). The
     # brain is about one change per child however long it is, about 0.0011 per brain digit.
-    segment_mutations={"body": 0.01 * 96, "brain": 1.0},
+    segment_mutations={"body": 0.01 * 100, "brain": 1.0},
 )
 
 PLANT_LAYOUT = GenomeLayout(
@@ -116,6 +118,10 @@ FOUNDER_LEVELS: Mapping[str, float] = {
 parenting, and the middle of the range for the rest. Evolution moves them from there."""
 
 
+FOUNDER_CAMOUFLAGE: float = 0.0
+"""A first generation starts with no camouflage (``SENSE.21``); evolution raises it where being seen
+costs more than hiding does."""
+
 FOUNDER_SENSE_SPREAD: float = 0.07
 """How far a first generation's sense genes stray from the middle (0.5), either way, so the
 population is not a set of clones (``SENSE.16``)."""
@@ -153,6 +159,7 @@ def founder_animal_dna(rng: random.Random) -> DNA:
     dna = DNA.random(ANIMAL_LAYOUT, rng)
     for gene_id, level in FOUNDER_LEVELS.items():
         dna = dna.with_value(gene_id, level)
+    dna = dna.with_value("camouflage", FOUNDER_CAMOUFLAGE)
     return seed_sense_genes(dna, rng)
 
 

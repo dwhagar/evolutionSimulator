@@ -313,11 +313,11 @@ def test_whole_cluster_units_merge_each_cluster_into_one_crossover_unit():
         cluster_units=True,
     )
     assert not ANIMAL_LAYOUT.cluster_units and joined.cluster_units
-    assert len(ANIMAL_LAYOUT.units) == 26 + 17
-    assert len(joined.units) == 13 + 17  # eight clusters hold thirteen genes fewer as units
+    assert len(ANIMAL_LAYOUT.units) == 27 + 17
+    assert len(joined.units) == 14 + 17  # eight clusters hold thirteen genes fewer as units
     assert (0, 12) in joined.units  # the frame cluster
     assert (67, 80) in joined.units  # the reproduction cluster
-    assert joined.units[-17][0] >= 96  # the brain's groups follow, unchanged
+    assert joined.units[-17][0] >= 100  # the brain's groups follow, unchanged
 
     zeros = DNA.from_string(joined, "0" * joined.length)
     ones = DNA.from_string(joined, "1" * joined.length)
