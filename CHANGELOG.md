@@ -7,6 +7,7 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `TRAIT.20`: Design note for body colour and hiding in foliage (`docs/design/colour.md`): a `colour` gene on a red, purple, blue, teal, green line, a background of ground and plant cover, a contrast term in the visibility rule, a pigment upkeep, and the balance audit entry; built as TRAIT.21 in animal layout 10. [#251](https://github.com/dwhagar/evolutionSimulator/pull/251)
 - `SENSE.13`: Sense calibration (`docs/design/sense-calibration.md`, tools `sense_calibration` and `sense_probe`): a typical founder pays 12.4% of upkeep on senses (aim 10 to 15%), any long-range sense is about ten times a blind forager, and no constant changed. [#248](https://github.com/dwhagar/evolutionSimulator/pull/248)
 - `INFRA.10`: `run.ps1` and `run.bat` in the root start the viewer from source on Windows: they find Python 3.12 or newer, build `.venv`, install only when the version changed and pass the exit code through. [#244](https://github.com/dwhagar/evolutionSimulator/pull/244)
 - `STORE.2`: A run is one `run.sqlite` file: history is saved as it is sampled, a checkpoint is one transaction so a kill in the middle leaves the last good one, a second program can open a run read-only while one writes, and old folder runs are imported on first open (old files kept in `imported/`). [#243](https://github.com/dwhagar/evolutionSimulator/pull/243)
