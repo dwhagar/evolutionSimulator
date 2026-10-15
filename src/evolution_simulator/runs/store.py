@@ -62,6 +62,7 @@ from evolution_simulator.runs.database import (
 )
 from evolution_simulator.runs.errors import RunError
 from evolution_simulator.runs.paths import default_runs_root
+from evolution_simulator.species import SpeciesRow, SpeciesTracker
 from evolution_simulator.world.persistence import (
     FORMAT_VERSION,
     SaveFormatError,
@@ -452,6 +453,7 @@ class Run:
         self._last_seconds: float | None = None
         self._last_wall: float | None = None
         self._recorder: Recorder | None = None
+        self._tracker: SpeciesTracker | None = None
         self._history_stale = False
         """The history rows may be behind the recorder (a write failed); the next checkpoint
         rewrites them."""
@@ -508,6 +510,9 @@ class Run:
         recorder, self._recorder = self._recorder, None
         if recorder is not None:
             recorder.remove_tier_listener(self._on_tiers)
+        tracker, self._tracker = self._tracker, None
+        if tracker is not None:
+            tracker.remove_sample_listener(self._on_species)
         if self._leased and not self._file.closed and not self._file.readonly:
             self._leased = False
             self._file.set_meta(writer=None)
@@ -659,6 +664,22 @@ class Run:
             self._history_stale = True
             raise
         recorder.add_tier_listener(self._on_tiers)
+        tracker = recorder.species
+        if tracker is not None:
+            self._tracker = tracker
+            try:
+                self._file.species_replace(tracker.rows())
+            except RunError:
+                log.exception("The species of %s could not be written", self.id)
+            tracker.add_sample_listener(self._on_species)
+
+    def _on_species(self, tracker: SpeciesTracker) -> None:
+        if self._file.closed:
+            return
+        try:
+            self._file.species_upsert(tracker.rows())
+        except Exception:
+            log.exception("The species of %s could not be written", self.id)
 
     def _on_tiers(self, changes: Sequence[TierChange]) -> None:
         if self._history_stale or self._file.closed:
@@ -707,6 +728,12 @@ class Run:
     def history(self) -> HistorySamples | None:
         """The recorded history, current to the last sample taken, or ``None`` if there is none."""
         return self._file.history_read()
+
+    def species(self) -> list[SpeciesRow]:
+        """Every species the run has seen (``SpeciesRow``: parent, first and last day, extinction,
+        peak size, divergence), by kind and id. Their sizes over time are the history's
+        ``species.<kind>.<id>`` series. Empty for a run with no species tracker."""
+        return self._file.species_read()
 
     # ---- autosave ---------------------------------------------------------------------------
 

@@ -27,20 +27,32 @@ from typing import Any
 from evolution_simulator.history.recorder import TierChange
 from evolution_simulator.history.samples import HistorySamples, Sample, Stat, Tier
 from evolution_simulator.runs.errors import RunError
+from evolution_simulator.species import SpeciesRow
 
 log = logging.getLogger(__name__)
 
 FILE_NAME = "run.sqlite"
 APPLICATION_ID = 0x45565331
 """``EVS1``: the file is an Evolution Simulator run (SQLite stores it in the file's header)."""
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 """The tables below. A later change is a function in ``MIGRATIONS`` that takes the file from the
 number before it; a file with a higher number than this one is refused, not guessed at."""
 BUSY_SECONDS = 5.0
 WAL_LIMIT = 8 * 1024 * 1024
 """A WAL that grew for a big checkpoint is cut back to this when it is next emptied."""
 
-SCHEMA = """
+SPECIES_TABLE = """
+CREATE TABLE IF NOT EXISTS species (
+    kind TEXT NOT NULL, id INTEGER NOT NULL, parent INTEGER,
+    first_day REAL NOT NULL, last_day REAL NOT NULL, extinct_day REAL, merged_into INTEGER,
+    peak INTEGER NOT NULL, divergence REAL,
+    PRIMARY KEY (kind, id)) WITHOUT ROWID;
+"""
+"""``SPECIES.2``: who each species is (the series of their sizes are ``level`` rows named
+``species.<kind>.<id>``). Schema 2 added it."""
+
+SCHEMA = (
+    """
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
 CREATE TABLE checkpoints (
     id INTEGER PRIMARY KEY,
@@ -73,11 +85,19 @@ CREATE TABLE histogram (
     tier INTEGER NOT NULL, day INTEGER NOT NULL, name INTEGER NOT NULL, bins BLOB NOT NULL,
     PRIMARY KEY (tier, day, name)) WITHOUT ROWID;
 """
+    + SPECIES_TABLE
+)
 """Values and statistics are REAL without NOT NULL because SQLite stores a NaN as NULL; reading a
 NULL back gives NaN."""
 
-MIGRATIONS: dict[int, Any] = {}
-"""``{n: function(connection)}`` taking the file from schema ``n - 1`` to ``n``; none yet."""
+
+def _add_species_table(connection: sqlite3.Connection) -> None:
+    connection.execute(SPECIES_TABLE.strip())
+
+
+MIGRATIONS: dict[int, Any] = {2: _add_species_table}
+"""``{n: function(connection)}`` taking the file from schema ``n - 1`` to ``n``: 2 adds the
+``species`` table."""
 
 TABLES = (
     "meta",
@@ -456,6 +476,71 @@ class RunFile:
             (tick,),
         )
         return None if not rows or rows[0][0] is None else bytes(rows[0][0])
+
+    # ---- the species --------------------------------------------------------------------------
+
+    def species_replace(self, rows: Sequence[SpeciesRow]) -> None:
+        """Make the ``species`` table hold exactly ``rows``."""
+        with self.transaction(), self._lock:
+            try:
+                self._connection.execute("DELETE FROM species")
+                self._species_put(rows)
+            except sqlite3.Error as error:
+                raise RunError(f"{self.path.name} cannot be written: {error}") from error
+
+    def species_upsert(self, rows: Sequence[SpeciesRow]) -> None:
+        """Add or update these species (the others stay, extinct ones the tracker has forgotten
+        among them)."""
+        with self.transaction(), self._lock:
+            try:
+                self._species_put(rows)
+            except sqlite3.Error as error:
+                raise RunError(f"{self.path.name} cannot be written: {error}") from error
+
+    def _species_put(self, rows: Sequence[SpeciesRow]) -> None:
+        self._connection.executemany(
+            "INSERT OR REPLACE INTO species(kind, id, parent, first_day, last_day, extinct_day, "
+            "merged_into, peak, divergence) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    r.kind,
+                    r.id,
+                    r.parent,
+                    r.first_day,
+                    r.last_day,
+                    r.extinct_day,
+                    r.merged_into,
+                    r.peak,
+                    r.divergence,
+                )
+                for r in rows
+            ],
+        )
+
+    def species_read(self) -> list[SpeciesRow]:
+        """Every species the file knows, by kind and id (empty for a file from before schema 2 that
+        was opened read-only)."""
+        try:
+            rows = self._query(
+                "SELECT kind, id, parent, first_day, last_day, extinct_day, merged_into, peak, "
+                "divergence FROM species ORDER BY kind, id"
+            )
+        except RunError:
+            return []
+        return [
+            SpeciesRow(
+                str(kind),
+                int(sid),
+                None if parent is None else int(parent),
+                float(first),
+                float(last),
+                None if extinct is None else float(extinct),
+                None if merged is None else int(merged),
+                int(peak),
+                _number(divergence),
+            )
+            for kind, sid, parent, first, last, extinct, merged, peak, divergence in rows
+        ]
 
     # ---- the history --------------------------------------------------------------------------
 
