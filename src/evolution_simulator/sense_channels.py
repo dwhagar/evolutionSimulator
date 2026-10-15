@@ -188,12 +188,15 @@ def percepts_class(
     module: str = __name__,
 ) -> type:
     """Build the frozen ``Percepts`` dataclass: one field per world channel, defaulting to "nothing"
-    (0.0, or False for a flag), plus ``senses_nothing``."""
+    (0.0, or False for a flag), plus ``senses_nothing`` and ``targets``: the ``(class, id)`` of the
+    nearest thing of each class that was reported (the eyes of ``UX.43`` turn toward one of them). It
+    is not a brain input and takes no part in comparing two ``Percepts``."""
     fields: list[tuple[str, type, Any]] = [
         (c.name, bool if c.is_flag else float, field(default=False if c.is_flag else 0.0))
         for c in world_channels(channels)
     ]
 
+    fields.append(("targets", tuple, field(default=(), compare=False, repr=False)))
     sensed = tuple(c.name for c in world_channels(channels) if not c.ambient)
 
     def senses_nothing(self: Any) -> bool:

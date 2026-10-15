@@ -2,10 +2,11 @@
 
 A mode turns the animals of a frame into one colour each. Every colour is picked to stay readable
 for the common kinds of colour blindness: the categorical pair (sex) uses the Okabe-Ito blue and
-reddish purple, the two ramps (energy, age) change in lightness as well as hue, and the diverging
-ramp (diet) runs from blue to vermillion through a pale middle, the Okabe-Ito pair that stays apart
-for red-green colour blindness. Nothing means anything by colour alone: sex also changes the shape
-(females have a notch at the back), sleep dims and rings the animal, pregnancy puts a dot on it.
+reddish purple and the two ramps (energy, age) change in lightness as well as hue. The diet colours
+are the owner's blue and red; the "colour-blind safe" option swaps them for the Okabe-Ito blue and
+vermillion through a pale middle, which stay apart for red-green colour blindness. Nothing means
+anything by colour alone (UX.43): the spotted sex has spots, sleep dims and rings the animal and
+shuts its eyes, pregnancy puts a dot on it.
 
 ``MODES`` is the menu. A mode that needs columns the frame does not carry (the family colour needs the
 two family numbers of UX.30) is listed but reported unavailable.
@@ -19,6 +20,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from evolution_simulator import colour
 from evolution_simulator.session.snapshot import ANIMAL_FLAGS
 from evolution_simulator.viewer.worldview.layers import Layer
 
@@ -29,8 +31,19 @@ ENERGY_STOPS = ((122, 74, 164), (45, 128, 180), (30, 170, 150), (150, 210, 80), 
 """Low energy (purple) to full (yellow): lightness climbs the whole way."""
 AGE_STOPS = ((250, 240, 170), (235, 170, 40), (185, 85, 110), (110, 60, 150))
 """Newborn (pale) to worn out (deep purple)."""
-DIET_STOPS = ((0, 114, 178), (225, 228, 232), (213, 94, 0))
-"""Plant eater (blue) through a pale middle to meat eater (vermillion)."""
+
+
+def _rgb255(position: float) -> tuple[int, int, int]:
+    r, g, b = colour.rgb(position)
+    return round(r * 255), round(g * 255), round(b * 255)
+
+
+DIET_STOPS = (_rgb255(0.5), _rgb255(0.25), _rgb255(0.0))
+"""Plant eater (blue) through purple to meat eater (red), the owner's colours (issue #129): the
+colour line of ``colour.py`` from a meat share of 0 to 1."""
+SAFE_DIET_STOPS = ((0, 114, 178), (225, 228, 232), (213, 94, 0))
+"""The colour-blind-safe pair (Okabe-Ito blue and vermillion through a pale middle), chosen with the
+view's "colour-blind safe" option."""
 MALE = (86, 180, 233)
 FEMALE = (204, 121, 167)
 
@@ -107,6 +120,42 @@ def _family(layer: Layer) -> Colours:
     return FamilyScale.of(layer).colours(layer.col("family_a"), layer.col("family_b"))
 
 
+def body_positions(layer: Layer) -> np.ndarray:
+    """Where each animal's coat sits on the colour line (``colour.py``): the frame's ``colour``
+    column once the colour gene exists (``TRAIT.21``), until then worked out from the diet."""
+    if "colour" in layer.columns:
+        return layer.col("colour").astype(np.float64)
+    return 0.5 * (1.0 - np.clip(np.nan_to_num(layer.col("diet").astype(np.float64)), 0.0, 1.0))
+
+
+def colour_line(positions: np.ndarray) -> Colours:
+    """``(n, 3)`` uint8 colours at ``positions`` (0 to 1) on the colour line."""
+    at = np.clip(np.nan_to_num(positions.astype(np.float64)), 0.0, 1.0)
+    anchors = np.asarray(colour.ANCHORS, dtype=np.float64) * 255.0
+    channels = [np.interp(at, colour.POSITIONS, anchors[:, c]) for c in range(3)]
+    return np.rint(np.stack(channels, axis=1)).astype(np.uint8)
+
+
+def body_colours(layer: Layer, safe: bool = False) -> Colours:
+    """The body colour of every animal in the frame (UX.43): the one place that says it.
+
+    The coat's position on the colour line, turned into RGB by the shared ``colour`` module. For
+    now the position comes from the diet (blue plant eaters, red meat eaters, purple between);
+    when the frame carries the colour gene it is read from there, with no other change. ``safe``
+    swaps to the colour-blind-safe pair, by diet."""
+    if safe:
+        return ramp(SAFE_DIET_STOPS, layer.col("diet"))
+    return colour_line(body_positions(layer))
+
+
+def plant_shades(levels: int, toughness: float = 0.0) -> Colours:
+    """``levels`` plant colours from sparse to full, darker the tougher the plant (UX.44 will pass
+    each plant's toughness once the trade-off traits of TRAIT.13 exist; 0 is the plain green)."""
+    shades = ramp((PLANT_DIM, PLANT_FULL), np.linspace(0.0, 1.0, levels))
+    darker = 1.0 - colour.FOLIAGE_DARKENING * min(max(toughness, 0.0), 1.0)
+    return np.rint(shades.astype(np.float64) * darker).astype(np.uint8)
+
+
 @dataclass(frozen=True)
 class ColourMode:
     id: str
@@ -114,13 +163,21 @@ class ColourMode:
     colours: Callable[[Layer], Colours]
     needs: tuple[str, ...] = ()
     """The columns the frame must carry for this mode to work."""
+    safe_colours: Callable[[Layer], Colours] | None = None
+    """The same mode with colour-blind-safe colours, for modes whose plain colours are not."""
+
+    def paint(self, layer: Layer, safe: bool = False) -> Colours:
+        """The colours of the frame's animals, the safe ones if asked and the mode has them."""
+        if safe and self.safe_colours is not None:
+            return self.safe_colours(layer)
+        return self.colours(layer)
 
     def available(self, columns: tuple[str, ...]) -> bool:
         return all(name in columns for name in self.needs)
 
 
 MODES: tuple[ColourMode, ...] = (
-    ColourMode("diet", "Diet", _column("diet", DIET_STOPS)),
+    ColourMode("diet", "Diet", body_colours, safe_colours=lambda layer: body_colours(layer, True)),
     ColourMode("sex", "Sex", _sex),
     ColourMode("energy", "Energy", _column("energy_ratio", ENERGY_STOPS)),
     ColourMode("age", "Age", _column("age_ratio", AGE_STOPS)),

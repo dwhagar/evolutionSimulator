@@ -77,7 +77,7 @@ def test_an_animal_keeps_its_key_and_the_view_and_frame_carry_it():
     assert key == family_key(animal.traits.dna)
     view = world.animal_views()[0]
     assert (view.family_a, view.family_b) == key
-    assert ANIMAL_FIELDS[-2:] == ("family_a", "family_b")
+    assert ANIMAL_FIELDS[-3:-1] == ("family_a", "family_b")
     block = pack_animals([view])
     assert block.columns == ANIMAL_COLUMNS and FRAME_FORMAT >= 2
     assert block.column("family_a")[0] == pytest.approx(key[0])
