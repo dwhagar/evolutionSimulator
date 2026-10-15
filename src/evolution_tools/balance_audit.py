@@ -59,7 +59,7 @@ import random
 import re
 import sys
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 
 from evolution_simulator.config import DEFAULT_RULES, SensingRules, TraitRules
@@ -93,6 +93,20 @@ SRC = ROOT / "src" / "evolution_simulator"
 # --------------------------------------------------------------------------------------------------
 
 
+AUDIT_RULES: TraitRules = replace(
+    DEFAULT_RULES,
+    body=replace(DEFAULT_RULES.body, burn_scale=1.0, kinetic_burn=0.35),
+    sleep=replace(DEFAULT_RULES.sleep, energy_regain=0.002),
+    world=replace(DEFAULT_RULES.world, graze_amount=5.0),
+)
+"""The energy economy the habitats and verdicts below were set against: before ``WORLD.15`` made a
+tenth of the upkeep bill, a bite of 20 and small litters the defaults. The audit stays on it until
+its habitats are re-tuned for the new economy (a ``TRAIT.17`` follow-up); the genes themselves are
+the live layout's."""
+AUDIT_LEVELS = {**FOUNDER_LEVELS, "fertility": 0.75, "parenting": 0.0}
+"""The founders' reproduction genes of the same time, for the same reason."""
+
+
 def reference_animal(**genes: float) -> DNA:
     """The animal every sweep starts from: the middle (0.5) of every gene, the reproduction genes at
     ``FOUNDER_LEVELS``, no camouflage and sex 0 (the brain is left as drawn, since nothing here has
@@ -101,7 +115,7 @@ def reference_animal(**genes: float) -> DNA:
     for gene in ANIMAL_LAYOUT.genes:
         if gene.block is None:
             dna = dna.with_value(gene.id, 0.5)
-    for gene_id, level in FOUNDER_LEVELS.items():
+    for gene_id, level in AUDIT_LEVELS.items():
         dna = dna.with_value(gene_id, level)
     dna = dna.with_value("camouflage", FOUNDER_CAMOUFLAGE).with_value("sex_strategy", 0.0)
     for gene_id, value in genes.items():
@@ -259,7 +273,7 @@ def _seedling_established(
 
 
 def plant_births(
-    dna: DNA, stand: Stand, rules: TraitRules = DEFAULT_RULES, days: int = PLANT_HORIZON_DAYS
+    dna: DNA, stand: Stand, rules: TraitRules = AUDIT_RULES, days: int = PLANT_HORIZON_DAYS
 ) -> list[tuple[float, float]]:
     """The ``(tick, established seedlings)`` a plant of this genome leaves in ``stand``, each burst
     weighted by the chance that the plant is still alive to make it (``adult_hazard``).
@@ -314,7 +328,7 @@ def plant_births(
 
 
 def plant_fitness(
-    dna: DNA, stand: Stand, rules: TraitRules = DEFAULT_RULES, days: int = PLANT_HORIZON_DAYS
+    dna: DNA, stand: Stand, rules: TraitRules = AUDIT_RULES, days: int = PLANT_HORIZON_DAYS
 ) -> float:
     """The growth rate per day of a lineage of this plant in ``stand`` (see ``growth_rate``)."""
     return growth_rate(plant_births(dna, stand, rules, days))
@@ -435,7 +449,7 @@ def live_animal(
     dna: DNA,
     habitat: Habitat,
     seed: int,
-    rules: TraitRules = DEFAULT_RULES,
+    rules: TraitRules = AUDIT_RULES,
     ticks: int = ANIMAL_HORIZON_TICKS,
 ) -> list[tuple[float, float]]:
     """One animal's life in ``habitat``: the ``(tick, weight)`` of every birth it fathers or bears,
@@ -565,7 +579,7 @@ def animal_fitness(
     habitat: Habitat,
     animals: int = 8,
     ticks: int = ANIMAL_HORIZON_TICKS,
-    rules: TraitRules = DEFAULT_RULES,
+    rules: TraitRules = AUDIT_RULES,
     seed: int = 1,
 ) -> float:
     """The growth rate per day of a lineage founded by ``animals`` animals of this genome in
@@ -770,13 +784,13 @@ def price(layout: str, gene: str) -> float:
 
     def upkeep(value: float) -> float:
         if layout == "plant":
-            return PlantTraits(reference_plant(**{gene: value})).basal_metabolism
-        return AnimalTraits(reference_animal(**{gene: value})).basal_metabolism
+            return PlantTraits(reference_plant(**{gene: value}), AUDIT_RULES).basal_metabolism
+        return AnimalTraits(reference_animal(**{gene: value}), rules=AUDIT_RULES).basal_metabolism
 
     swing = upkeep(1.0) - upkeep(0.0)
     if layout == "plant":
         return swing / upkeep(0.5)
-    reference = AnimalTraits(reference_animal())
+    reference = AnimalTraits(reference_animal(), rules=AUDIT_RULES)
     rules = reference.rules.body
     moving = FORAGE_SPEED_RATIO * reference.current_max_speed
     whole = reference.basal_metabolism + (moving / rules.speed_reference) ** 2 * (
