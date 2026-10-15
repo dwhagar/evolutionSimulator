@@ -1,6 +1,6 @@
 # Plant trade-offs, effort to eat and animal resistance
 
-Design for TRAIT.13 to TRAIT.16, from the owner's request of 2026-10-14. Written by the TODO thread from the code as it is on main; the numbers below are the shape of each rule, not tuned values (the build threads tune them, after WORLD.15, and record them in [trait-config.md](trait-config.md)). Open points are in [#216](https://github.com/dwhagar/evolutionSimulator/issues/216); each has a default, used until the owner answers.
+Design for TRAIT.13 to TRAIT.16, from the owner's request of 2026-10-14. Written by the TODO thread from the code as it is on main; the numbers below are the shape of each rule, not tuned values (the build threads tune them, after WORLD.15, and record them in [trait-config.md](trait-config.md)). The owner answered the three design questions in [#216](https://github.com/dwhagar/evolutionSimulator/issues/216) with the defaults named here (bigger plants pay more to stay poisonous; `toughness` is its own gene; an animal carries the poison it ate and its meat poisons whoever eats it, with no animal toxin gene for now). The second balancer is a direct cost (question 4, answered).
 
 ## What the owner asked for
 
@@ -13,9 +13,9 @@ Design for TRAIT.13 to TRAIT.16, from the owner's request of 2026-10-14. Written
 
 ## The rule behind all of it: two balancers per gene
 
-The owner's general rule (2026-10-14, for every gene, plant and animal): **every gene needs two balancers.** The first is an **inter-gene reaction**: the gene is connected to other genes through auxiliary traits, so raising it changes something else about the organism. The owner's example: a plant with more seeds is easier to eat, so it is more likely to get eaten. The owner has not yet said what the second balancer is. Until they do, the working default is the one the animal side already uses (TRAIT.9): a **direct cost** (upkeep, a share of a budget, a delay). Both are recorded per gene in the balancer table, and a test fails if a gene has fewer than two entries. If the owner names a different second balancer, the table gets that column instead. ([#216](https://github.com/dwhagar/evolutionSimulator/issues/216), question 4.)
+The owner's general rule (2026-10-14, for every gene, plant and animal): **every gene needs two balancers.** The first is an **inter-gene reaction**: the gene is connected to other genes through auxiliary traits, so raising it changes something else about the organism. The owner's example: a plant with more seeds is easier to eat, so it is more likely to get eaten. The second is a **direct cost** (the owner's answer to question 4): upkeep, a share of a budget or a delay, as on the animal side since TRAIT.9. Both are recorded per gene in the balancer table, and a test fails if a gene has fewer than two entries. ([#216](https://github.com/dwhagar/evolutionSimulator/issues/216), question 4.)
 
-In the table below, the "side effect" part is the first balancer (the inter-gene link) and the "cost" part is the working second one. The animal genes need the same table (TRAIT.17).
+In the table below, the "side effect" part is the first balancer (the inter-gene link) and the "cost" part is the second one. The animal genes need the same table (TRAIT.17).
 
 The TRAIT.9 rule for animals also still applies:
 
