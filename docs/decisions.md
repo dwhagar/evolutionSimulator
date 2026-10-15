@@ -4,6 +4,10 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-15: pause
+
+The owner paused the project: "alright let's go ahead and we're going to shut down for a while, let all threads finish their current task and todo needs to update github with everything, but then go idle." Every thread finished and merged; [resume.md](resume.md) is the handover. Nothing new was started.
+
 ## 2026-10-15: owner taps on the starting world and the touch and taste cost
 
 The owner confirmed the defaults of [#242](https://github.com/dwhagar/evolutionSimulator/issues/242) and [#249](https://github.com/dwhagar/evolutionSimulator/issues/249). Starting world (`WORLD.15` part 2): (1) the upkeep bill is a tenth of today's, with the moving cost scaled with it; (2) a bite of a plant is 20; (3) the first plants carry about 30% of today's poison; (4) founder fertility 0.3 and parenting 0.1; (5) the world keeps its size (1,000 by 1,000, 800 plants) and the plants start grown with spread ages. (6) Hearing and smell acuity (`SENSE.22`) costs like sight: the sense costs more as its sharpness rises (area times one plus acuity) and sharper means smaller errors. (7) Positions stay two-dimensional for good, so the numpy arrays (`WORLD.20`) are two-dimensional only. (#249) Touch and taste keep their costs.

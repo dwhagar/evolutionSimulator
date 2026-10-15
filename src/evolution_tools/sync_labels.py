@@ -97,11 +97,17 @@ def gh(*args: str) -> subprocess.CompletedProcess:
 
 def current() -> dict[str, str]:
     """The colours the repository's labels have now."""
-    done = gh(
-        "--paginate", f"repos/{REPO}/labels?per_page=100", "--jq", ".[] | [.name, .color] | @tsv"
-    )
-    pairs = (line.split("\t") for line in done.stdout.splitlines() if "\t" in line)
-    return {name: colour_ for name, colour_ in pairs}
+    found: dict[str, str] = {}
+    page = 1
+    while True:
+        done = gh(
+            f"repos/{REPO}/labels?per_page=100&page={page}", "--jq", ".[] | [.name, .color] | @tsv"
+        )
+        rows = [line.split("\t") for line in done.stdout.splitlines() if "\t" in line]
+        found.update({name: colour_ for name, colour_ in rows})
+        if len(rows) < 100:
+            return found
+        page += 1
 
 
 def apply_label(name: str, wanted_colour: str, description: str = "") -> None:
