@@ -4,6 +4,25 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-15: how creatures look, and the last cards
+
+The owner answered [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) in their own words: "For how creatures should look, little round creatures with eyes in the front that point in the direction they are focused on within their vision. Color should be a separate trait tied to what they eat (carnivore red herbivore blue), markings will determine gender (ladybug style little spots or no spots), but color of their body should also be its own value as when it's closer to the foliage they are in they are harder to see. Also plants are darker that are tougher."
+
+This replaces the default (triangles coloured by diet). It splits into: `UX.43` (draw round creatures with front eyes that turn toward their target inside the field of vision, colour from diet for now, spots for one sex), `UX.44` (plants darker when tougher, after `TRAIT.13`), `TRAIT.20` (a design note for the colour gene and hiding in foliage) and `TRAIT.21` (the build, in animal layout 10 with `TRAIT.15` and `SENSE.22`, two balancers, the balance gate). The open details are four questions with defaults in [#246](https://github.com/dwhagar/evolutionSimulator/issues/246): colour is its own gene that starts at the diet colour and mutates freely; it sits alongside the camouflage gene; the background is plant green and ground blended by nearby cover; females carry the spots. The gene freeze for the numpy build now also waits for `TRAIT.21`.
+
+The remaining cards were answered with the defaults, all logged in the Done table of TODO.md and closed:
+
+| Issue | Task | Answer |
+| --- | --- | --- |
+| [#90](https://github.com/dwhagar/evolutionSimulator/issues/90) | SENSE.19 | Predator and prey eyes are only a starting point; evolution is free |
+| [#54](https://github.com/dwhagar/evolutionSimulator/issues/54) | BRAIN.18 | All four brain operating settings are genes (gain, reaction time, curiosity, learning rate) |
+| [#55](https://github.com/dwhagar/evolutionSimulator/issues/55) | BRAIN.19 | Keep the reward weights |
+| [#56](https://github.com/dwhagar/evolutionSimulator/issues/56) | BRAIN.20 | A medium cap on the nightly change |
+| [#126](https://github.com/dwhagar/evolutionSimulator/issues/126) | UX.5 | Keep saving, resuming, headless runs and recorded history |
+| [#130](https://github.com/dwhagar/evolutionSimulator/issues/130) | UX.24 | Keep all speed presets |
+| [#131](https://github.com/dwhagar/evolutionSimulator/issues/131) | UX.25 | Keep the run folder and the 5 GB warning as built |
+| [#133](https://github.com/dwhagar/evolutionSimulator/issues/133) | UX.27 | The brain view shows both bars and the network, bars first |
+
 ## 2026-10-15: owner taps on the senses questions
 
 The owner answered the senses cards. Every answer except one is the default the builds were already using, so only the last row changes any work.

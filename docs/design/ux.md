@@ -1270,7 +1270,7 @@ Filed as issues, each with a default so nothing waits. The earlier four are
 [#126](https://github.com/dwhagar/evolutionSimulator/issues/126).
 
 1. [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) **Look of the creatures** (`UX.23`, feeds `UX.12`): colour by what by default, and the shape. Default: triangles by heading,
-   colour by diet, switchable.
+   colour by diet, switchable. **Answered 2026-10-15, replacing the default:** round creatures with eyes at the front pointing where they focus inside their field of vision, colour tied to diet (carnivore red, herbivore blue) and its own gene, spots for one sex, and darker tougher plants (`UX.43`, `UX.44`, `TRAIT.20`, `TRAIT.21`; [docs/decisions.md](../decisions.md)).
 2. [#130](https://github.com/dwhagar/evolutionSimulator/issues/130) **Slow and impossible speeds** (`UX.24`, feeds `UX.13`): the lowest presets (real time, a minute a second) move almost nothing
    with an hourly tick, and the fastest cannot be reached. Default: keep all presets, glide between ticks,
    show achieved speed, and add "as fast as possible".
