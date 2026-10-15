@@ -8,7 +8,9 @@ from evolution_simulator.layouts import ANIMAL_LAYOUT, BRAIN_GENE, PLANT_LAYOUT
 from evolution_simulator.world import TimeScale, Vec, World, WorldConfig
 
 BRAIN_SIZE = BRAIN_GENE.count
-ANIMAL_BASE = DNA(ANIMAL_LAYOUT, "1" * ANIMAL_LAYOUT.length)
+ANIMAL_BASE = DNA(ANIMAL_LAYOUT, "1" * ANIMAL_LAYOUT.length).replaced("camouflage", "0000")
+"""All 1s but for camouflage (``SENSE.21``), which starts at zero so the numbers pinned for the
+reference animal keep their values."""
 PLANT_BASE = DNA(PLANT_LAYOUT, "1" * PLANT_LAYOUT.length)
 
 

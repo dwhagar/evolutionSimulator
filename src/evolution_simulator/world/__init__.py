@@ -2,11 +2,13 @@
 
 Modules: ``vector`` (positions), ``bounds`` (WORLD.4), ``timescale`` (WORLD.3), ``spatial`` (finding
 neighbours), ``daycycle`` and ``sleep`` (WORLD.5), ``organisms``, ``combat`` (attacks, BRAIN.10), ``corpses`` (what the dead leave, WORLD.12), ``mating`` (who mates with
-whom, REPRO.4), ``events`` and ``views`` (what listeners and viewers may read, UX.6), ``senses``
+whom, REPRO.4), ``events`` and ``views`` (what listeners and viewers may read, UX.6), ``ancestry`` (who is whose
+child, the dead too, UX.39), ``senses``
 (swappable), ``persistence`` (save and load, UX.9) and ``world`` (WORLD.2).
 """
 
 from evolution_simulator.config import AttackRules, CorpseRules, DayCycle, PlantRules, WorldRules
+from evolution_simulator.world.ancestry import AncestryBook
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.corpses import Corpse
 from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
@@ -28,6 +30,8 @@ from evolution_simulator.world.views import (
     AnimalDetail,
     AnimalView,
     CorpseView,
+    FamilyView,
+    KinView,
     PlantView,
 )
 from evolution_simulator.world.world import StepReport, World, WorldConfig
@@ -37,6 +41,7 @@ __all__ = [
     "CORPSE_FIELDS",
     "PLANT_FIELDS",
     "SPEED_PRESETS",
+    "AncestryBook",
     "Animal",
     "AnimalDetail",
     "AnimalView",
@@ -50,6 +55,8 @@ __all__ = [
     "DayCycle",
     "Died",
     "EventListener",
+    "FamilyView",
+    "KinView",
     "Mated",
     "Pacer",
     "Plant",

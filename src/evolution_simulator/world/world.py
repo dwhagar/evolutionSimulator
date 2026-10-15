@@ -53,6 +53,7 @@ from evolution_simulator.learning import NightlyLearning
 from evolution_simulator.seed_brain import seeded_dna
 from evolution_simulator.sense_genes import HEARING_RANGE, SIGHT_REACH, SMELL_RANGE
 from evolution_simulator.traits import AnimalTraits, MatingResult, PlantTraits
+from evolution_simulator.world.ancestry import AncestryBook
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.corpses import Corpse
 from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
@@ -74,6 +75,7 @@ from evolution_simulator.world.views import (
     AnimalDetail,
     AnimalView,
     CorpseView,
+    FamilyView,
     PlantView,
     animal_detail,
     animal_view,
@@ -224,6 +226,8 @@ class World:
             ScentField(scent_rules, self.dt) if scent_rules.enabled else None
         )
         """Smell trails (``SENSE.20``); ``None`` when the run does not have them."""
+        self.ancestry = AncestryBook()
+        """Who is whose child, dead animals included, up to a bound (UX.39)."""
         self.max_canopy: float = 0.0
         """Largest canopy radius of any plant added so far; bounds the plant search radius."""
         self.max_body: float = 0.0
@@ -394,6 +398,11 @@ class World:
         """The ids of the living animals that name ``animal_id`` as a parent, oldest first."""
         return tuple(a.id for a in self.animals if animal_id in a.parents)
 
+    def family_of(self, animal_id: int) -> FamilyView | None:
+        """The animal's place in the family tree: ancestors and descendants, dead ones too as far
+        as ``ancestry`` remembers them (``None`` for an animal it does not know)."""
+        return self.ancestry.family_of(animal_id)
+
     def trace_brain(self, animal_id: int | None) -> bool:
         """Keep the brain's last inputs, hidden values and outputs for this animal (and stop for
         the one traced before); ``None`` stops tracing. They appear in ``animal_detail`` once its
@@ -504,6 +513,7 @@ class World:
         self._animals[animal.id] = animal
         self._animal_index.insert(animal.id, animal.position, animal.radius)
         self.max_body = max(self.max_body, animal.radius)
+        self.ancestry.born(animal.id, parents, traits.sex, self._event_tick, traits.family_key)
         if self._event_listeners:
             self._emit(
                 Born(
@@ -1025,6 +1035,9 @@ class World:
             organism = organisms.pop(organism_id)
             if organism_id in index:
                 index.remove(organism_id)
+            if isinstance(organism, Animal):
+                cause = organism.traits.death_cause or DeathCause.DAMAGE
+                self.ancestry.died(organism_id, self._event_tick, cause)
             if self._event_listeners:
                 self._emit_death(organism)
         return len(dead)

@@ -187,8 +187,11 @@ class AnimalTraits(BaseTraits):
         self.max_damage_capacity = body.damage_capacity * (1.0 + t["size"])
         self.max_energy = body.energy_capacity * (1.0 + (body.energy_size_gain * t["size"]))
 
-        self.base_max_speed: float = (body.speed_base + (body.speed_span * t["speed"])) / (
-            1.0 + (body.speed_size_drag * t["size"])
+        self.camouflage: float = t["camouflage"]
+        self.base_max_speed: float = (
+            (body.speed_base + (body.speed_span * t["speed"]))
+            / (1.0 + (body.speed_size_drag * t["size"]))
+            * (1.0 - body.camouflage_slowing * self.camouflage)
         )
         self.base_turn_rate: float = (body.turn_base + (body.turn_span * t["agility"])) / (
             1.0 + (body.turn_size_drag * t["size"])
@@ -288,6 +291,7 @@ class AnimalTraits(BaseTraits):
             t["aggression"] ** 2 + t["fear"] ** 2
         )
         self.learning_upkeep: float = rules.brain.learning_cost * t["learning_rate"]
+        self.camouflage_upkeep: float = body.camouflage_cost * self.camouflage**2
         self.basal_metabolism = (
             (body.basal_scale * (self.mass**body.basal_exponent))
             + self.repair_upkeep
@@ -298,6 +302,7 @@ class AnimalTraits(BaseTraits):
             + self.agility_upkeep
             + self.temperament_upkeep
             + self.learning_upkeep
+            + self.camouflage_upkeep
             + sensory_overhead
             + self.gut_maintenance
             + self.brain_upkeep

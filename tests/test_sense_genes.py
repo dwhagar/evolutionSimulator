@@ -175,7 +175,7 @@ LEVELS = [i / 20 for i in range(21)]
 
 
 def test_the_acuity_gene_sits_after_the_field_gene_in_the_sight_cluster():
-    assert ANIMAL_LAYOUT.version == 8
+    assert ANIMAL_LAYOUT.version == 9
     assert ANIMAL_LAYOUT.clusters["sight"] == ("sight_range", "sight_fov", "sight_acuity")
     assert ANIMAL_LAYOUT.gene("sight_acuity").start == ANIMAL_LAYOUT.gene("sight_fov").end
 

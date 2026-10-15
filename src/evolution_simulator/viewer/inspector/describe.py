@@ -26,7 +26,7 @@ from evolution_simulator.history import HistorySamples
 from evolution_simulator.layouts import ANIMAL_LAYOUT
 from evolution_simulator.session import ANIMAL_FLAGS, Frame
 from evolution_simulator.viewer.worldview.layers import Layer
-from evolution_simulator.world.views import AnimalDetail
+from evolution_simulator.world.views import AnimalDetail, KinView
 
 LEVEL_UNIT = "level 0 to 1"
 DIGIT_UNIT_PREFIX = "digit"
@@ -406,3 +406,22 @@ def relative_text(relative: Relative) -> str:
 
 def ids_text(ids: Sequence[int]) -> str:
     return ", ".join(f"#{i}" for i in ids) if ids else "none"
+
+
+# --- the family tree ----------------------------------------------------------------------
+
+
+def when_text(tick: int, tick_seconds: float | None) -> str:
+    """A tick as a simulated day ("day 3") or, while the tick length is unknown, as the tick."""
+    if tick_seconds is None:
+        return f"tick {tick}"
+    return f"day {int(tick * tick_seconds / DAY_SECONDS)}"
+
+
+def kin_text(kin: KinView, tick_seconds: float | None) -> str:
+    """One line on an animal of the tree: "#12, female, born day 3, died of old age on day 9"."""
+    text = f"#{kin.id}, {sex_name(kin.sex)}, born {when_text(kin.born, tick_seconds)}"
+    if kin.died is None:
+        return f"{text}, alive"
+    cause = death_text(kin.cause)
+    return f"{text}, {cause} on {when_text(kin.died, tick_seconds)}"

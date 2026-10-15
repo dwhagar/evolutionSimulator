@@ -32,12 +32,19 @@ _MIDDLE = 49.5
 """The character code of the digit 1.5, the middle of '0' (48) to '3' (51)."""
 
 
+def _unit_length(weights: tuple[float, ...]) -> tuple[float, ...]:
+    """The weights scaled so their squares add up to the number of weights, which makes the spread of
+    a random genome exactly 1 whatever draw the direction was (a chance direction can be off by 20%)."""
+    norm = math.sqrt(math.sumprod(weights, weights) / len(weights))
+    return tuple(w / norm for w in weights)
+
+
 def _weights(length: int) -> tuple[tuple[float, ...], float, tuple[float, ...], float, float]:
     found = _directions.get(length)
     if found is None:
         rng = random.Random(_SEED + length)
-        first = tuple(rng.gauss(0.0, 1.0) for _ in range(length))
-        second = tuple(rng.gauss(0.0, 1.0) for _ in range(length))
+        first = _unit_length(tuple(rng.gauss(0.0, 1.0) for _ in range(length)))
+        second = _unit_length(tuple(rng.gauss(0.0, 1.0) for _ in range(length)))
         # A uniform digit of 0 to 3 has variance 1.25; the weights of one projection add up in
         # squares, so this scale gives a random genome a spread of 1 on each key.
         scale = 1.0 / math.sqrt(1.25 * length)

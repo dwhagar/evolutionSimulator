@@ -12,6 +12,8 @@ An organism's body (its traits, brain, costs) is a function of its genome, the t
 world's tick length, so it is rebuilt by the same constructors that made it. Only what changes
 during a life is written: energy, health, damage, age, cooldowns, drive flags, the cached decision,
 the wander turn, the learner and the pregnancy. The spatial indexes are rebuilt from positions.
+The ancestry book (``UX.39``: who is whose child, the dead too, up to a bound) is written as it is; a
+save from before it (format 5) starts one from the living animals.
 
 **If you add state to the world, an organism or one of the objects below, add it here.**
 ``tests/test_persistence.py`` runs a rich world, saves it and compares *every attribute* of the
@@ -55,6 +57,7 @@ from evolution_simulator.dna import Genome
 from evolution_simulator.layouts import LAYOUTS, dna_from_dict
 from evolution_simulator.learning import Learner, Snapshot, State
 from evolution_simulator.traits import AnimalTraits, PlantTraits, Pregnancy
+from evolution_simulator.world.ancestry import AncestryBook
 from evolution_simulator.world.corpses import Corpse
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.senses import Senses, WorldSenses
@@ -64,7 +67,7 @@ from evolution_simulator.world.world import World, WorldConfig
 
 FORMAT = "evolution-simulator-world"
 """The document type, so a file of something else is refused with a clear message."""
-FORMAT_VERSION = 5
+FORMAT_VERSION = 6
 """The layout of the document. Bump it when the layout changes and add a migration if old saves can
 still be read."""
 
@@ -120,11 +123,19 @@ def _bites_corpses_and_world_settings_into_the_trait_rules(
     return data
 
 
+def _ancestry_book(data: dict[str, Any]) -> dict[str, Any]:
+    """Version 5 to 6 (``UX.39``): the world keeps an ancestry book. A save from before has none
+    (``None``): loading starts one from the living animals, who know their parents."""
+    data["world"].setdefault("ancestry", None)
+    return data
+
+
 _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     1: _learning_into_the_trait_rules,
     2: _sleep_into_the_trait_rules,
     3: _day_time_and_plants_into_the_trait_rules,
     4: _bites_corpses_and_world_settings_into_the_trait_rules,
+    5: _ancestry_book,
 }
 """``{n: f}``: ``f`` takes a document of version ``n`` and returns it as version ``n + 1``."""
 
@@ -521,6 +532,7 @@ def world_to_dict(world: World) -> dict[str, Any]:
             "plants": [_plant_to_data(p) for p in world.plants],
             "corpses": [_corpse_to_data(c) for c in world.corpses],
             "scent": None if world.scent is None else world.scent.records(),
+            "ancestry": world.ancestry.to_data(),
         },
     }
 
@@ -650,7 +662,21 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
             raise SaveFormatError(f"A pregnancy names animal {father_id}, who is not in the save.")
         assert mother_traits.pregnancy is not None
         mother_traits.pregnancy.father = father.traits
+    world.ancestry = _ancestry_from_data(world, data.get("ancestry"))
     return world
+
+
+def _ancestry_from_data(world: World, rows: Sequence[Any] | None) -> AncestryBook:
+    """The saved ancestry book, or for a save from before it a new one holding the living animals
+    (born as long ago as their age says)."""
+    if rows is not None:
+        return AncestryBook.from_data(rows)
+    book = AncestryBook()
+    for animal in world.animals:
+        traits = animal.traits
+        born = max(0, world.tick - traits.age_ticks)
+        book.born(animal.id, animal.parents, traits.sex, born, traits.family_key)
+    return book
 
 
 # =============================================================================

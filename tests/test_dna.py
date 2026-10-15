@@ -30,7 +30,7 @@ def rng(seed: int = 1) -> random.Random:
 
 
 def test_layout_lengths_match_prototype():
-    assert ANIMAL_LAYOUT.length == 1260  # 96 body digits plus a 1164-digit brain
+    assert ANIMAL_LAYOUT.length == 1264  # 100 body digits plus a 1164-digit brain
     assert PLANT_LAYOUT.length == 33
     assert TINY.length == 5
 
@@ -65,7 +65,8 @@ def test_animal_gene_positions_follow_the_clusters():
     assert span(ANIMAL_LAYOUT, "sex_strategy") == (79, 80)
     assert span(ANIMAL_LAYOUT, "brain_gain") == (80, 84)  # the operating genes follow the body
     assert span(ANIMAL_LAYOUT, "learning_rate") == (92, 96)
-    assert span(ANIMAL_LAYOUT, "brain") == (96, 1260)
+    assert span(ANIMAL_LAYOUT, "camouflage") == (96, 100)  # last in the body (SENSE.21)
+    assert span(ANIMAL_LAYOUT, "brain") == (100, 1264)
     assert span(PLANT_LAYOUT, "root_reach") == (20, 24)
 
 
@@ -119,7 +120,7 @@ def test_random_is_seeded_and_valid():
     a = DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a == DNA.random(ANIMAL_LAYOUT, rng(7))
     assert a != DNA.random(ANIMAL_LAYOUT, rng(8))
-    assert a.length == len(a) == 1260
+    assert a.length == len(a) == 1264
     assert a.layout is ANIMAL_LAYOUT
     assert set(a.sequence) <= {0, 1, 2, 3}
 

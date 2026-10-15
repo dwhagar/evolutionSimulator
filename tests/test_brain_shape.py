@@ -165,7 +165,7 @@ def test_the_gain_must_be_positive_and_is_part_of_the_brain():
 def test_the_brain_block_matches_the_blueprint():
     assert BRAIN_GENE.count == DEFAULT_BLUEPRINT.value_count
     assert BRAIN_GENE.groups == DEFAULT_BLUEPRINT.group_sizes
-    assert ANIMAL_LAYOUT.version == 8 and ANIMAL_LAYOUT.length == 96 + 1164
+    assert ANIMAL_LAYOUT.version == 9 and ANIMAL_LAYOUT.length == 100 + 1164
 
 
 def test_unit_crossover_keeps_a_slot_with_its_gate():
