@@ -262,7 +262,7 @@ limit working; it only stopped being a daily pulse.
 
 The default founder run (100 seeded animals, 800 plants, 1,000 by 1,000, hourly ticks) still ends in
 extinction with no births. This is the first reading of why and of what a change of constants can
-and cannot do. Every number below is from `scripts/founder_economy.py` (seeds 1 to 3 unless said, a
+and cannot do. Every number below is from `src/evolution_tools/founder_economy.py` (seeds 1 to 3 unless said, a
 run of 3,000 ticks is about 80 seconds); nothing in the rules has changed yet.
 
 **Where the energy goes.** Per animal and tick, seed 1, default constants:
@@ -335,7 +335,7 @@ with a few births a run. What blocks it is how little the founders eat per hour 
 touched in 15 to 30 ticks while a plant is in sight 88% of the time), how long the first breeding
 takes (the maturity cooldown is about 890 ticks and the population is at its lowest by then), and
 that newborns starve; the follow-ups for these went to the TODO thread with the `WORLD.15` row. The script takes these options:
-`python scripts/founder_economy.py burn=0.1 sleep.energy_regain=0.0002 world.graze_amount=20 tox=0.3
+`python -m evolution_tools.founder_economy burn=0.1 sleep.energy_regain=0.0002 world.graze_amount=20 tox=0.3
 grown=0.7 agespread=0.5 lvl.fertility=0.3 lvl.parenting=0.1` (add `account=1` for the energy table).
 
 ## Speed (WORLD.14, WORLD.17)

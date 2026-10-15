@@ -1,6 +1,6 @@
 """Speed benchmark: milliseconds per tick of a full world (``WORLD.19``, docs/design/numpy-core.md).
 
-    python scripts/benchmark_ticks.py [--sizes 60/300,300/3000,1000/5000] [--ticks 48]
+    python -m evolution_tools.benchmark_ticks [--sizes 60/300,300/3000,1000/5000] [--ticks 48]
         [--warmup 20] [--repeat 3] [--seed 3] [--engine object] [--profile]
         [--json out.json] [--compare baseline.json] [--tolerance 0.15] [--target-ms 41.7]
 
@@ -42,7 +42,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
 DEFAULT_SIZES = "60/300,300/3000,1000/5000"

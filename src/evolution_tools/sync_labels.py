@@ -1,13 +1,14 @@
-"""Give every TODO tag its own GitHub label colour, rotating through a palette (INFRA.8).
+"""Colour every TODO tag on GitHub by its category (INFRA.8, revised for INFRA.12).
 
-The tags are the task IDs in TODO.md, CHANGELOG.md and docs/decisions.md (``AREA.N``). Each one gets the next colour of ``PALETTE`` the
-first time it is seen, and the choice is kept in ``.github/label-colours.json`` so a tag keeps its
-colour and a new tag simply continues the rotation. ``needs-owner`` is the one fixed label: it marks
-an item or issue with an owner question that is still open, and is removed when the question is
-answered. The scheme is described in ``docs/labels.md``.
+The tags are the task IDs in TODO.md, CHANGELOG.md and docs/decisions.md (``AREA.N``). Each area has
+its own colour family and the items of an area are shades of it, cycling through six lightness
+steps, so a glance at the label list shows the category and no two neighbouring items look alike. A
+colour is worked out from the tag alone, so a new tag needs no bookkeeping. Two labels are fixed:
+``needs-owner`` is bright red (an owner question is open) and ``in-progress`` is royal blue (a thread
+is building it). The scheme is described in ``docs/labels.md``.
 
-    python -m evolution_tools.sync_labels            # update label-colours.json and print what would change
-    python -m evolution_tools.sync_labels --apply    # also create or recolour the labels with the gh CLI
+    python -m evolution_tools.sync_labels            # print the colours that GitHub should have
+    python -m evolution_tools.sync_labels --apply    # also create or recolour the labels with gh
 
 Needs only the standard library; ``--apply`` needs ``gh`` logged in with access to the repository.
 """
@@ -15,6 +16,7 @@ Needs only the standard library; ``--apply`` needs ``gh`` logged in with access 
 from __future__ import annotations
 
 import argparse
+import colorsys
 import json
 import re
 import subprocess
@@ -22,7 +24,6 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-COLOURS_FILE = ROOT / ".github" / "label-colours.json"
 SOURCES = (ROOT / "TODO.md", ROOT / "CHANGELOG.md", ROOT / "docs" / "decisions.md")
 REPO = "dwhagar/evolutionSimulator"
 
@@ -39,26 +40,29 @@ AREAS = (
     "SPECIES",
     "STORE",
 )
-"""The task areas, in the order of the table in TODO.md. A new area is added here and there."""
+"""The task areas, in the order of the table in TODO.md. A new area is added here and in FAMILIES."""
 
-PALETTE = (
-    "1d76db",  # blue
-    "0e8a16",  # green
-    "fbca04",  # yellow
-    "5319e7",  # purple
-    "ff7619",  # orange
-    "006b75",  # teal
-    "e99695",  # pink
-    "bfd4f2",  # light blue
-    "c2e0c6",  # light green
-    "d4c5f9",  # lavender
-    "f9d0c4",  # peach
-    "8b6f47",  # brown
-)
-"""Twelve distinct colours that stay readable with the text colour GitHub picks. Red is kept for
-``needs-owner`` and the default grey (ededed) is what an unassigned tag looks like."""
+FAMILIES: dict[str, tuple[float, float]] = {
+    "DOCS": (0.0, 0.0),  # grey
+    "INFRA": (205.0, 0.20),  # slate
+    "DNA": (130.0, 0.55),  # green
+    "REPRO": (320.0, 0.55),  # magenta
+    "TRAIT": (28.0, 0.90),  # orange
+    "WORLD": (170.0, 0.60),  # teal
+    "BRAIN": (270.0, 0.50),  # purple
+    "SENSE": (50.0, 0.85),  # yellow
+    "UX": (90.0, 0.60),  # lime
+    "SPECIES": (195.0, 0.75),  # cyan
+    "STORE": (25.0, 0.40),  # brown
+}
+"""Hue in degrees and saturation of each area's family. Red and royal blue are kept free for the two
+status labels, and the families are spread around the rest of the colour wheel."""
 
-NEEDS_OWNER = ("needs-owner", "b60205", "An owner question about this item is still open")
+SHADES = (0.30, 0.38, 0.46, 0.54, 0.62, 0.70)
+"""The lightness steps an area's items cycle through (item 1 is the darkest)."""
+
+NEEDS_OWNER = ("needs-owner", "ff0000", "An owner question about this item is still open")
+IN_PROGRESS = ("in-progress", "4169e1", "A thread is building this item now")
 
 TAG = re.compile(r"\b(" + "|".join(AREAS) + r")\.(\d+)\b")
 
@@ -69,42 +73,42 @@ def tags_in(text: str) -> list[str]:
     return [f"{AREAS[a]}.{n}" for a, n in sorted(found)]
 
 
-def assign(tags: list[str], state: dict) -> dict:
-    """Give each tag without a colour the next one of the rotation. Existing choices never change."""
-    colours = state.setdefault("colours", {})
-    for tag in tags:
-        if tag not in colours:
-            colours[tag] = PALETTE[state.get("next", 0) % len(PALETTE)]
-            state["next"] = state.get("next", 0) + 1
-    return state
+def colour(tag: str) -> str:
+    """The six-digit hex colour (no ``#``) of a task tag such as ``TRAIT.13``."""
+    area, number = tag.split(".")
+    hue, saturation = FAMILIES[area]
+    lightness = SHADES[(int(number) - 1) % len(SHADES)]
+    red, green, blue = colorsys.hls_to_rgb(hue / 360.0, lightness, saturation)
+    return f"{round(red * 255):02x}{round(green * 255):02x}{round(blue * 255):02x}"
 
 
-def load() -> dict:
-    if COLOURS_FILE.exists():
-        return json.loads(COLOURS_FILE.read_text(encoding="utf-8"))
-    return {"next": 0, "colours": {}}
-
-
-def save(state: dict) -> None:
-    """Write the choices, tags in area and number order."""
-
-    def order(tag: str) -> tuple[int, int]:
-        area, number = tag.split(".")
-        return AREAS.index(area), int(number)
-
-    state["colours"] = {t: state["colours"][t] for t in sorted(state["colours"], key=order)}
-    COLOURS_FILE.write_text(json.dumps(state, indent=1) + "\n", encoding="utf-8")
+def wanted() -> dict[str, str]:
+    """Every label GitHub should have for the tags in the sources, with its colour."""
+    text = "\n".join(f.read_text(encoding="utf-8") for f in SOURCES)
+    labels = {tag: colour(tag) for tag in tags_in(text)}
+    labels[NEEDS_OWNER[0]] = NEEDS_OWNER[1]
+    labels[IN_PROGRESS[0]] = IN_PROGRESS[1]
+    return labels
 
 
 def gh(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["gh", "api", *args], capture_output=True, text=True, check=False)
 
 
-def apply_label(name: str, colour: str, description: str = "") -> None:
-    """Recolour the label if it exists, create it if not."""
-    fields = ["-f", f"color={colour}"] + (
-        ["-f", f"description={description}"] if description else []
+def current() -> dict[str, str]:
+    """The colours the repository's labels have now."""
+    done = gh(
+        "--paginate", f"repos/{REPO}/labels?per_page=100", "--jq", ".[] | [.name, .color] | @tsv"
     )
+    pairs = (line.split("\t") for line in done.stdout.splitlines() if "\t" in line)
+    return {name: colour_ for name, colour_ in pairs}
+
+
+def apply_label(name: str, wanted_colour: str, description: str = "") -> None:
+    """Recolour the label if it exists, create it if not."""
+    fields = ["-f", f"color={wanted_colour}"]
+    if description:
+        fields += ["-f", f"description={description}"]
     done = gh("-X", "PATCH", f"repos/{REPO}/labels/{name}", *fields)
     if done.returncode != 0:
         done = gh("-X", "POST", f"repos/{REPO}/labels", "-f", f"name={name}", *fields)
@@ -118,13 +122,19 @@ def main() -> int:
         "--apply", action="store_true", help="create or recolour the labels on GitHub"
     )
     args = parser.parse_args()
-    state = assign(tags_in("\n".join(f.read_text(encoding="utf-8") for f in SOURCES)), load())
-    save(state)
-    print(f"{len(state['colours'])} tags, next colour index {state['next'] % len(PALETTE)}")
-    if args.apply:
-        apply_label(*NEEDS_OWNER)
-        for tag, colour in state["colours"].items():
-            apply_label(tag, colour)
+    labels = wanted()
+    print(f"{len(labels)} labels")
+    if not args.apply:
+        print(json.dumps(labels, indent=1))
+        return 0
+    now = current()
+    descriptions = {NEEDS_OWNER[0]: NEEDS_OWNER[2], IN_PROGRESS[0]: IN_PROGRESS[2]}
+    changed = 0
+    for name, wanted_colour in labels.items():
+        if now.get(name, "").lower() != wanted_colour:
+            apply_label(name, wanted_colour, descriptions.get(name, ""))
+            changed += 1
+    print(f"{changed} labels created or recoloured")
     return 0
 
 
