@@ -82,12 +82,45 @@ The same resistance applies to poisoned meat (TRAIT.16).
 
 Default (question 3, A): an animal that ate poison keeps a `toxin_load` that fades by a half-life, and its corpse's meat carries the load it had at death. A meat eater taking in meat from a poisoned animal takes the poison like a plant eater would, reduced by resistance, and the effort to eat meat follows the same formula (meat has a toughness of its own, a rules constant). Prey that are poisoned then are less rewarding to hunt, so the hunters evolve resistance too. Option B (animals with a toxin gene of their own, venom or poisonous skin) is a bigger project and would be a new item after this one if the owner picks it.
 
+## Toxin types (owner chose "now", question 4 of [#231](https://github.com/dwhagar/evolutionSimulator/issues/231))
+
+The genetics research ([gene-balance.md](gene-balance.md), Phase 2) offered toxin types as a later option. The owner chose to build them **now**, so they ride in the same layout bumps as `toughness` and `resistance`: plant layout version 4 and animal layout version 10. Open details are in [#239](https://github.com/dwhagar/evolutionSimulator/issues/239) (defaults used).
+
+**Genes.** A plant gets `toxin_type` and an animal gets `resistance_type`: each is one digit of the genome, so four types (A to D) with the default of four. A type is a category, not a size: a mutation that changes the digit jumps to another type. Magnitudes stay where they are: `toxicity` (plant) and `resistance` (animal). A plant is poisonous with its one type at its toxicity; an animal resists one type at its resistance.
+
+**Matching.** The protection an animal has against a bite is `resistance * match(resistance_type, toxin_type)`. The types sit on a ring (A, B, C, D, back to A); the default match is 1 for the same type, 0.5 for a neighbour and 0 for the opposite. The matching rule is a rules table, not code, so it can be changed to the sharper or smoother choices in the issue.
+
+**Each type is different, so none is best at everything.** A table in `TraitRules` gives every type a profile:
+
+| Type (working name) | Damage per dose | Upkeep to make | How long it lingers in the eater | How easily it is tasted |
+|---|---|---|---|---|
+| A, alkaloid-like | 1.0 | 1.0 | 1.0 | 1.0 |
+| B, glycoside-like | 1.3 | 1.3 | 1.5 | 0.5 |
+| C, tannin-like | 0.4 | 0.7 | 1.0 | 1.2, and lowers the food value of the plant a little |
+| D, irritant-like | 0.7 | 0.8 | 0.5 | 0.8 |
+
+The numbers are placeholders to tune. The rule they must satisfy, checked by a test: no type is at least as good as another on every column (a strong type costs more or lingers more or is easier to taste), so the choice of type is a real trade-off for the plant. Plants pay the upkeep factor on their defence upkeep, animals take the damage and persistence factors in the dose.
+
+**Dose with types (TRAIT.18).** The animal's `toxin_load` becomes one load per type (a short tuple, saved and restored). A bite adds dose to its plant's type; each load decays with its own half-life (the type's lingering factor, shortened by `resistance * match`); harm is the sum over types of the damage above that type's threshold, where the threshold grows with body mass and with `resistance * match`. Eating two types at once does not share a load, so a grazer mixing plants is exposed to each type separately. A corpse carries the per-type loads, so poisoned meat (TRAIT.16) is poisoned with the types the animal had eaten, and a hunter's resistance matches those types the same way.
+
+**Balancers, as the owner's rule wants two for every gene.**
+
+- `toxin_type` (inter-gene link): the type sets the profile that the plant's `toxicity` is multiplied by, so a plant's cost, damage and chance of being tasted all depend on it. It also acts through the animals: a type that grazers do not resist is rewarded, and one that they resist is not. This is negative frequency dependence: a common type pushes the grazers to evolve resistance to it, which makes a rare type better, so the types should cycle and not run to one. (Direct cost: the profile's upkeep column.)
+- `resistance_type` (inter-gene link): protection exists only against the matching type, so an animal that does well on one plant type is worse on the others, and a world with several plant types keeps the choice open. (Direct cost: it is free by itself, as a category with no direction; its cost is carried by `resistance`'s upkeep, which only pays when the type matches the plants around. Record this reason in the balancer table.) When `resistance` is 0 the type does nothing and drifts neutrally; that is allowed and noted.
+- `resistance` and `toxicity` keep the balancers already in this note.
+
+**Founders.** First-generation plants draw their type at random, so all types are present. First-generation animals have `resistance` 0 and a random type. With only one plant type in a small world the arms race has nothing to cycle on, so the default starting world keeps at least two types.
+
+**Audit (TRAIT.17).** The audit sweeps the type digit over its four values in each reference environment and reports the best type per environment: a type that is best in every environment, or worst in every one, fails (that would mean the profile table is unbalanced). For `resistance_type` it sweeps the four values in worlds where each plant type is the only one present and in a world with all four, and reports the best match; a type that is best in all of them fails. Both are categorical genes, so the "both ends" check (best at 0 or 1) is replaced by "not dominated".
+
+**Viewer.** Types are shown as letters A to D with a colour in the inspector and the gene charts; the catalogue gets names and units for the new genes.
+
 ## Order of work
 
 1. WORLD.15 (Foundations 3) makes founders breed. Plant and feeding numbers depend on it, so none of the builds below start before it merges (a plant layout bump changes the `state_digest` of the default run).
-2. TRAIT.12 (plants start longer-lived), then TRAIT.13 (genes, costs, germination, `root_reach`, cost table and test), by one thread, because both retune the plant side. Plant layout version 4.
+2. TRAIT.12 (plants start longer-lived), then TRAIT.13 (genes, costs, germination, `root_reach`, cost table and test), by one thread, because both retune the plant side. Plant layout version 4 (`toughness` and `toxin_type`).
 3. TRAIT.14 (effort to eat) by the same thread; it needs the `toughness` gene.
-4. TRAIT.15 (animal resistance gene, animal layout version 10) by the thread that built SENSE.21, since it holds the layout bump history. It needs TRAIT.14 (the effort formula) and SENSE.21 (version 9).
+4. TRAIT.15 (animal resistance gene and `resistance_type`, animal layout version 10) by the thread that built SENSE.21, since it holds the layout bump history. It needs TRAIT.14 (the effort formula) and SENSE.21 (version 9).
 5. TRAIT.16 (poisoned animals), after TRAIT.15, if the owner confirms the default.
 6. TRAIT.17 (the same two-balancer table and test for every animal gene) is independent of the plant builds apart from the layout bumps; it comes after TRAIT.15 so the new gene is in the table, and can start earlier as an audit that lists the gaps.
 7. A small viewer item (inspector fields: toughness, germination, effort, resistance) and the species/gene-chart names for the new genes, after each layout bump (the catalogue names and units are in `catalogue.py` and the viewer tables).

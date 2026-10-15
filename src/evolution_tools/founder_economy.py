@@ -1,6 +1,6 @@
 """Runs a seeded first generation and reports whether it feeds and breeds (``WORLD.15``).
 
-Run ``python scripts/founder_economy.py [name=value ...]``. A name with a dot overrides a rule in the
+Run ``python -m evolution_tools.founder_economy [name=value ...]``. A name with a dot overrides a rule in the
 ``TraitRules`` tree (``body.kinetic_burn=0.02``, ``world.graze_amount=20``); the others are options:
 
     seeds=1,2,3 ticks=3000 animals=100 plants=800 size=1000 step=500
@@ -24,7 +24,7 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "src"))
 
 from evolution_simulator import layouts
 from evolution_simulator.config import DEFAULT_RULES, TraitRules

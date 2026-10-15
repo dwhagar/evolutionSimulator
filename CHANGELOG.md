@@ -7,6 +7,8 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `INFRA.12`: Task labels are coloured by category, one colour family per area and shades for the items, with `needs-owner` bright red and a new `in-progress` label in royal blue. [#241](https://github.com/dwhagar/evolutionSimulator/pull/241)
+- `INFRA.11`: Python 3.12 or newer is required and checked everywhere it is stated (package metadata, linter target, workflows, README), with a clear error on an older Python. [#241](https://github.com/dwhagar/evolutionSimulator/pull/241)
 - `INFRA.9`: All Python source is under `src/`: the developer tools moved from `scripts/` to `src/evolution_tools/` (run with `python -m evolution_tools.NAME` or the PowerShell and batch wrappers in `scripts/`), and a test keeps it that way. [#235](https://github.com/dwhagar/evolutionSimulator/pull/235)
 - `DNA.17`: Genome distance is one XOR and a bit count on a packed integer cached on each genome: 300 genomes' 44,850 pairs take 34 ms instead of 1,393 ms (about 41 times), with identical results. [#230](https://github.com/dwhagar/evolutionSimulator/pull/230)
 - `UX.39`: The family tree: the Family tab opens a window with the selected animal, four generations of ancestors and three of descendants, dead ones included, each a button that selects it; the world keeps a bounded family book (the newest 20,000 dead) and saves are format 6. [#228](https://github.com/dwhagar/evolutionSimulator/pull/228)

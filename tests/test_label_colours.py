@@ -1,43 +1,47 @@
-"""The TODO tags and their label colours (INFRA.8): every tag has one, and the rotation is kept."""
+"""Label colours by category (INFRA.8, INFRA.12): one colour family per area, shades per item."""
 
 from __future__ import annotations
 
-import importlib.util
-import json
-from pathlib import Path
+import colorsys
 
-ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location(
-    "sync_labels", ROOT / "src" / "evolution_tools" / "sync_labels.py"
-)
-assert spec is not None and spec.loader is not None
-sync_labels = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(sync_labels)
+from evolution_tools import sync_labels
 
 
-def _state() -> dict:
-    return json.loads((ROOT / ".github" / "label-colours.json").read_text(encoding="utf-8"))
+def _hue(tag: str) -> float:
+    value = sync_labels.colour(tag)
+    red, green, blue = (int(value[i : i + 2], 16) / 255 for i in (0, 2, 4))
+    return colorsys.rgb_to_hls(red, green, blue)[0] * 360
 
 
-def test_every_tag_in_the_todo_has_a_colour() -> None:
-    text = "\n".join(f.read_text(encoding="utf-8") for f in sync_labels.SOURCES)
-    missing = [t for t in sync_labels.tags_in(text) if t not in _state()["colours"]]
-    assert not missing, f"run src/evolution_tools/sync_labels.py to colour: {missing}"
+def test_every_area_has_a_family() -> None:
+    assert set(sync_labels.FAMILIES) == set(sync_labels.AREAS)
 
 
-def test_colours_come_from_the_palette_and_follow_the_rotation() -> None:
-    state = _state()
-    assert set(state["colours"].values()) <= set(sync_labels.PALETTE)
-    assert state["next"] == len(state["colours"])
+def test_items_of_an_area_are_shades_of_one_colour() -> None:
+    colours = [sync_labels.colour(f"TRAIT.{n}") for n in range(1, 7)]
+    assert len(set(colours)) == 6  # six shades before it repeats
+    assert sync_labels.colour("TRAIT.7") == colours[0]
+    hues = {round(_hue(f"TRAIT.{n}")) for n in range(1, 7)}
+    assert max(hues) - min(hues) <= 2  # the same hue, only the lightness changes
 
 
-def test_a_new_tag_continues_the_rotation() -> None:
-    state = {"next": 5, "colours": {"DOCS.1": sync_labels.PALETTE[4]}}
-    sync_labels.assign(["DOCS.1", "DOCS.2", "DOCS.3"], state)
-    assert state["colours"]["DOCS.1"] == sync_labels.PALETTE[4]  # unchanged
-    assert state["colours"]["DOCS.2"] == sync_labels.PALETTE[5]
-    assert state["colours"]["DOCS.3"] == sync_labels.PALETTE[6]
-    assert state["next"] == 7
+def test_areas_have_different_colours() -> None:
+    first = {area: sync_labels.colour(f"{area}.1") for area in sync_labels.AREAS}
+    assert len(set(first.values())) == len(first)
+
+
+def test_status_labels_are_not_a_tag_colour() -> None:
+    assert sync_labels.NEEDS_OWNER[1] == "ff0000"  # bright red
+    assert sync_labels.IN_PROGRESS[1] == "4169e1"  # royal blue
+    every = {sync_labels.colour(f"{a}.{n}") for a in sync_labels.AREAS for n in range(1, 40)}
+    assert sync_labels.NEEDS_OWNER[1] not in every
+    assert sync_labels.IN_PROGRESS[1] not in every
+
+
+def test_every_tag_in_the_sources_gets_a_colour() -> None:
+    labels = sync_labels.wanted()
+    assert "needs-owner" in labels and "in-progress" in labels
+    assert all(len(v) == 6 for v in labels.values())
 
 
 def test_tags_are_found_in_area_and_number_order() -> None:
