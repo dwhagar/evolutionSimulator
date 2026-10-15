@@ -13,7 +13,7 @@ from typing import Any
 from world_support import animal_dna, breeding_pair, hourly_world
 
 from evolution_simulator.config import DEFAULT_RULES
-from evolution_simulator.dna import GenomeLayout
+from evolution_simulator.dna import DNA, GenomeLayout
 from evolution_simulator.traits import AnimalTraits, Pregnancy
 from evolution_simulator.world import Bounds, DayCycle, Vec, World
 from evolution_simulator.world.spatial import SpatialIndex
@@ -90,9 +90,10 @@ def what_the_scenario_covers(world: World) -> dict[str, int]:
 
 # --- the full-state comparison ------------------------------------------------------------------
 
-_IGNORED = {(SpatialIndex, "_max_extent"), (World, "_light")}
-"""Attributes that only widen a search or keep a value worked out from the tick and the rules, so
-they cannot change what happens."""
+_IGNORED = {(SpatialIndex, "_max_extent"), (World, "_light"), (DNA, "_packed")}
+"""Attributes that only widen a search or keep a value worked out from the tick and the rules (or,
+for ``DNA._packed``, from the sequence, filled when a distance first asks), so they cannot change
+what happens."""
 
 
 def flatten(obj: Any, path: str = "world") -> dict[str, Any]:
