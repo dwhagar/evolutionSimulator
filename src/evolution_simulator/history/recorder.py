@@ -26,7 +26,7 @@ import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol
 
 from evolution_simulator.deaths import DeathCause
 from evolution_simulator.history.samples import (
@@ -117,6 +117,17 @@ class RecorderRules:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class TierChange:
+    """One step of how a sample reached the ring buffers: a sample ``put`` into tier ``level`` or
+    ``drop``ped from it (a merge is a drop of the sample merged into and a put of the result). A run
+    store applies these to its rows, so the stored tiers stay equal to the recorder's."""
+
+    kind: Literal["put", "drop"]
+    level: int
+    sample: Sample
+
+
 class Observable(Protocol):
     """What the recorder reads. ``World`` has all of it; ``add_step_listener`` and ``trait_columns``
     are optional (without the first, call ``Recorder.observe`` after each step yourself; without the
@@ -166,6 +177,7 @@ class Recorder:
         began, is its own root and has no entry."""
         self._attached = False
         self._sample_listeners: list[Callable[[Sample], None]] = []
+        self._tier_listeners: list[Callable[[Sequence[TierChange]], None]] = []
         if attach:
             self.attach()
 
@@ -201,6 +213,15 @@ class Recorder:
         if listener in self._sample_listeners:
             self._sample_listeners.remove(listener)
 
+    def add_tier_listener(self, listener: Callable[[Sequence[TierChange]], None]) -> None:
+        """Call ``listener(changes)`` with the ``TierChange`` list each new sample made in the ring
+        buffers, after it is made (a run store keeps its history rows by these)."""
+        self._tier_listeners.append(listener)
+
+    def remove_tier_listener(self, listener: Callable[[Sequence[TierChange]], None]) -> None:
+        if listener in self._tier_listeners:
+            self._tier_listeners.remove(listener)
+
     def _on_event(self, event: WorldEvent) -> None:
         if isinstance(event, Born):
             if event.parents:
@@ -231,9 +252,13 @@ class Recorder:
         sample = self._take(now, now - self._last_period)
         self._last_period = now
         self._taken += 1
-        self._push(0, sample)
+        changes: list[TierChange] | None = [] if self._tier_listeners else None
+        self._push(0, sample, changes)
         for listener in tuple(self._sample_listeners):
             listener(sample)
+        if changes:
+            for tier_listener in tuple(self._tier_listeners):
+                tier_listener(changes)
         return True
 
     def _take(self, period: int, span: int) -> Sample:
@@ -312,8 +337,8 @@ class Recorder:
 
     # ---- the ring buffers --------------------------------------------------
 
-    def _push(self, level: int, sample: Sample) -> None:
-        push_sample(self._tiers, self.rules.tiers, level, sample)
+    def _push(self, level: int, sample: Sample, changes: list[TierChange] | None = None) -> None:
+        push_sample(self._tiers, self.rules.tiers, level, sample, changes)
 
     # ---- reading and saving ------------------------------------------------
 
@@ -376,23 +401,40 @@ class Recorder:
 
 
 def push_sample(
-    tiers: list[list[Sample]], rules: Sequence[TierRule], level: int, sample: Sample
+    tiers: list[list[Sample]],
+    rules: Sequence[TierRule],
+    level: int,
+    sample: Sample,
+    changes: list[TierChange] | None = None,
 ) -> None:
     """Add a sample to a tier, merging it into the newest one when they belong to the same stretch
     of that tier, and pass the oldest on when the tier is over its capacity. The ring buffers of a
-    ``Recorder`` and of a ``HistoryMirror`` are both kept by this."""
+    ``Recorder`` and of a ``HistoryMirror`` are both kept by this. Given a list, it is filled with
+    the ``TierChange`` steps taken, in order."""
     tier = tiers[level]
     rule = rules[level]
     if tier and _bucket(tier[-1], rule) == _bucket(sample, rule):
+        if changes is not None:
+            changes.append(TierChange("drop", level, tier[-1]))
         tier[-1] = tier[-1].merge(sample)
+        if changes is not None:
+            changes.append(TierChange("put", level, tier[-1]))
     else:
         tier.append(sample)
+        if changes is not None:
+            changes.append(TierChange("put", level, sample))
     while len(tier) > rule.capacity:
         oldest = tier.pop(0)
+        if changes is not None:
+            changes.append(TierChange("drop", level, oldest))
         if level + 1 < len(tiers):
-            push_sample(tiers, rules, level + 1, oldest)
+            push_sample(tiers, rules, level + 1, oldest, changes)
         else:
+            if changes is not None:
+                changes.append(TierChange("drop", level, tier[0]))
             tier[0] = oldest.merge(tier[0])
+            if changes is not None:
+                changes.append(TierChange("put", level, tier[0]))
 
 
 def _bucket(sample: Sample, rule: TierRule) -> int:
@@ -400,14 +442,29 @@ def _bucket(sample: Sample, rule: TierRule) -> int:
     return (sample.day - 1) // rule.periods
 
 
+def dump_history(history: HistorySamples | Recorder, gzipped: bool = True) -> bytes:
+    """A history, or a recorder's whole state, as the bytes ``save_history`` writes (JSON, gzipped
+    unless told not to), for a store that keeps them somewhere other than a file."""
+    payload = json.dumps(history.to_dict(), separators=(",", ":"), sort_keys=True).encode("utf-8")
+    return gzip.compress(payload, compresslevel=1, mtime=0) if gzipped else payload
+
+
+def load_history_bytes(
+    raw: bytes, gzipped: bool = True, name: str = "the history"
+) -> dict[str, Any]:
+    """The dict ``dump_history`` bytes hold; give it to ``HistorySamples.from_dict`` or
+    ``Recorder.restore``."""
+    data = json.loads((gzip.decompress(raw) if gzipped else raw).decode("utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{name} is not a saved history.")  # noqa: TRY004
+    return data
+
+
 def save_history(history: HistorySamples | Recorder, path: str | os.PathLike[str]) -> Path:
     """Write a history, or a recorder's whole state, as JSON (gzip when the name ends in ``.gz``),
     written beside the target and moved into place."""
-    data = history.to_dict()
     target = Path(path)
-    payload = json.dumps(data, separators=(",", ":"), sort_keys=True).encode("utf-8")
-    if target.suffix == ".gz":
-        payload = gzip.compress(payload, compresslevel=6, mtime=0)
+    payload = dump_history(history, gzipped=target.suffix == ".gz")
     scratch = target.with_name(target.name + ".part")
     scratch.write_bytes(payload)
     os.replace(scratch, target)
@@ -418,10 +475,4 @@ def load_history_data(path: str | os.PathLike[str]) -> dict[str, Any]:
     """The dict a ``save_history`` file holds; give it to ``HistorySamples.from_dict`` (a plain
     history) or ``Recorder.restore`` (a recorder's state)."""
     source = Path(path)
-    raw = source.read_bytes()
-    if source.suffix == ".gz":
-        raw = gzip.decompress(raw)
-    data = json.loads(raw.decode("utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError(f"{source.name} is not a saved history.")  # noqa: TRY004
-    return data
+    return load_history_bytes(source.read_bytes(), source.suffix == ".gz", source.name)

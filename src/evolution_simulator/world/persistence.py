@@ -684,16 +684,26 @@ def _ancestry_from_data(world: World, rows: Sequence[Any] | None) -> AncestryBoo
 # =============================================================================
 
 
+def dump_world(world: World) -> bytes:
+    """The world as the bytes ``save_world`` writes to a ``.gz`` file (gzip of its JSON), for a store
+    that keeps saves somewhere other than a file. The same world always gives the same bytes."""
+    text = json.dumps(world_to_dict(world), separators=(",", ":"), sort_keys=True)
+    # mtime 0 keeps the bytes the same from run to run. Level 1: four times faster than 6 for a file
+    # about a fifth bigger, and a checkpoint is dominated by this call.
+    return gzip.compress(text.encode("utf-8"), compresslevel=1, mtime=0)
+
+
 def save_world(world: World, path: str | os.PathLike[str]) -> Path:
     """Write the world to ``path`` (gzip-compressed if the name ends in ``.gz``). The file is
     written beside the target and moved into place, so a crash cannot leave half a save. The same
     world always gives the same bytes."""
     target = Path(path)
-    text = json.dumps(world_to_dict(world), separators=(",", ":"), sort_keys=True)
-    payload = text.encode("utf-8")
     if target.suffix == ".gz":
-        # mtime 0 keeps the bytes the same from run to run.
-        payload = gzip.compress(payload, compresslevel=6, mtime=0)
+        payload = dump_world(world)
+    else:
+        payload = json.dumps(world_to_dict(world), separators=(",", ":"), sort_keys=True).encode(
+            "utf-8"
+        )
     scratch = target.with_name(target.name + ".part")
     scratch.write_bytes(payload)
     os.replace(scratch, target)
@@ -707,15 +717,32 @@ def load_world(
 ) -> World:
     """Read a world saved by ``save_world`` (see ``world_from_dict``)."""
     source = Path(path)
-    raw = source.read_bytes()
+    return load_world_bytes(
+        source.read_bytes(),
+        senses,
+        sleep_listeners,
+        name=source.name,
+        gzipped=source.suffix == ".gz",
+    )
+
+
+def load_world_bytes(
+    raw: bytes,
+    senses: Senses | None = None,
+    sleep_listeners: Iterable[SleepListener] = (),
+    *,
+    name: str = "the save",
+    gzipped: bool = True,
+) -> World:
+    """Read a world from the bytes ``dump_world`` made (``gzipped=False`` for plain JSON)."""
     try:
-        if source.suffix == ".gz":
+        if gzipped:
             raw = gzip.decompress(raw)
         data = json.loads(raw.decode("utf-8"))
     except (OSError, EOFError, UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise SaveFormatError(f"{source.name} is not a readable save: {error}.") from error
+        raise SaveFormatError(f"{name} is not a readable save: {error}.") from error
     if not isinstance(data, dict):
-        raise SaveFormatError(f"{source.name} is not a saved world.")
+        raise SaveFormatError(f"{name} is not a saved world.")
     return world_from_dict(data, senses, sleep_listeners)
 
 
@@ -725,7 +752,9 @@ __all__ = [
     "SaveFormatError",
     "config_from_dict",
     "config_to_dict",
+    "dump_world",
     "load_world",
+    "load_world_bytes",
     "save_world",
     "world_from_dict",
     "world_to_dict",

@@ -1,13 +1,14 @@
-"""Measurements behind docs/design/storage.md (STORE.1): the folder run store against a SQLite file.
+"""Measurements behind docs/design/storage.md (STORE.1, repeated for STORE.2): the run store as built
+against the draft schema.
 
     python -m evolution_tools.bench_storage [--animals 1000] [--plants 5000] [--checkpoints 8]
 
-It builds a world, then writes the same checkpoints two ways (the folder layout of ``UX.10`` through
-``RunStore``, and the schema proposed in the note into a WAL-mode ``run.sqlite``) and prints the time
+It builds a world, then writes the same checkpoints two ways (through ``RunStore``, which since STORE.2
+is the ``run.sqlite`` file, and the draft schema of the note, written directly) and prints the time
 each took and the size on disk. It also appends 100 simulated years of daily history samples to the
 history tables, reads them back, reads one while a writer has a transaction open, and kills a writer
 in the middle of a checkpoint to see what is left. Standard library only; nothing is written outside
-a temporary folder. The schema here is a draft for STORE.2, not the final one.
+a temporary folder. The schema here is the draft; the built one is in ``runs/database.py``.
 """
 
 from __future__ import annotations
@@ -103,9 +104,9 @@ def serialise(world: World, recorder: Recorder) -> tuple[bytes, bytes, float]:
     """The two blobs of a checkpoint (the bytes the folder layout writes to its two .gz files)."""
     start = time.perf_counter()
     text = json.dumps(world_to_dict(world), separators=(",", ":"), sort_keys=True)
-    world_blob = gzip.compress(text.encode(), compresslevel=6, mtime=0)
+    world_blob = gzip.compress(text.encode(), compresslevel=1, mtime=0)
     text = json.dumps(recorder.to_dict(), separators=(",", ":"), sort_keys=True)
-    recorder_blob = gzip.compress(text.encode(), compresslevel=6, mtime=0)
+    recorder_blob = gzip.compress(text.encode(), compresslevel=1, mtime=0)
     return world_blob, recorder_blob, time.perf_counter() - start
 
 
@@ -343,7 +344,7 @@ def folder_bench(root: Path, world: World, recorder: Recorder, count: int) -> No
         times.append(time.perf_counter() - start)
     assert run is not None
     print(
-        f"  checkpoint (world + recorder, folder layout): mean {ms(statistics.mean(times))}, "
+        f"  checkpoint (world + recorder, RunStore as built): mean {ms(statistics.mean(times))}, "
         f"worst {ms(max(times))}; folder holds {mb(size_of(run.path))} for {len(run.checkpoints())} kept"
     )
 
@@ -450,9 +451,9 @@ def main() -> None:
         world, recorder = build(args.animals, args.plants, ticks=24)
         print(f"world built and stepped two days in {time.perf_counter() - start:.1f} s")
         template = recorder.history().samples()[0]  # the first sample carries gene histograms
-        print("the folder layout (UX.10):")
+        print("the run store as built (STORE.2):")
         folder_bench(root, world, recorder, args.checkpoints)
-        print("the SQLite file (proposed):")
+        print("the draft schema, written directly:")
         world_blob = sqlite_bench(root, world, recorder, args.checkpoints)
         print(f"history appended to the tables, {args.years} years of days:")
         (root / "history").mkdir()

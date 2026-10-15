@@ -269,12 +269,18 @@ dependencies (a test checks that no core module names Qt or numpy).
   exactly as an uninterrupted pair; tested with `save_world`). `save_history(path)` writes JSON, gzip by
   suffix. The run store (`UX.10`, below) puts this file beside the world checkpoints.
 
-### As built: the run store (`UX.10`)
+### As built: the run store (`UX.10`, moved to SQLite by `STORE.2`)
 
-`evolution_simulator.runs` (no dependencies, no window code):
+`evolution_simulator.runs` (no dependencies, no window code). **`STORE.2` changed where a run lives:**
+one SQLite file per run, described in [storage.md](storage.md). The API below is unchanged; where this
+section says "folder" for the checkpoints or the history files, read "rows of `run.sqlite`". The first
+version's layout is kept here because the import reads it:
 
 ```
 <runs folder>/<run id>/            id = <UTC date-time>-<name slug>
+    run.sqlite                     the whole run (since STORE.2); run.sqlite-wal / -shm beside it
+                                   while a program has it open
+    (first version, imported on open and then moved to imported/)
     run.json                       manifest: format, name, seed, program version, created/updated,
                                    config (readable), summary for the run list
     history.json.gz                the recorded history as of the latest checkpoint (for charts)
@@ -303,6 +309,82 @@ dependencies (a test checks that no core module names Qt or numpy).
   the same history.
 - **Space (`UX.25`).** Runs are never deleted unless asked (`store.delete(id)`); `store.space_warning()` returns
   a sentence once the folder holds more than `warn_bytes` (5 GB).
+
+### As built: the SQLite run file (`STORE.2`)
+
+`runs/database.py` (`RunFile`, the only code that knows the tables), `runs/store.py` (`RunStore`, `Run`,
+`Autosaver`, the same public API as before) and `runs/legacy.py` (the import). The schema, the reasons for
+it and the measurements are in [storage.md](storage.md); what was built, and where it differs:
+
+- **What is in `run.sqlite`.** `meta` (the manifest, one JSON value per key, including `setup`), `checkpoints`
+  (small rows) and `checkpoint_data` (the world and recorder blobs, the bytes `world.json.gz` and
+  `history.json.gz` held), and the history in `samples`, `level`, `stat`, `histogram` and `names`. The file is
+  marked (`application_id`) and numbered (`user_version`, `SCHEMA_VERSION`, with a `MIGRATIONS` table for
+  the next change); a file from a newer version is refused with a message.
+- **A checkpoint is one transaction.** `Run.checkpoint` serialises the world first, then in a single
+  `BEGIN IMMEDIATE` adds the rows, applies retention and updates the manifest; an error anywhere rolls
+  all of it back. Afterwards `incremental_vacuum` and `wal_checkpoint(TRUNCATE)` keep the file and the WAL
+  from staying the size of the biggest checkpoint. The first checkpoint of a new run is written into
+  `run.sqlite.part` and moved into place, so a run folder has a whole first checkpoint or no run file.
+- **Each checkpoint says how it is written.** `checkpoints.world_format` is the world save format
+  (`persistence.FORMAT_VERSION`) of its blob and `encoding` is `json+gzip` today. The store never looks
+  inside a world: `persistence` writes and reads the blob and owns its migrations, so a new world layout
+  (the numpy rewrite, `WORLD.19`/`WORLD.20`) is a new `encoding` or `world_format` and a change in
+  `dump_world`/`load_world_bytes`, not a schema change. Resume skips a checkpoint whose `encoding` it
+  does not know and tries the one before. Both blobs are gzip level 1 (`mtime` 0): on a 1000-animal,
+  5000-plant world level 6 took 124 ms and made 1.00 MB where level 1 takes 40 ms and makes 1.27 MB; the
+  JSON text itself costs 440 ms of the checkpoint, so the gain is the 85 ms, not a multiple.
+- **The species document.** `Run.checkpoint(world, recorder, species)` and `Run.autosave(world, recorder,
+  species)` take anything with a `to_dict()` (the species tracker) and keep the document with the
+  checkpoint (`checkpoint_data.species`, gzip JSON, `NULL` without one); `Resumed.species` hands it back
+  unread, for `species.migrate` and `SpeciesTracker.restore`. The store does not know its format, so
+  `SPECIES.2` needs no schema change.
+- **The family book** is part of the world document (`persistence` calls `AncestryBook.to_data()` and
+  `from_data()` inside the world), so every checkpoint already has it. It is not a table of its own: that
+  would copy it and tie the store to the world's shape.
+- **History follows the recorder.** The recorder reports the tier changes of each sample
+  (`Recorder.add_tier_listener`, `TierChange`) and the run applies them as rows (about a millisecond a
+  day), so `Run.history()` is current to the last sample, not to the last checkpoint. A run starts
+  following a recorder when it autosaves or checkpoints with it, and the rows are first made to match it;
+  that is also how a resume from an older checkpoint gets the history of that moment. If a history write
+  fails the world carries on and the next checkpoint rewrites the rows. The recorder's own saved format
+  does not change (`HISTORY_FORMAT` stays 2).
+- **Reading while it is written.** `RunStore.open(run_id, readonly=True)` opens the file read-only, and
+  `list_runs` reads each manifest that way; a reader sees the last committed state while a simulation
+  writes. This is the base of watching a headless run (`UX.40`).
+- **The writer's claim.** A run that is autosaving or following a recorder sets `meta.writer` (process id
+  and start time) and clears it when it is released (`Autosaver.finish`/`close`, `Run.release`/`close`).
+  A second program that tries to write a run whose claimant is still running gets a `RunError`; a claim
+  left by a program that died is ignored (`process_alive`, with the Windows call through `ctypes`).
+  `Run.writer()` tells a viewer whether a run is live.
+- **The starting setup.** `RunStore.create(..., setup={"animals", "plants", "seeded"})` records what the
+  world was started from, with the seed, in `meta.setup` (`Run.setup`), for `UX.35`'s "Copy with new
+  seed". `NewRunSpec`, `Host._new_run`, the host's `StartRun` (from `WorldSpec.starting()`, through
+  `starting_of(recipe)`) and the headless command give it; a world at tick 0 gives its own counts; a
+  world that has already run and was not told gives none (a local viewer world saved with Save run now).
+- **Old runs.** A run still in the first version's folder layout is listed from its `run.json` and
+  imported the first time it is opened: the checkpoint blobs are copied as bytes, the history is read
+  from its file, and the old files go to `<run>/imported/` (kept; delete them by hand). An import cut
+  short is finished on the next open.
+- **Measured as built** (`python -m evolution_tools.bench_storage`, 1000 animals, 5000 plants): a checkpoint through
+  `RunStore` takes 0.73 s on average (0.59 s of it serialising the world and the recorder, 20 to 40 ms in
+  SQLite with the `incremental_vacuum` and WAL truncate), the file holds 9.4 MB for three kept
+  checkpoints, 100 simulated years of daily history cost 1.0 ms per day appended and 2.4 MB, the whole
+  history reads in 47 ms and one series in under a millisecond, and ten writers killed mid-checkpoint
+  each left a file that passed `integrity_check` with every checkpoint whole.
+- **Restart.** `Controller.restart` now closes the old backend before it starts the new one: a
+  simulation that is still alive is the run's writer, and the one that resumes the run would be refused.
+- **Other changes.** `CheckpointInfo.path` is the run file; `RunStore.delete` closes the runs it opened
+  (Windows will not delete an open file); `persistence.dump_world`/`load_world_bytes` and
+  `history.dump_history`/`load_history_bytes` are the byte forms of the save functions; the packaging
+  `--selftest` saves and resumes a tiny run, so the Windows check covers SQLite.
+- **Tests.** `tests/test_runfile.py`: the rows equal the recorder's history after every sample through
+  small tiers; a resume from an older checkpoint gives that history; a write that fails mid-checkpoint
+  rolls back; a writer process killed (`SIGKILL`) at six different moments leaves a file that passes
+  `integrity_check` with every checkpoint readable; a reader beside an open write transaction; the
+  newer-version, other-program and second-writer refusals; and the import of a folder run.
+  `tests/test_runstore.py`, `test_headless.py` and the host tests are the API contract and pass over the
+  new store.
 
 ### As built: the shell (`UX.11`)
 
@@ -359,7 +441,8 @@ python -m evolution_simulator list --out runs/
   `2w`, `6mo`, `100y` (365.25 days) or `5000t` (ticks of this world). On `--resume` it is still counted
   from the start, so the same `--until` finishes an interrupted run.
 - **`--config`** is JSON in the form `persistence.config_to_dict` writes (missing fields take their
-  defaults, unknown ones are refused); a run's own `run.json` works too, which repeats a run's settings.
+  defaults, unknown ones are refused); a run's own `run.json` (first version) or `run.sqlite` works too,
+  which repeats a run's settings.
   `--seed` overrides the file's seed. Without a file the default config is used.
 - **What it writes.** A new run folder (`UX.10`) with the recorder's history and autosaved checkpoints;
   a last checkpoint is always written, also on Ctrl-C (exit code 130) or when every animal has died (the

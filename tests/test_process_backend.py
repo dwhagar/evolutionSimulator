@@ -175,6 +175,7 @@ def test_restarted_resumes_the_run_it_was_saved_into_else_starts_again(made, tmp
     fresh.send(Step(DAY))
     poll_until(fresh, lambda b: b.frame is not None and b.frame.tick >= DAY)
     notice = fresh.save_now(tmp_path)
+    fresh.close()  # the controller closes the old one first: it is the run's writer
     resumed = fresh.restarted()
     try:
         assert resumed.recipe == ResumeSpec(str(tmp_path), notice.run_id)

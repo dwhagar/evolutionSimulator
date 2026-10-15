@@ -1,11 +1,10 @@
 """The run store (UX.10): checkpoints, retention, resume equals uninterrupted, listing."""
 
-import json
-import shutil
 from pathlib import PurePosixPath, PureWindowsPath
 
 import pytest
 from persistence_support import MORE_TICKS, SAVE_TICK, assert_same_world, rich_world
+from run_support import damage_checkpoint, remove_checkpoints
 from world_support import hourly_world
 
 from evolution_simulator.history import Recorder, RecorderRules, TierRule
@@ -63,7 +62,7 @@ def test_create_writes_manifest_and_first_checkpoint(tmp_path) -> None:
     world.populate(animals=5, plants=20)
     run = store.create(world, name="First try")
     assert run.id.endswith("-first-try")
-    manifest = json.loads((run.path / "run.json").read_text())
+    manifest = store.open(run.id).manifest
     assert manifest["seed"] == 7
     assert manifest["name"] == "First try"
     assert manifest["config"]["seed"] == 7
@@ -71,6 +70,22 @@ def test_create_writes_manifest_and_first_checkpoint(tmp_path) -> None:
     assert manifest["summary"]["animals"] == 5
     assert [c.tick for c in run.checkpoints()] == [0]
     assert run.config == world.config
+    assert (run.path / "run.sqlite").is_file()
+    assert run.setup == {
+        "animals": 5,
+        "plants": 20,
+        "seed": 7,
+    }  # a world at tick 0 says what it has
+
+
+def test_the_setup_it_was_given_is_kept(tmp_path) -> None:
+    world = hourly_world(seed=2)
+    world.populate(animals=5, plants=20)
+    world.run(3)
+    store = store_in(tmp_path)
+    given = {"animals": 5, "plants": 20, "seeded": False}
+    assert store.create(world, setup=given).setup == {**given, "seed": 2}
+    assert store.create(world).setup == {"seed": 2}  # it has run, so its counts are not the start
 
 
 def test_run_ids_do_not_collide(tmp_path) -> None:
@@ -89,6 +104,10 @@ def test_list_runs_newest_first_and_skips_junk(tmp_path) -> None:
     (store.root / "not-a-run").mkdir()
     (store.root / "broken").mkdir()
     (store.root / "broken" / "run.json").write_text("{")
+    (store.root / "half-made").mkdir()
+    (store.root / "half-made" / "run.sqlite.part").write_bytes(b"")
+    (store.root / "garbage").mkdir()
+    (store.root / "garbage" / "run.sqlite").write_bytes(b"this is not a database at all")
     runs = store.list_runs()
     assert [r.id for r in runs] == [new.id, old.id]
     assert runs[0].seed == 2
@@ -171,11 +190,22 @@ def test_retention_keeps_newest_and_one_per_year(tmp_path) -> None:
     assert kept[-1].tick >= world.tick - 5  # the newest are the latest
 
 
-def test_hidden_scratch_never_counts_as_a_checkpoint(tmp_path) -> None:
-    store = store_in(tmp_path)
-    run = store.create(hourly_world())
-    (run.path / "checkpoints" / ".writing-checkpoint-000000000009").mkdir()
-    assert [c.tick for c in run.checkpoints()] == [0]
+def test_a_checkpoint_that_fails_to_write_leaves_the_run_as_it_was(tmp_path, monkeypatch) -> None:
+    store = store_in(tmp_path, keep_newest=5)
+    world = rich_world()
+    run = store.create(world)
+    world.run(5)
+
+    def broken(*_args, **_kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr(run, "_update_manifest", broken)
+    with pytest.raises(OSError):
+        run.checkpoint(world)
+    monkeypatch.undo()
+    assert [c.tick for c in run.checkpoints()] == [1]  # nothing half-written is there
+    assert store.open(run.id).summary.checkpoints == 1
+    assert run.resume().world.tick == 1
 
 
 # --- resuming ----------------------------------------------------------------------------------
@@ -227,12 +257,11 @@ def test_damaged_newest_checkpoint_falls_back(tmp_path) -> None:
     run = store.create(world)
     world.run(20)
     newest = run.checkpoint(world)
-    (newest.path / "world.json.gz").write_bytes(b"garbage")
+    damage_checkpoint(run, newest.tick, b"garbage")
     resumed = run.resume()
     assert resumed.checkpoint.tick == 1
     assert resumed.world.tick == 1
-    shutil.rmtree(run.path / "checkpoints")
-    (run.path / "checkpoints").mkdir()
+    remove_checkpoints(run)
     with pytest.raises(RunError):
         run.resume()
 

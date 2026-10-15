@@ -11,7 +11,7 @@ from world_support import HOURLY
 from evolution_simulator.__main__ import main
 from evolution_simulator.runs import RunError, RunStore, RunStoreRules
 from evolution_simulator.runs.headless import RunPlan, execute, load_config, parse_duration
-from evolution_simulator.world import Bounds, WorldConfig, persistence
+from evolution_simulator.world import Bounds, World, WorldConfig, persistence
 
 SMALL = WorldConfig(seed=2, bounds=Bounds((300.0, 300.0))).with_time_scale(HOURLY)
 
@@ -137,6 +137,8 @@ def test_load_config_from_config_or_manifest(tmp_path) -> None:
     manifest = tmp_path / "run.json"
     manifest.write_text(json.dumps({"format": 1, "kind": "run", "config": data}))
     assert load_config(manifest) == SMALL
+    run = RunStore(tmp_path / "runs").create(World(SMALL))
+    assert load_config(run.file_path) == SMALL
     partial = tmp_path / "p.json"
     partial.write_text(json.dumps({"seed": 5}))
     assert load_config(partial).seed == 5

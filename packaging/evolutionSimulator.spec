@@ -18,6 +18,9 @@ a = Analysis(
     hiddenimports=[
         "evolution_simulator.session.specs",
         "evolution_simulator.session.host",
+        # The run store keeps every run in a SQLite file (STORE.2).
+        "sqlite3",
+        "evolution_simulator.runs.legacy",
     ],
     excludes=["tkinter", "unittest", "pytest", "ruff", "PySide6.QtWebEngineCore", "PySide6.QtQml"],
     noarchive=False,

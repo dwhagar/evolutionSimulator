@@ -354,10 +354,14 @@ class RunManager(QObject):
     def starting_counts(self, run_id: str) -> tuple[int, int] | None:
         """``(animals, plants)`` the run began with, or ``None`` when that is no longer known.
 
-        The run does not write its starting counts down, so this is read from its first checkpoint
-        when that is from tick 0 (older ones are pruned), else from its first history sample.
+        The run's manifest has them when it was made by this version; an older run's are read from its
+        first checkpoint when that is from tick 0 (older ones are pruned), else from its first history
+        sample.
         """
         run = self.store.open(run_id)
+        setup = run.setup
+        if isinstance(setup.get("animals"), int) and isinstance(setup.get("plants"), int):
+            return setup["animals"], setup["plants"]
         first = next(iter(run.checkpoints()), None)
         if first is not None and first.tick == 0:
             return first.animals, first.plants

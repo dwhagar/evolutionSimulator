@@ -109,8 +109,9 @@ class ViewerController(QObject):
         make = getattr(old, "restarted", None)
         if make is None:
             return False
-        self.replace_backend(make())
+        # The old one goes first: it may be the writer of the run the new one resumes.
         old.close()  # type: ignore[attr-defined]
+        self.replace_backend(make())
         return True
 
     def send(self, command: Request) -> bool:
