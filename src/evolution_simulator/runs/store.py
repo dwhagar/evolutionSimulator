@@ -54,6 +54,7 @@ from evolution_simulator.history import (
     load_history_bytes,
 )
 from evolution_simulator.history.samples import HistorySamples
+from evolution_simulator.runs.compact import Compacted, compact_file
 from evolution_simulator.runs.database import (
     FILE_NAME,
     CheckpointRow,
@@ -371,6 +372,29 @@ class RunStore:
         except OSError as error:
             raise RunError(f"Run {run_id!r} cannot be deleted: {error}") from error
 
+    def compact(self, run_id: str) -> Compacted:
+        """Rewrite a run's file without its free space (``STORE.3``): the size before and after. The
+        run is refused while a program that is running writes it (this one included); the file is
+        replaced whole or not at all. See ``compact.py``."""
+        path = self.root / run_id
+        if not (path / FILE_NAME).is_file():
+            if (path / LEGACY_MANIFEST).is_file():
+                raise RunError(
+                    f"Run {run_id!r} is in the old folder layout; open it once to import it."
+                )
+            raise RunError(f"There is no run {run_id!r} in {self.root}.")
+        mine = [run for run in self._open if run.path == path]
+        if any(run.writing for run in mine):
+            raise RunError(f"Run {run_id!r} is being written by this program; stop it first.")
+        for run in mine:  # the file is replaced under them, so they let go of it
+            run.close()
+        return compact_file(
+            path / FILE_NAME,
+            run_id,
+            {"pid": os.getpid(), "started": _utc(self.clock()), "task": "compact"},
+            process_alive,
+        )
+
     # ---- space -------------------------------------------------------------------------------
 
     def total_bytes(self) -> int:
@@ -488,6 +512,11 @@ class Run:
             self._leased = False
             self._file.set_meta(writer=None)
         self._leased = False
+
+    @property
+    def writing(self) -> bool:
+        """This object is the run's writer: it follows a recorder or holds the claim."""
+        return self._leased or self._recorder is not None
 
     def _writable(self) -> None:
         if self._file.closed:
