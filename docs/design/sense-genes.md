@@ -276,8 +276,8 @@ Total about 0.084 energy per tick, 14% of an average basal budget. Two notes.
 
 - **Hearing and smell do not get their own acuity gene.** For them the one gene sets both range and
   accuracy, as `sense_genes.py` already does, so a good nose is long-ranged and precise together.
-  Vision has a separate acuity because it is where the owner wants the trade-off. Issue `SENSE.18` asks
-  whether hearing and smell should also split level from acuity.
+  Vision has a separate acuity because it is where the owner wants the trade-off. Issue `SENSE.18` asked
+  whether hearing and smell should also split level from acuity; the owner said yes on 2026-10-15, so `SENSE.22` adds `hearing_acuity` and `smell_acuity`.
 - **Touch and taste are twice as dear as the eye at the middle.** They still use the old
   gene-squared rule (0.08 times the level squared). That makes the senses that do the least cost the
   most; moving them onto a cost that follows what they do is `SENSE.13`.
@@ -564,8 +564,8 @@ Filed as GitHub issues, each with a recommended default that the build assumes u
 
 | Question | Issue and task | Default |
 | --- | --- | --- |
-| What shape is the field-against-acuity trade-off: a hard ceiling, one linked dial, or a soft penalty? | [#88](https://github.com/dwhagar/evolutionSimulator/issues/88) `SENSE.17` | Hard ceiling: working acuity is the smaller of the acuity gene and one minus the field gene |
-| Do hearing and smell also get a separate acuity gene, or does one gene set both their range and accuracy? | [#89](https://github.com/dwhagar/evolutionSimulator/issues/89) `SENSE.18` | One gene each for now |
+| What shape is the field-against-acuity trade-off: a hard ceiling, one linked dial, or a soft penalty? | [#88](https://github.com/dwhagar/evolutionSimulator/issues/88) `SENSE.17` | Hard ceiling: working acuity is the smaller of the acuity gene and one minus the field gene. **Answered 2026-10-15: yes, the default** |
+| Do hearing and smell also get a separate acuity gene, or does one gene set both their range and accuracy? | [#89](https://github.com/dwhagar/evolutionSimulator/issues/89) `SENSE.18` | One gene each for now. **Answered 2026-10-15: yes, separate genes** (`SENSE.22`) |
 | Is the predator and prey difference only the first generation's starting point, or permanently linked to diet? | [#90](https://github.com/dwhagar/evolutionSimulator/issues/90) `SENSE.19` | Starting point only; evolution is free |
 | Should smell leave trails that fade (a scent field), or only come from the things themselves? | [#91](https://github.com/dwhagar/evolutionSimulator/issues/91) `SENSE.20` | From the things themselves; trails later if wanted |
 | Should things be harder or easier to see (size, movement, camouflage), or is everything equally visible? | [#92](https://github.com/dwhagar/evolutionSimulator/issues/92) `SENSE.21` | Owner said yes: see [How visible a thing is](#how-visible-a-thing-is-sense21). Built as `SENSE.21` |

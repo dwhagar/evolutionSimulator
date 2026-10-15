@@ -4,6 +4,27 @@ A log of the owner's design decisions, with the date, the issue where each was a
 task IDs it created or changed (see [TODO.md](../TODO.md)). Newest first. Kept by the TODO thread.
 Where an answer was ambiguous it is marked "to confirm" and collected in a follow-up issue; a newer section (higher up) replaces any "to confirm" in an older one.
 
+## 2026-10-15: owner taps on the senses questions
+
+The owner answered the senses cards. Every answer except one is the default the builds were already using, so only the last row changes any work.
+
+| Issue | Task | Answer | What follows |
+| --- | --- | --- | --- |
+| [#40](https://github.com/dwhagar/evolutionSimulator/issues/40) | SENSE.2 | Yes: vision, hearing and smell can be lost completely; touch always works | Nothing, built (SENSE.11) |
+| [#41](https://github.com/dwhagar/evolutionSimulator/issues/41) | SENSE.3 | Yes: darkness reduces vision (range times 0.25 + 0.75 x daylight) | Nothing, built |
+| [#42](https://github.com/dwhagar/evolutionSimulator/issues/42) | SENSE.4 | Yes: vision nearly exact, hearing and smell noisy | Nothing, built; SENSE.13 calibrates the noise |
+| [#43](https://github.com/dwhagar/evolutionSimulator/issues/43) | SENSE.5 | The brain sees the kind and the relative size of the nearest thing | Similarity to a mate with REPRO.4 |
+| [#44](https://github.com/dwhagar/evolutionSimulator/issues/44) | SENSE.6 | No: the list of senses is fixed | Nothing |
+| [#45](https://github.com/dwhagar/evolutionSimulator/issues/45) | SENSE.7 | Asleep: touch full, hearing and smell half, sight off | Nothing, built (WORLD.5) |
+| [#88](https://github.com/dwhagar/evolutionSimulator/issues/88) | SENSE.17 | A hard ceiling: working acuity is the smaller of the acuity gene and one minus the field gene | Nothing, built (SENSE.16) |
+| [#89](https://github.com/dwhagar/evolutionSimulator/issues/89) | SENSE.18 | Yes, hearing and smell get separate acuity genes (not the default) | New item SENSE.22: two animal genes, two balancers each, the balance gate, built with the resistance genes in animal layout 10 (TRAIT.15). The cost is a question in [#242](https://github.com/dwhagar/evolutionSimulator/issues/242) |
+
+## 2026-10-15: the first reading of the founders, and the numbering of the numpy build
+
+Foundations 3 measured why seeded founders do not breed (WORLD.15, [#237](https://github.com/dwhagar/evolutionSimulator/pull/237)): they gain 0.04 to 0.10 energy a tick and lose about 0.78, and constants alone do not fix it. The settings that make the starting world forgiving are owner questions with defaults in use, in [#242](https://github.com/dwhagar/evolutionSimulator/issues/242): upkeep a tenth of today's, bite 20, founder plants at 0.3 of today's toxicity, founder fertility 0.3 and parenting 0.1, the world kept at 1,000 by 1,000 with 800 plants started grown and aged. What constants cannot fix became three items: BRAIN.26 (finding plants close up), TRAIT.12 (founder plants, now with ages and growth) and REPRO.10 (newborns and the first litter).
+
+Research 5's numpy note ([#236](https://github.com/dwhagar/evolutionSimulator/pull/236)) numbered its nine stages WORLD.21 to WORLD.29, which clashed with the varied world (WORLD.21, TRAIT.15's follow-up). They are WORLD.30 to WORLD.38 in TODO.md (the note was updated). WORLD.20 stays the umbrella; numpy 2.0 or newer as a core dependency is accepted; the gene freeze is declared (WORLD.15, TRAIT.12 to TRAIT.15 and SENSE.22 first, then any layout or trait change during the build is made in both engines in the same PR); the version proposal goes to the owner at stage 8. Whether positions stay two-dimensional is the last question in [#242](https://github.com/dwhagar/evolutionSimulator/issues/242) (default 2-D for good).
+
 ## 2026-10-14: plant trade-offs, effort to eat and animal resistance
 
 The owner asked that toxicity and size are linked, that a bigger plant takes longer to germinate, that every free plant gene gets a balancing trait and all of them interact, that `root_reach` is fixed, that faster seeding makes a plant easier to eat, that tougher and more toxic plants take longer to eat (an effort to eat), and that animals get a resistance gene: more resistance to toxic plants (or poisoned animals) means eating takes longer but more food can be eaten. Design: [design/plant-tradeoffs.md](design/plant-tradeoffs.md). Tasks: `TRAIT.13` (plant genes, new `toughness` gene, germination, `root_reach`), `TRAIT.14` (effort to eat), `TRAIT.15` (animal resistance gene, animal layout version 10), `TRAIT.16` (poisoned animals). A later message made it a general rule: **every gene, plant and animal, needs two balancers**; the first is an inter-gene reaction through auxiliary traits (more seeds, easier to eat), the second was not named. `TRAIT.13` records it for plants and `TRAIT.17` for animals (a balancer table and a test). Four points are open in [#216](https://github.com/dwhagar/evolutionSimulator/issues/216) with defaults in use: how toxicity and size are linked (default: a bigger plant costs more to keep poisonous), whether tough is its own gene (default: yes), what poisoned animals means (default: they carry the poison they ate, and their meat is poisonous), and what the second balancer is (default: a direct cost).

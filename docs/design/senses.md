@@ -542,7 +542,7 @@ the stated defaults.
 ## Open questions
 
 Tracked as GitHub issues so the owner can answer there, each with a recommended default that will be
-assumed until answered.
+assumed until answered. **All six were answered on 2026-10-15** ([docs/decisions.md](../decisions.md)): yes to each default.
 
 | Question | Issue | Default |
 | --- | --- | --- |
