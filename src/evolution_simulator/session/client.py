@@ -44,7 +44,7 @@ from evolution_simulator.session.messages import (
 from evolution_simulator.session.protocol import Simulation
 from evolution_simulator.session.session import SessionEvent
 from evolution_simulator.session.snapshot import Block, Frame
-from evolution_simulator.session.specs import FakeSpec, Prepared
+from evolution_simulator.session.specs import FakeSpec, Prepared, starting_of
 from evolution_simulator.world.views import AnimalDetail
 
 
@@ -175,12 +175,14 @@ class InProcessClient:
         rules: HostRules | None = None,
         clock: Callable[[], float] | None = None,
     ) -> None:
-        made = (
-            simulation
-            if isinstance(simulation, Prepared) or hasattr(simulation, "step")
-            else simulation()  # type: ignore[operator]
+        recipe = not (isinstance(simulation, Prepared) or hasattr(simulation, "step"))
+        made = simulation() if recipe else simulation  # type: ignore[operator]
+        self.host: Host = make_host(
+            made,  # type: ignore[arg-type]
+            rules,
+            clock,
+            setup=starting_of(simulation) if recipe else None,  # type: ignore[arg-type]
         )
-        self.host: Host = make_host(made, rules, clock)  # type: ignore[arg-type]
         self._collector = _Collector()
         self._pending: list[Outgoing] = [self.host.first_message()]
         self._crash: str | None = None

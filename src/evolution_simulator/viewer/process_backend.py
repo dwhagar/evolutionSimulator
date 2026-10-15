@@ -204,7 +204,8 @@ class ProcessBackend:
 
     def restarted(self) -> ProcessBackend:
         """A new backend to put in this one's place after a failure: from the newest checkpoint of
-        the run the world was saved into, else from the recipe it started with."""
+        the run the world was saved into, else from the recipe it started with. ``close()`` this one
+        first: a process that is still alive is the writer of the run, and the new one would be refused."""
         notice = self.run_notice
         recipe: Callable[[], Simulation | Prepared] = self.recipe
         if notice is not None and notice.checkpoints > 0:

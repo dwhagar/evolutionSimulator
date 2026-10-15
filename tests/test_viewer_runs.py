@@ -2,6 +2,7 @@
 delete, the history window, the size warning and the CSV export."""
 
 import pytest
+from run_support import damage_checkpoint
 from world_support import hourly_world
 
 QtCore = pytest.importorskip("PySide6.QtCore", exc_type=ImportError)
@@ -438,7 +439,7 @@ def test_a_run_that_cannot_be_restored_changes_nothing(window, panel, controller
     manager.save_now()
     run = manager.current_run
     for checkpoint in run.checkpoints():
-        (checkpoint.path / "world.json.gz").write_bytes(b"not a world")
+        damage_checkpoint(run, checkpoint.tick)
     answer(panel)
     backend = controller.backend
     assert not panel.resume(run.id)

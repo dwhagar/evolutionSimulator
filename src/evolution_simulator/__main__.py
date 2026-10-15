@@ -26,7 +26,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="simulated time to run to, from the start of the world: 30d, 100y, 5000t",
     )
     run.add_argument(
-        "--config", metavar="FILE", help="world settings as JSON (or a run's run.json)"
+        "--config",
+        metavar="FILE",
+        help="world settings as JSON (or a run's run.json or run.sqlite)",
     )
     run.add_argument("--seed", type=int, help="seed of the world (overrides the config's)")
     run.add_argument("--animals", type=int, default=120, help="animals to start with (default 120)")

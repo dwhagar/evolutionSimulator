@@ -38,9 +38,10 @@ import queue
 import threading
 import time
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from multiprocessing.connection import Connection
+from typing import Any
 
 from evolution_simulator.history import Recorder, Sample
 from evolution_simulator.runs import Autosaver, Run, RunStore
@@ -71,7 +72,7 @@ from evolution_simulator.session.session import (
     SessionRules,
     StatusChanged,
 )
-from evolution_simulator.session.specs import Prepared
+from evolution_simulator.session.specs import Prepared, starting_of
 from evolution_simulator.world import World
 
 log = logging.getLogger(__name__)
@@ -118,6 +119,7 @@ class Host:
         recorder: Recorder | None = None,
         run: Run | None = None,
         resumed_from: str | None = None,
+        setup: Mapping[str, Any] | None = None,
     ) -> None:
         self.session = session
         self.rules = rules if rules is not None else HostRules()
@@ -145,6 +147,8 @@ class Host:
             recorder = Recorder(session.simulation)  # type: ignore[arg-type]
         self.recorder = recorder
         self.run = run
+        self.setup = setup
+        """What the world was started from, for the manifest of a run begun later."""
         self._resumed_from = resumed_from
         self._pending_samples: list[Sample] = []
         self._need_full = recorder is not None
@@ -232,9 +236,20 @@ class Host:
             self._need_full = True
         self.run, self._resumed_from = None, None
         self._manual_saves, self._noticed_saves = 0, None
+        self.setup = {
+            "animals": command.animals,
+            "plants": command.plants,
+            "seeded": command.seeded,
+        }
         if old_run is not None:
+            old_run.close()
             try:
-                self.run = old_run.store.create(world, name=command.name, recorder=self.recorder)  # type: ignore[arg-type]
+                self.run = old_run.store.create(
+                    world,
+                    name=command.name,
+                    recorder=self.recorder,  # type: ignore[arg-type]
+                    setup=self.setup,
+                )
                 self._autosaver = self.run.autosave(world, self.recorder)  # type: ignore[arg-type]
             except Exception:  # the new world runs on, unsaved
                 log.exception("The new run could not be saved")
@@ -279,7 +294,9 @@ class Host:
             )
             return
         if self.run is None:
-            run = RunStore(message.root).create(world, name=message.name, recorder=self.recorder)
+            run = RunStore(message.root).create(
+                world, name=message.name, recorder=self.recorder, setup=self.setup
+            )
             self.run = run
             self._autosaver = run.autosave(world, self.recorder)
         else:
@@ -331,6 +348,8 @@ class Host:
                 autosaver.close()
         if self.recorder is not None:
             self.recorder.remove_sample_listener(self._on_sample)
+        if self.run is not None:
+            self.run.release()  # the file stays readable; the process ending closes it
 
     def first_message(self) -> Ready:
         """The message that tells the viewer the simulation is up, with a first full frame."""
@@ -403,9 +422,10 @@ def make_host(
     made: Simulation | Prepared,
     rules: HostRules | None = None,
     clock: Callable[[], float] | None = None,
+    setup: Mapping[str, Any] | None = None,
 ) -> Host:
     """A ``Host`` for what a recipe made: a bare simulation, or a ``Prepared`` one with its recorder
-    and run."""
+    and run. ``setup`` is what the recipe started the world from (``starting_of``)."""
     rules = rules if rules is not None else HostRules()
     kwargs = {} if clock is None else {"clock": clock}
     prepared = made if isinstance(made, Prepared) else Prepared(made)
@@ -416,6 +436,7 @@ def make_host(
         recorder=prepared.recorder,
         run=prepared.run,
         resumed_from=prepared.resumed_from,
+        setup=setup,
         **kwargs,  # type: ignore[arg-type]
     )
 
@@ -480,7 +501,7 @@ def run_host(
     flushed = True
     try:
         try:
-            host = make_host(recipe(), rules)
+            host = make_host(recipe(), rules, setup=starting_of(recipe))
             sender.send(host.first_message())
             while not host.stopped:
                 while connection.poll(0):

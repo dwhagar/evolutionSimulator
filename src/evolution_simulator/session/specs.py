@@ -10,14 +10,22 @@ into, UX.31). ``WorldSpec`` and ``FakeSpec`` cover the tests and a plain window;
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import Any, ClassVar
 
 from evolution_simulator.history import Recorder
 from evolution_simulator.runs import Run, RunStore
 from evolution_simulator.session.fake import FakeSimulation
 from evolution_simulator.session.protocol import Simulation
 from evolution_simulator.world.world import World, WorldConfig
+
+
+def starting_of(recipe: Callable[..., Any]) -> dict[str, Any] | None:
+    """What a recipe starts its world from (``animals``, ``plants``, ``seeded``), when it says: kept
+    in a saved run's manifest so a copy of the run can be started exactly."""
+    starting = getattr(recipe, "starting", None)
+    return dict(starting()) if callable(starting) else None
 
 
 @dataclass(frozen=True)
@@ -44,6 +52,9 @@ class WorldSpec:
 
     saveable: ClassVar[bool] = True
     """Whether the world it makes can be saved into a run (a real ``World``)."""
+
+    def starting(self) -> dict[str, Any]:
+        return {"animals": self.animals, "plants": self.plants, "seeded": self.seeded}
 
     def __call__(self) -> Simulation:
         world = World(self.config)
@@ -89,11 +100,16 @@ class NewRunSpec:
 
     saveable: ClassVar[bool] = True
 
+    def starting(self) -> dict[str, Any]:
+        return {"animals": self.animals, "plants": self.plants, "seeded": self.seeded}
+
     def __call__(self) -> Prepared:
         world = World(self.config)
         world.populate(self.animals, self.plants, self.seeded)
         recorder = Recorder(world)
-        run = RunStore(self.root).create(world, name=self.name, recorder=recorder)
+        run = RunStore(self.root).create(
+            world, name=self.name, recorder=recorder, setup=self.starting()
+        )
         return Prepared(world, recorder, run)
 
 

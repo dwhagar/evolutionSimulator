@@ -5,6 +5,7 @@ import time
 from typing import ClassVar
 
 import pytest
+from run_support import remove_checkpoints
 from session_support import FailsAtTick
 
 pytest.importorskip("PySide6.QtCore", exc_type=ImportError)
@@ -181,7 +182,7 @@ def test_the_newest_saved_run_with_a_checkpoint_is_the_one_opened(tmp_path):
     older = store.create(world, name="older")
     world.run(5)
     newer = store.create(world, name="newer")
-    (newer.path / "checkpoints").rename(newer.path / "gone")  # a run with nothing to open
+    remove_checkpoints(newer)  # a run with nothing to open
     assert app.newest_run(store).id == older.id
 
 

@@ -1,6 +1,7 @@
 # Storing runs in SQLite
 
-Design note for `STORE.1`, the plan for the build `STORE.2`. The owner decided on 2026-10-14 that data
+Design note for `STORE.1`, the plan for the build `STORE.2` (built; what differs from the plan is in
+[ux.md](ux.md), "As built: the SQLite run file"). The owner decided on 2026-10-14 that data
 storage is SQLite and not a database server ([decisions.md](../decisions.md)). This note says what goes in
 the file, how it is written and read, how old runs come across, and what was measured. The numbers come
 from `src/evolution_tools/bench_storage.py`; the schema there is the draft this note describes.
@@ -65,7 +66,9 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL) WITHOUT ROWID;
 CREATE TABLE checkpoints (            -- what the Saved runs dock lists: small rows, no blobs
     id INTEGER PRIMARY KEY, tick INTEGER NOT NULL UNIQUE, simulated_seconds REAL NOT NULL,
     state_digest TEXT NOT NULL, animals INTEGER NOT NULL, plants INTEGER NOT NULL,
-    written TEXT NOT NULL, has_history INTEGER NOT NULL);
+    written TEXT NOT NULL, has_history INTEGER NOT NULL,
+    world_format INTEGER,             -- persistence.FORMAT_VERSION of the world blob (NULL: imported)
+    encoding TEXT NOT NULL DEFAULT 'json+gzip');  -- how the two blobs are written
 CREATE TABLE checkpoint_data (        -- the big part, read only to resume
     id INTEGER PRIMARY KEY REFERENCES checkpoints(id) ON DELETE CASCADE,
     world BLOB NOT NULL,              -- gzip of the world_to_dict JSON: the bytes world.json.gz holds

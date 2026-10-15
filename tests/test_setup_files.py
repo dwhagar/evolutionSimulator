@@ -287,13 +287,8 @@ def test_starting_counts_come_from_the_first_checkpoint_or_the_history(
     start_and_run(window, controller, setup_panel, seed=5, animals=9, plants=33)
     run = manager.current_run
     assert manager.starting_counts(run.id) == (9, 33)
-    for checkpoint in run.checkpoints():  # as if the first checkpoint had been pruned
-        if checkpoint.tick == 0:
-            import shutil
-
-            shutil.rmtree(checkpoint.path)
-    counts = manager.starting_counts(run.id)
-    assert counts is None or all(isinstance(n, int) for n in counts)
+    run._file.delete_checkpoints([0])  # as if the first checkpoint had been pruned
+    assert manager.starting_counts(run.id) == (9, 33)  # the manifest remembers them
 
 
 def test_the_world_config_default_is_used_when_copying_a_default_run(

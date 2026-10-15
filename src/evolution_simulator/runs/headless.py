@@ -24,6 +24,7 @@ from pathlib import Path
 from typing import Any, Literal, TextIO
 
 from evolution_simulator.history import Recorder
+from evolution_simulator.runs.database import RunFile
 from evolution_simulator.runs.store import Run, RunError, RunStore
 from evolution_simulator.world.persistence import SaveFormatError, config_from_dict
 from evolution_simulator.world.timescale import DAY, HOUR, MINUTE, MONTH, YEAR, format_duration
@@ -64,15 +65,26 @@ def parse_duration(text: str, seconds_per_tick: float) -> float:
 
 
 def load_config(path: str | Path) -> WorldConfig:
-    """A world config from a JSON file: ``config_to_dict`` output, or a run's ``run.json``."""
-    try:
-        data = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, ValueError) as error:
-        raise RunError(f"The config file {path} cannot be read: {error}") from error
-    if not isinstance(data, dict):
-        raise RunError(f"The config file {path} must hold a JSON object.")
-    if isinstance(data.get("config"), dict):
-        data = data["config"]
+    """A world config from a JSON file: ``config_to_dict`` output, a run's manifest (``run.json`` of
+    the first version), or a run's ``run.sqlite``."""
+    source = Path(path)
+    if source.suffix == ".sqlite":
+        file = RunFile.open(source, readonly=True)
+        try:
+            data = file.get_meta("config")
+        finally:
+            file.close()
+        if not isinstance(data, dict):
+            raise RunError(f"The run file {path} holds no config.")
+    else:
+        try:
+            data = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise RunError(f"The config file {path} cannot be read: {error}") from error
+        if not isinstance(data, dict):
+            raise RunError(f"The config file {path} must hold a JSON object.")
+        if isinstance(data.get("config"), dict):
+            data = data["config"]
     try:
         return config_from_dict(data)
     except SaveFormatError as error:
@@ -131,7 +143,12 @@ def execute(
         world = World(config)
         world.populate(animals=plan.animals, plants=plan.plants)
         recorder = Recorder(world)
-        run = store.create(world, name=plan.name, recorder=recorder)
+        run = store.create(
+            world,
+            name=plan.name,
+            recorder=recorder,
+            setup={"animals": plan.animals, "plants": plan.plants, "seeded": True},
+        )
         say(f"Started {run.id} in {run.path}.")
 
     target_seconds = parse_duration(plan.until, world.time_scale.seconds_per_tick)

@@ -21,12 +21,37 @@ def quiet_streams() -> None:
         sys.stderr = open(os.devnull, "w", encoding="utf-8")  # noqa: SIM115
 
 
+def storage_selftest() -> bool:
+    """Save a tiny world into a run in a temporary folder and bring it back: proves that the frozen
+    program has SQLite (``sqlite3``, STORE.2) and can use it."""
+    import tempfile
+
+    from evolution_simulator.runs import RunStore
+    from evolution_simulator.world import World, WorldConfig
+
+    with tempfile.TemporaryDirectory() as folder:
+        world = World(WorldConfig(seed=1))
+        world.populate(animals=3, plants=5)
+        run = RunStore(folder).create(world)
+        try:
+            return run.resume().world.state_digest() == world.state_digest()
+        finally:
+            run.close()
+
+
 def selftest(timeout: float = 60.0) -> int:
-    """``evolutionSimulator.exe --selftest``: start the simulation process the way the viewer will,
-    wait for its first frame, ask it for five ticks, wait for a frame past tick 0, shut it down. Exit code 0 when
-    all of that worked, 1 when not. It opens no window, so the build workflow can run it on a
-    machine with no screen; it is what proves the frozen program can start its own second process."""
+    """``evolutionSimulator.exe --selftest``: save and bring back a run (SQLite), then start the
+    simulation process the way the viewer will, wait for its first frame, ask it for five ticks,
+    wait for a frame past tick 0, shut it down. Exit code 0 when all of that worked, 1 when not. It
+    opens no window, so the build workflow can run it on a machine with no screen; it is what proves
+    the frozen program can store a run and start its own second process."""
     import time
+
+    try:
+        if not storage_selftest():
+            return 1
+    except Exception:  # noqa: BLE001 - any failure is a failed self test
+        return 1
 
     from evolution_simulator.session import FakeSpec, ProcessClient, Step
 

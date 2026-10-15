@@ -135,7 +135,10 @@ def newest_run(store):
     try:
         for summary in store.list_runs():
             if summary.checkpoints > 0:
-                return store.open(summary.id)
+                run = store.open(summary.id)
+                if run.checkpoints():  # the manifest's count is a summary; the file is the truth
+                    return run
+                run.close()
     except (RunError, OSError):
         return None
     return None
