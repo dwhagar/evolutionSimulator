@@ -13,6 +13,10 @@ pip install -e ".[dev]"
 pytest
 ```
 
+`pip install -e ".[dev]"` also brings in the tools for testing faster and measuring (`pytest-xdist`,
+`hypothesis`, `pyinstrument`, `pytest-benchmark`); none of them ship to players. Add `-n auto` to run
+the tests on every core, and see [docs/testing.md](docs/testing.md) for profiling and benchmarks.
+
 ## Running without a window
 
 ```bash
@@ -53,6 +57,7 @@ To build it yourself: `pip install -e ".[gui,package]"` then `python scripts/pac
 ```
 src/evolution_simulator/   package source
 tests/                     pytest test suite
+benchmarks/                pytest-benchmark measurements (not part of the plain test run)
 docs/                      roadmap, design, research, archive
 scripts/version.py         prints the current MAJOR.minor.build version
 scripts/package.py         builds the Windows zip (UX.19)

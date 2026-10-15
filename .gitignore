@@ -219,3 +219,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# pytest-benchmark results and pyinstrument pages (INFRA.7)
+.benchmarks/
+profile.html
