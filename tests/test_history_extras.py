@@ -174,15 +174,15 @@ def recorded() -> Recorder:
     return recorder
 
 
-def test_the_current_format_is_two_and_both_load():
-    assert HISTORY_FORMAT == 2 and READABLE_FORMATS == (1, 2)
+def test_the_current_format_is_three_and_older_load():
+    assert HISTORY_FORMAT == 3 and READABLE_FORMATS == (1, 2, 3)
     history = recorded().history()
-    assert history.to_dict()["format"] == 2
+    assert history.to_dict()["format"] == 3
     stat = history.samples()[-1].stats["animal.gene.g"]
     assert stat.p10 is not None and stat.p90 is not None
 
 
-def test_format_one_history_loads_without_percentiles_and_saves_as_two(tmp_path):
+def test_format_one_history_loads_without_percentiles_and_saves_as_three(tmp_path):
     history = recorded().history()
     old = format_one(history.to_dict())
     loaded = HistorySamples.from_dict(old)
@@ -192,7 +192,7 @@ def test_format_one_history_loads_without_percentiles_and_saves_as_two(tmp_path)
     assert sample.stats["animal.gene.g"].mean == history.samples()[-1].stats["animal.gene.g"].mean
     path = save_history(loaded, tmp_path / "again.json.gz")
     again = load_history_data(path)
-    assert again["format"] == 2
+    assert again["format"] == 3
     assert HistorySamples.from_dict(again) == loaded
 
 
@@ -206,11 +206,11 @@ def test_a_format_one_saved_recorder_resumes_and_then_records_the_new_way():
     feed(source, resumed, 5)
     newest = resumed.history().samples()[-1]
     assert newest.values["lineages.animal"] >= 1
-    assert resumed.to_dict()["format"] == 2
+    assert resumed.to_dict()["format"] == 3
 
 
 def test_an_unknown_format_is_still_refused():
     with pytest.raises(ValueError):
-        HistorySamples.from_dict({"format": 3})
+        HistorySamples.from_dict({"format": 4})
     with pytest.raises(ValueError):
-        Recorder.restore(Scripted(), {"format": 3, "kind": "recorder"})
+        Recorder.restore(Scripted(), {"format": 4, "kind": "recorder"})

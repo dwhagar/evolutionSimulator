@@ -91,7 +91,7 @@ def test_the_ground_is_tinted_by_the_daylight_and_the_wall_marks_the_edge(canvas
     assert near(pixel(canvas, left, 200), palette.WALL, 30)
 
 
-def test_an_animal_is_a_triangle_pointing_along_its_heading_coloured_by_the_mode(canvas):
+def test_an_animal_is_a_round_body_coloured_by_the_mode(canvas):
     show(canvas, animal(heading=0.0, diet=1.0))
     ahead, behind = (
         pixel(canvas, CENTRE[0] + 30, CENTRE[1]),
@@ -130,7 +130,7 @@ def test_a_sleeping_animal_is_dimmed_and_a_pregnant_one_has_a_dot(canvas):
 def test_the_selected_animal_gets_a_ring(canvas):
     show(canvas, animal(), status=status(selected=1))
     assert canvas.selected == 1
-    reach = 10.0 * 2.2 * canvas.camera.scale * 0.85
+    reach = 10.0 * 2.0 * canvas.camera.scale * 0.75
     assert near(pixel(canvas, CENTRE[0], CENTRE[1] - reach), (255, 255, 255), 30)
     canvas.set_selected(None)
     assert near(pixel(canvas, CENTRE[0], CENTRE[1] - reach), palette.GROUND_DAY, 8)
@@ -517,3 +517,81 @@ def test_while_the_world_is_not_drawn_the_session_is_asked_for_fewer_frames_and_
     controller.send(Pause())
     controller.poll()
     assert controller.frame.plants is not None  # the plants missed while away came back
+
+
+# --- The creatures (UX.43): round bodies, eyes that look, spots on one sex -----------------
+
+
+def is_white(rgb):
+    return near(rgb, (250, 250, 250), 12)
+
+
+def is_dark(rgb):
+    return sum(rgb) < 120
+
+
+def test_the_eyes_sit_at_the_front_and_their_pupils_point_where_the_animal_looks(canvas):
+    show(canvas, animal(heading=0.0, look=0.0))
+    eye = (CENTRE[0] + 18, CENTRE[1] - 15)  # the eye on the left, a radius of 40 px
+    assert is_white(pixel(canvas, eye[0] - 6, eye[1] + 2))  # white around the pupil
+    assert is_dark(pixel(canvas, eye[0] + 5, eye[1]))  # the pupil, straight ahead
+    show(canvas, animal(heading=0.0, look=math.pi / 2))  # looking to its left: up the screen
+    assert is_dark(pixel(canvas, eye[0], eye[1] - 5))
+    assert is_white(pixel(canvas, eye[0] + 7, eye[1]))
+    show(canvas, animal(heading=0.0, look=-math.pi / 2))
+    assert is_dark(pixel(canvas, eye[0], eye[1] + 5))
+
+
+def test_the_eyes_follow_the_heading_and_close_when_asleep(canvas):
+    show(canvas, animal(heading=math.pi / 2))  # facing up: the eyes are above the middle
+    assert is_white(pixel(canvas, CENTRE[0] - 15 - 6, CENTRE[1] - 18 + 2)) or is_white(
+        pixel(canvas, CENTRE[0] - 15, CENTRE[1] - 18 - 6)
+    )
+    show(canvas, animal(heading=0.0, asleep=True))
+    eyes_area = [
+        pixel(canvas, CENTRE[0] + 12 + dx, CENTRE[1] - 15 + dy)
+        for dx in range(0, 12, 3)
+        for dy in range(-10, 10, 3)
+    ]
+    assert not any(is_white(p) for p in eyes_area)
+
+
+def test_the_spotted_sex_has_spots_on_its_back_and_the_other_has_none(canvas):
+    back = (CENTRE[0] - 20, CENTRE[1])
+    show(canvas, animal(sex=1, diet=1.0))  # female: spotted by default
+    assert sum(pixel(canvas, *back)) < sum(palette.DIET_STOPS[-1]) - 90
+    show(canvas, animal(sex=0, diet=1.0))
+    assert near(pixel(canvas, *back), palette.DIET_STOPS[-1], 25)
+
+
+def test_a_far_off_body_is_a_plain_dot_that_is_never_under_five_pixels(canvas):
+    show(canvas, animal(radius=0.05, diet=0.0, sex=1))
+    assert near(pixel(canvas, CENTRE[0] + 1, CENTRE[1]), palette.DIET_STOPS[0], 30)
+    assert near(pixel(canvas, CENTRE[0] - 1, CENTRE[1] + 1), palette.DIET_STOPS[0], 30)
+    assert near(pixel(canvas, CENTRE[0] + 5, CENTRE[1]), palette.GROUND_DAY, 8)
+    show(canvas, animal(radius=1.0, sex=1))  # 4 px across the radius: still too small for eyes
+    body = [
+        pixel(canvas, CENTRE[0] + dx, CENTRE[1] + dy) for dx in range(-3, 4) for dy in range(-3, 4)
+    ]
+    assert not any(is_white(p) or is_dark(p) for p in body)
+
+
+def test_the_colour_blind_safe_option_swaps_the_diet_pair(canvas):
+    show(canvas, animal(diet=1.0))
+    assert near(pixel(canvas, *CENTRE), palette.DIET_STOPS[-1], 25)
+    canvas.set_safe_colours(True)
+    assert near(pixel(canvas, *CENTRE), palette.SAFE_DIET_STOPS[-1], 25)
+    canvas.set_safe_colours(False)
+    assert near(pixel(canvas, *CENTRE), palette.DIET_STOPS[-1], 25)
+
+
+def test_a_frame_from_before_the_look_column_still_paints(canvas):
+    frame = make_frame([animal()])
+    block = frame.animals
+    count = len(block.columns)
+    old = np.frombuffer(block.values, dtype="<f4").reshape(-1, count)[:, :-1]
+    older = replace(block, columns=block.columns[:-1], values=old.tobytes())
+    canvas.set_frame(replace(frame, format=2, animals=older), None)
+    assert near(pixel(canvas, *CENTRE), palette.DIET_STOPS[-1], 25)
+    eye = (CENTRE[0] + 18, CENTRE[1] - 15)
+    assert is_dark(pixel(canvas, eye[0] + 5, eye[1]))  # straight ahead

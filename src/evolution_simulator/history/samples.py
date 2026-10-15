@@ -11,7 +11,8 @@ counts and flows add up, and levels are averaged by the time they cover.
 Plain values only, no dependencies: a viewer reads ``HistorySamples`` and nothing else, and it round
 trips through ``to_dict`` and ``from_dict`` (JSON-ready) for the run store.
 
-Series names are dotted: ``animals``, ``plants``, ``corpses``, ``animal.energy``, ``births.animal``,
+Species series (``SPECIES.2``) are levels named ``species.animal.12`` (the size of species 12) and so
+on; see ``species.series_name``. Series names are dotted: ``animals``, ``plants``, ``corpses``, ``animal.energy``, ``births.animal``,
 ``deaths.animal.starvation``, and for the stats ``animal.trait.mass`` and ``animal.gene.size``.
 """
 
@@ -22,17 +23,22 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
-HISTORY_FORMAT = 2
+from evolution_simulator.species import SERIES_PREFIX
+
+HISTORY_FORMAT = 3
 """The layout of ``HistorySamples.to_dict`` (and of a saved recorder); bump it when that layout
 changes and add the old number to ``READABLE_FORMATS`` with a migration.
 
 - 1: a ``Stat`` is ``[n, mean, std, lo, hi]``; no lineage counts.
 - 2: a ``Stat`` may carry the 10th and 90th percentile (``[n, mean, std, lo, hi, p10, p90]``), the
-  samples have ``lineages.*`` levels and a saved recorder carries the lineage roots of the living."""
+  samples have ``lineages.*`` levels and a saved recorder carries the lineage roots of the living.
+- 3: the samples may have ``species.*`` levels (``SPECIES.2``) and a saved recorder carries the
+  species tracker's state (``"species"``, ``None`` without one) and ``track_species`` in its rules."""
 
-READABLE_FORMATS: tuple[int, ...] = (1, 2)
+READABLE_FORMATS: tuple[int, ...] = (1, 2, 3)
 """The formats that load. A format-1 history loads with no percentiles (the charts fall back to
-mean plus or minus a deviation for those samples); saving it again writes format 2."""
+mean plus or minus a deviation for those samples) and a format-1 or 2 history has no species series;
+saving either again writes format 3."""
 
 SUM_PREFIXES: tuple[str, ...] = ("births.", "deaths.")
 """Values whose names start with these are flows, added up when samples merge. Every other value is
@@ -41,6 +47,13 @@ a level, averaged by the time each sample covers."""
 
 def is_flow(name: str) -> bool:
     return name.startswith(SUM_PREFIXES)
+
+
+def fills_zero(name: str) -> bool:
+    """Whether a value missing from one of two merged samples means zero: a species' size is nothing
+    in a sample that does not list it. The divergence and parent of a species have no value there, so
+    those are averaged over the samples that have them (like any level one sample lacks)."""
+    return name.startswith(SERIES_PREFIX) and not name.endswith((".divergence", ".parent"))
 
 
 def percentile(ordered: Sequence[float], q: float) -> float:
@@ -160,6 +173,10 @@ class Sample:
             a, b = self.values.get(name), later.values.get(name)
             if is_flow(name):
                 values[name] = (a or 0.0) + (b or 0.0)
+            elif fills_zero(name):
+                values[name] = ((a or 0.0) * self.span + (b or 0.0) * later.span) / (
+                    self.span + later.span
+                )
             elif a is None:
                 values[name] = b  # type: ignore[assignment]
             elif b is None:

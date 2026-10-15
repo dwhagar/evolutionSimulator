@@ -271,7 +271,7 @@ def test_a_frame_at_the_design_size_is_small():
     full = session.frame(include_plants=True)
     light = session.frame(include_plants=False)
     assert light.plants is None and light.plant_count == 3000
-    assert light.nbytes < 14_000  # the 30-a-second case
+    assert light.nbytes < 15_000  # the 30-a-second case (look column, UX.43: +1.2 KB)
     assert full.nbytes < 80_000  # the twice-a-second case, vs 54 KB measured in the design note
 
 

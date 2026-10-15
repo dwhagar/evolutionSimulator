@@ -19,6 +19,7 @@ class Animal:
         "asleep",
         "awake_time",
         "disturbed",
+        "focus",
         "heading",
         "id",
         "killed_by",
@@ -51,6 +52,8 @@ class Animal:
         self.disturbed: bool = False
         self.partner: int | None = None
         self.killed_by: int | None = None
+        self.focus: int | None = None
+        """The id of the thing it last looked at (UX.43): only where its eyes point, nothing else."""
 
     @property
     def is_alive(self) -> bool:

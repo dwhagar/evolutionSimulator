@@ -130,7 +130,8 @@ Each is added by a migration (`user_version` 2, 3 ...), so an older program refu
 clear message and a newer one upgrades an older file in one transaction.
 
 - `species(kind, id, parent, first_day, last_day, ...)` for `SPECIES.2`'s descriptive rows (id, age,
-  parent, divergence); the series themselves are `level` rows.
+  parent, divergence); the series themselves are `level` rows. **Built by `SPECIES.2` as schema 2**
+  (see `docs/design/species.md`, Recording); the series are named `species.<kind>.<id>`.
 - `lineage(kind, id, mother, father, born, died, family)` for `UX.39`, written as births and deaths
   happen (a listener that batches a day at a time). It can grow without bound in a long run (every
   birth is a row), so it must be bounded, for example by dropping dead rows with no living descendant

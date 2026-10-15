@@ -7,6 +7,7 @@ newest checkpoint back as a world and recorder that carry on exactly as an unint
 See ``store.py`` and docs/design/storage.md. No window code and no dependencies.
 """
 
+from evolution_simulator.runs.compact import Compacted
 from evolution_simulator.runs.errors import RunError
 from evolution_simulator.runs.paths import default_runs_root
 from evolution_simulator.runs.store import (
@@ -24,6 +25,7 @@ __all__ = [
     "RUN_FORMAT",
     "Autosaver",
     "CheckpointInfo",
+    "Compacted",
     "Resumed",
     "Run",
     "RunError",
