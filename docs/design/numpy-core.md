@@ -4,7 +4,7 @@ Design note for `WORLD.19`. The owner chose "rewrite the core with numpy" on the
 ([#222](https://github.com/dwhagar/evolutionSimulator/issues/222), 2026-10-15) over keeping the core pure
 Python, so that a full world (1,000 animals, 5,000 plants, hourly ticks) runs at one simulated day per real
 second. This note says how, in what order, and what it costs. It writes no engine code: the two scripts
-that come with it are a speed benchmark ([`src/evolution_tools/benchmark_ticks.py`](../../src/evolution_tools/benchmark_ticks.py))
+that come with it are a speed benchmark ([`src/evolution_tools/bench_world.py`](../../src/evolution_tools/bench_world.py))
 and a feasibility check of the array techniques ([`src/evolution_tools/numpy_kernel_check.py`](../../src/evolution_tools/numpy_kernel_check.py)).
 The build is `WORLD.20`, in the stages of [section 10](#10-build-stages), and does not start until the code it
 would rewrite has stopped changing (`WORLD.15`, `SENSE.21`, `TRAIT.12` to `TRAIT.15`, and the `DNA.16`
@@ -90,7 +90,7 @@ faster (9 against 41 ms in the research test) but search is only about a quarter
 real second: 24 ticks a second, **41.7 ms a tick**, against about 170 ms today (best of three, mean over two
 simulated days, which include the night).
 
-**The benchmark** is [`src/evolution_tools/benchmark_ticks.py`](../../src/evolution_tools/benchmark_ticks.py). It builds seeded worlds
+**The benchmark** is [`src/evolution_tools/bench_world.py`](../../src/evolution_tools/bench_world.py). It builds seeded worlds
 of 60/300, 300/3,000 and 1,000/5,000 (animals/plants at the start; the plants die back at first, because the
 founders are drawn to pay their way, so the table prints the counts at the end), warms up for 20 ticks and
 times 48 single ticks, three times from a fresh world, and prints mean, median, 95th percentile and worst
@@ -511,11 +511,11 @@ when 3 to 5 have made a tick run; stage 7 needs the learner and pregnancy tables
 | **5b. Life cycle** (`WORLD.26`) | Plant environment, growth, soil and shade, seeding and germination; mating and pregnancy, births, the pregnancies table | Everything | Same as 5a; litter and seed counts match the old engine's distributions |
 | **6. Facade and consumers** (`WORLD.27`) | The class with `World`'s read API; views and frames from columns; events; session, history recorder and species tracker moved to array accessors; inspector detail from a row | Viewer, session, host and history run on either engine | The viewer and the history tests pass on the array engine; frame time measured |
 | **7. Saves** (`WORLD.28`) | Save format 6, the two digests, migration from format 5 (state kept), checkpoints through the run store | Format 5 saves still load, on either engine | Migration fixture test; save and load of a 1,000-animal world |
-| **8. Equivalence and the flip** (`WORLD.29`) | Golden records taken from the last object-engine commit before anything is deleted, the statistical test, the benchmark gate, flip the default engine, delete the object engine and its tests, update `docs/design/` (world, dna-and-traits, ux), changelog and version proposal | The array engine is the only one | Section 9 level 2 passes; `benchmark_ticks.py --target-ms 41.7` passes; the owner agrees to the cut |
+| **8. Equivalence and the flip** (`WORLD.29`) | Golden records taken from the last object-engine commit before anything is deleted, the statistical test, the benchmark gate, flip the default engine, delete the object engine and its tests, update `docs/design/` (world, dna-and-traits, ux), changelog and version proposal | The array engine is the only one | Section 9 level 2 passes; `bench-world --target-ms 41.7` passes; the owner agrees to the cut |
 
 Each stage's PR quotes its phase time at 1,000/5,000 against the budget line of section 3 (the benchmark
 cannot run the whole tick before stage 6, so stages 3 to 5 report their kernel timings in the style of
-`src/evolution_tools/numpy_kernel_check.py`). A stage that is over its line says so and says which control of section 6
+`numpy_kernel_check.py`). A stage that is over its line says so and says which control of section 6
 it will try; it does not wait for the end to find out.
 
 **Coordination rules** for the build:

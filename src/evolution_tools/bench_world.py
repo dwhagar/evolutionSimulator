@@ -1,6 +1,10 @@
 """Speed benchmark: milliseconds per tick of a full world (``WORLD.19``, docs/design/numpy-core.md).
 
+<<<<<<<< HEAD:src/evolution_tools/benchmark_ticks.py
     python -m evolution_tools.benchmark_ticks [--sizes 60/300,300/3000,1000/5000] [--ticks 48]
+========
+    python -m evolution_tools.bench_world   (or scripts/bench-world.ps1 or .bat) [--sizes 60/300,300/3000,1000/5000] [--ticks 48]
+>>>>>>>> origin/main:src/evolution_tools/bench_world.py
         [--warmup 20] [--repeat 3] [--seed 3] [--engine object] [--profile]
         [--json out.json] [--compare baseline.json] [--tolerance 0.15] [--target-ms 41.7]
 
@@ -42,9 +46,12 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+<<<<<<<< HEAD:src/evolution_tools/benchmark_ticks.py
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "src"))
 
+========
+>>>>>>>> origin/main:src/evolution_tools/bench_world.py
 DEFAULT_SIZES = "60/300,300/3000,1000/5000"
 """The three worlds of the package research (docs/research/python-packages.md, section 3)."""
 TARGET_DAYS_PER_SECOND = 1.0
