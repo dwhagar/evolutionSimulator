@@ -67,7 +67,7 @@ from evolution_simulator.world.world import World, WorldConfig
 
 FORMAT = "evolution-simulator-world"
 """The document type, so a file of something else is refused with a clear message."""
-FORMAT_VERSION = 6
+FORMAT_VERSION = 7
 """The layout of the document. Bump it when the layout changes and add a migration if old saves can
 still be read."""
 
@@ -130,12 +130,21 @@ def _ancestry_book(data: dict[str, Any]) -> dict[str, Any]:
     return data
 
 
+def _upkeep_bill_scale(data: dict[str, Any]) -> dict[str, Any]:
+    """Version 6 to 7 (``WORLD.15``): animals burn ``body.burn_scale`` of their upkeep bill. A save
+    from before burnt all of it, so it keeps burning all of it (the new default is 0.1)."""
+    traits = data["world"]["config"].setdefault("traits", {})
+    traits.setdefault("body", {}).setdefault("burn_scale", 1.0)
+    return data
+
+
 _MIGRATIONS: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {
     1: _learning_into_the_trait_rules,
     2: _sleep_into_the_trait_rules,
     3: _day_time_and_plants_into_the_trait_rules,
     4: _bites_corpses_and_world_settings_into_the_trait_rules,
     5: _ancestry_book,
+    6: _upkeep_bill_scale,
 }
 """``{n: f}``: ``f`` takes a document of version ``n`` and returns it as version ``n + 1``."""
 

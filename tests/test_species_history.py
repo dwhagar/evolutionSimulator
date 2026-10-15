@@ -244,7 +244,7 @@ def test_a_run_keeps_the_species_series_and_the_species_rows(tmp_path):
     assert history == recorder.history()  # the series came back from the tables unchanged
     assert any(n.startswith("species.animal.") for n in history.names())
     rows = store.open(run.id, readonly=True).species()
-    assert rows == recorder.species.rows() and rows
+    assert rows == sorted(recorder.species.rows(), key=lambda r: (r.kind, r.id)) and rows
     first = rows[0]
     assert isinstance(first, SpeciesRow) and first.parent is None and first.extinct_day is None
     assert {r.kind for r in rows} == {"animal", "plant"}

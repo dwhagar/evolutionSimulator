@@ -561,10 +561,16 @@ class World:
 
         The animals are a first generation: random bodies with the reproduction and sense genes at
         their starting levels, and the seeded brain (``BRAIN.9``, slightly varied) unless ``seeded``
-        is False, which leaves the brains random: those mostly die before they breed.
+        is False, which leaves the brains random: those mostly die before they breed. The plants
+        are a first generation too: part-grown, of ages spread over part of their life, and less
+        poisonous than their genes say (``TraitRules.plant``, ``WORLD.15``).
         """
+        grown = self.config.traits.plant
         for _ in range(plants):
-            self.add_plant(self._founder_plant())
+            founder = self.add_plant(self._founder_plant())
+            founder.traits.establish(
+                grown.founder_size, self.rng.random() * grown.founder_age_spread
+            )
         for _ in range(animals):
             founder = founder_animal_dna(self.rng)
             self.add_animal(seeded_dna(self.rng, base=founder) if seeded else founder)
@@ -577,7 +583,7 @@ class World:
             dna = founder_plant_dna(self.rng)
             if PlantTraits(dna, rules).upkeep_share <= rules.plant.founder_upkeep_share:
                 break
-        return dna
+        return dna.with_value("toxicity", dna.value("toxicity") * rules.plant.founder_toxicity)
 
     # -------------------------------------------------------------------------
     # The step loop
@@ -822,7 +828,7 @@ class World:
         dt = self.dt
         traits.update_metabolism_and_aging(0.0, dt)
         if traits.is_alive:
-            saved = traits.basal_metabolism * (1.0 - rules.metabolism_factor)
+            saved = traits.energy_burn * (1.0 - rules.metabolism_factor)
             regained = rules.energy_regain * traits.max_energy * traits.rest_regain_factor
             gained = (saved + regained) * dt
             traits.current_energy = min(traits.max_energy, traits.current_energy + gained)

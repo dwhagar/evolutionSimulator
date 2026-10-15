@@ -167,7 +167,7 @@ def run_world(monkeypatch=None, reference=None):
 
         monkeypatch.setattr(DNA, "distance", counting)
     world = hourly_world(seed=11)
-    world.populate(animals=24, plants=80)
+    world.populate(animals=60, plants=80)
     for _ in range(24 * 6):
         world.step()
     return world.state_digest(), calls

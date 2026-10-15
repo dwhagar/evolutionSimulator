@@ -185,7 +185,7 @@ into clusters, with the five reproduction genes next to each other: layout versi
   feeding". Wear (ageing) does not heal. `SleepRules.energy_regain` is multiplied by `0.5 + 1.5 * recovery` (the
   world reads `AnimalTraits.rest_regain_factor`). An average sleeper roughly breaks even, a fast healer gains.
 - **First generation.** `World.populate` builds animals with `layouts.founder_animal_dna`: random genomes with
-  `fertility` 0.75 (six young), `parenting` 0 and the rest of the reproduction genes at 0.5 (`FOUNDER_LEVELS`).
+  `fertility` 0.3 (about three young), `parenting` 0.1 and the rest of the reproduction genes at 0.5 (`FOUNDER_LEVELS`).
   `add_animal` takes whatever genome it is given.
 - **Built later (`SENSE.14`).** The protective effect of `parenting` on aggression and fear and the "own young" channel
   exist now (animal layout version 8; version 9 added `camouflage`, below). The pregnancy list is kept on

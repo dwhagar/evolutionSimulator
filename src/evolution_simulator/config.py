@@ -81,7 +81,12 @@ class BodyRules:
     """Upkeep of the body itself is ``scale * mass ** exponent`` (Kleiber's law)."""
     gut_cost: float = 0.06
     """Upkeep of the gut: ``gut_cost * (herbivore_eff ** 2 + carnivore_eff ** 2)``."""
-    kinetic_burn: float = 0.35
+    burn_scale: float = 0.1
+    """Share of its upkeep bill (``basal_metabolism``: the body, gut, organ, brain and temperament
+    terms together) an animal burns per reference tick; sleeping saves against the same burn. The
+    tables give the bill at full size, and at 1 a seeded first generation eats a tenth of what it
+    burns and is dead within about 1,000 ticks (``WORLD.15``, issue 242 question 1)."""
+    kinetic_burn: float = 0.035
     """Energy per reference tick per unit of mass for an animal moving at ``speed_reference``; the
     burn goes with the square of the speed actually moved, so a fast animal pays more per hour and
     more than twice as much per unit of distance moved at twice the speed (``TRAIT.9``)."""
@@ -298,6 +303,13 @@ class PlantTraitRules:
     """Growth is multiplied by ``1 - longevity_growth * longevity``."""
     longevity_seeds: float = 0.4
     """The seed budget share is multiplied by ``1 - longevity_seeds * longevity``."""
+    founder_toxicity: float = 0.3
+    """A first generation's plants have this share of the toxicity their genes give (``WORLD.15``,
+    issue 242 question 3): a random plant is poisonous enough to kill an animal that eats it often."""
+    founder_size: float = 0.7
+    """A first generation's plants start at this share of their full size, not as seedlings."""
+    founder_age_spread: float = 0.5
+    """...and at a random age up to this share of their lifespan, so they do not die in one wave."""
     founder_upkeep_share: float = 0.3
     """A first generation's plants must be able to pay their way: ``World.populate`` redraws a
     random plant whose full-size upkeep is more than this share of its growth (``WORLD.11``).
@@ -484,7 +496,7 @@ class SleepRules:
     """An animal with less than this fraction of its energy store stays awake to find food."""
     metabolism_factor: float = 0.4
     """Fraction of its basal metabolism an animal burns while asleep."""
-    energy_regain: float = 0.002
+    energy_regain: float = 0.0002
     """Fraction of its energy store an animal regains each reference tick (hour) of sleep, at
     average ``recovery``, on top of burning less."""
     alarm_wakes_above: float = 0.2
@@ -664,7 +676,7 @@ class WorldRules:
     """The small settings of how the world applies its rules to organisms (``TRAIT.11``);
     ``TraitRules.world`` holds them for a run."""
 
-    graze_amount: float = 5.0
+    graze_amount: float = 20.0
     """Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer
     tick takes proportionally less or more."""
     mating_reach: float = 3.0

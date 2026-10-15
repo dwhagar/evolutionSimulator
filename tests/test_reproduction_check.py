@@ -24,7 +24,7 @@ def test_a_short_run_is_repeatable_and_records_the_genes():
     assert first.history == second.history
     assert first.history[0]["population"] == 10
     assert set(check.WATCHED) <= set(first.history[0])
-    assert abs(first.history[0]["fertility"] - 0.75) < 0.03
+    assert abs(first.history[0]["fertility"] - 0.3) < 0.03
 
 
 def test_the_young_of_a_fed_population_are_born_in_the_check():

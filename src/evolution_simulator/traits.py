@@ -445,6 +445,11 @@ class AnimalTraits(BaseTraits):
         self.current_sight_range = self.effective_sight_range * sense_scale
         self.current_hearing_range = self.hearing_range * sense_scale
 
+    @property
+    def energy_burn(self) -> float:
+        """Energy burnt per reference tick at rest: the upkeep bill times ``body.burn_scale``."""
+        return self.basal_metabolism * self.rules.body.burn_scale
+
     def update_metabolism_and_aging(
         self, movement_speed_ratio: float = 0.0, dt: float = 1.0
     ) -> None:
@@ -468,7 +473,7 @@ class AnimalTraits(BaseTraits):
         body = self.rules.body
         speed = movement_speed_ratio * self.current_max_speed
         kinetic_burn = ((speed / body.speed_reference) ** 2) * (body.kinetic_burn * self.mass) * dt
-        upkeep = self.basal_metabolism
+        upkeep = self.energy_burn
         if self.pregnancy is not None:
             upkeep *= 1.0 + (repro.gestation_upkeep * self.pregnancy.litter / repro.litter_max)
         self.current_energy -= (upkeep * dt) + kinetic_burn
@@ -952,6 +957,16 @@ class PlantTraits(BaseTraits):
         # A seedling's vitality follows its starting health, not the default of 1.0.
         self._refresh_vitality_dependents()
         self._update_needs_and_drives()
+
+    def establish(self, size: float, age_share: float) -> None:
+        """Make a first-generation plant that is already grown: ``size`` of its full biomass, full
+        health, and ``age_share`` of its lifespan lived (it can seed once the rest of its juvenile
+        period is over)."""
+        self.set_starting_biomass(self.max_biomass * size)
+        self.current_health = self.max_damage_capacity
+        self._refresh_vitality_dependents()
+        self.lived_ticks = age_share * self.lifespan_ticks
+        self.seed_cooldown = max(0.0, self.seed_cooldown - self.lived_ticks)
 
     @property
     def upkeep_share(self) -> float:

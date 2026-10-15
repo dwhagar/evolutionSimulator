@@ -387,14 +387,39 @@ def test_a_mother_who_dies_loses_the_litter(sure_conception):
     assert len(world.animals) == 1
 
 
-def test_a_first_generation_starts_with_large_litters_and_no_parenting():
+def test_a_first_generation_of_plants_starts_grown_old_and_less_poisonous():
+    world = make(seed=4)
+    world.populate(plants=60)
+    rules = world.config.traits.plant
+    for plant in world.plants:
+        traits = plant.traits
+        assert traits.current_biomass == pytest.approx(rules.founder_size * traits.max_biomass)
+        assert traits.current_health == traits.max_damage_capacity
+        assert 0.0 <= traits.lived_ticks <= rules.founder_age_spread * traits.lifespan_ticks
+    assert max(p.traits.toxicity for p in world.plants) <= rules.founder_toxicity + 0.02
+    assert len({round(p.traits.lived_ticks) for p in world.plants}) > 30  # spread, not one wave
+
+
+def test_an_animal_burns_the_burn_scale_of_its_upkeep_bill_and_saves_against_the_same_burn():
+    world = make(seed=4, day_cycle=None)
+    world.populate(animals=1)
+    traits = world.animals[0].traits
+    assert traits.energy_burn == pytest.approx(
+        traits.basal_metabolism * world.config.traits.body.burn_scale
+    )
+    traits.current_energy = traits.max_energy
+    traits.update_metabolism_and_aging(0.0, 1.0)
+    assert traits.max_energy - traits.current_energy == pytest.approx(traits.energy_burn)
+
+
+def test_a_first_generation_starts_with_small_litters_and_a_little_parenting():
     world = make(seed=4)
     world.populate(animals=12)
     for animal in world.animals:
         traits = animal.traits
-        assert traits.phenotype["fertility"] == pytest.approx(0.75, abs=0.02)
-        assert traits.phenotype["care_fraction"] == pytest.approx(0.10)
-        assert 5 <= traits.litter_size <= 7  # fertility 0.75, scaled 0.8 to 1.2 by body size
+        assert traits.phenotype["fertility"] == pytest.approx(0.3, abs=0.02)
+        assert traits.phenotype["care_fraction"] == pytest.approx(0.167, abs=0.002)  # parenting 0.1
+        assert 3 <= traits.litter_size <= 4  # fertility 0.3, scaled 0.8 to 1.2 by body size
         assert traits.phenotype["repro_drive"] == pytest.approx(0.5, abs=0.02)
         assert traits.phenotype["recovery"] == pytest.approx(0.5, abs=0.02)
 
