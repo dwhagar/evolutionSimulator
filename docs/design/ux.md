@@ -838,6 +838,43 @@ The shell and the shared widgets, with no change to what any screen does.
   cannot be given a parent by their factory; the window gives them one when it docks them.
 - **Removed.** `panels/_placeholder.py`, which no slot uses any more.
 
+### As built: the family tree (`UX.39`)
+
+The owner's first extra ([#134](https://github.com/dwhagar/evolutionSimulator/issues/134)): for the
+selected animal, its ancestors above it and its descendants below, alive and dead.
+
+- **What the core keeps.** `world/ancestry.py`: `AncestryBook`, one small record per animal (`Kin`: its
+  parents, sex, birth tick, death tick and cause, and its family key), filled by the world itself
+  whether or not anyone listens (`World._insert_animal` and `_remove_dead`; a founder has no parents).
+  Every living animal has a record and the newest 20,000 dead ones are kept, the oldest forgotten first
+  (`max_dead`), so memory is bounded (about a megabyte at the bound). A forgotten ancestor is simply
+  missing: its child still names it and the tree stops there ("Older ancestors are not remembered").
+  The book is bookkeeping about the past, not an input to what happens next, so it is not in
+  `state_digest` (a test runs a world with the bound at zero and checks the digest is the same).
+- **Saved.** The book is a table in the save (`world.ancestry`, `[id, parents, sex, born, family_a,
+  family_b, died, cause]` by id); `FORMAT_VERSION` is 6, and a save from format 5 starts a book from the
+  living animals (born as long ago as their age says, nothing known about the dead).
+- **What the viewer gets.** `World.family_of(id)` gives a `FamilyView` (`world/views.py`): the animal,
+  its ancestors up to 4 generations back and its descendants up to 3 on, each animal once, at most 120,
+  descendants cut first (`truncated`), as `KinView` records (id, parents, sex, born, died, cause, family
+  key). `AnimalDetail.family` carries it, so it arrives with the details of the selected animal (and
+  through the process host) with no new message; it is `None` from a simulation that keeps no ancestry
+  (`FakeSimulation`). Selecting another animal re-centres it.
+- **Layout.** `viewer/inspector/treelayout.py` (no Qt) builds the tree: ancestors above (father left of
+  mother), descendants below in birth order, one row a generation, parents centred over what hangs from
+  them, the selected animal in one column for both halves. An animal two paths lead to is drawn once per
+  path, so it stays a tree. At most 128 nodes.
+- **The window.** `viewer/inspector/familytree.py`: a non-modal `FamilyTreeWindow`, opened by the Family
+  tab's "Show the family tree" button. Each animal is a button from a pool of 128 made at the start
+  (parent given at creation, as everywhere): its fill is the world view's family colour for its family
+  key, using the frame's own scale (`palette.FamilyScale`, the 5th to 95th percentile, so a dead
+  ancestor matches its living kin); a glyph says male or female, a dagger and a dashed border say dead,
+  the selected one has a thick border. A button for an animal that is not in the frame (dead, or not drawn
+  yet) is greyed out and cannot be pressed; pressing another sends `Select`. A tooltip gives the animal's
+  birth, and death with its cause, in simulated days.
+- **Not built.** Zooming the tree (it scrolls); a partner line between the two parents; a wider tree than
+  4 up and 3 down (the numbers are `ancestry.DEFAULT_UP` and `DEFAULT_DOWN`).
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

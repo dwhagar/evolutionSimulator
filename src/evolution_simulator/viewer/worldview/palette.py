@@ -53,26 +53,58 @@ def _sex(layer: Layer) -> Colours:
     return np.where(female[:, None], np.uint8(FEMALE), np.uint8(MALE)).astype(np.uint8)
 
 
-def _unit(values: np.ndarray) -> np.ndarray:
-    """``values`` stretched over 0 to 1 by the range of the middle 90% of the frame (5th to 95th
-    percentile, the rest clipped, so one far-off animal does not squash everyone else's colours;
-    all 0 when there is no spread), which is how the frame's family key is meant to be read
-    (``lineage.family_key``)."""
+def _bounds(values: np.ndarray) -> tuple[float, float]:
+    """The range of the middle 90% of ``values`` (5th to 95th percentile), which is how the frame's
+    family key is meant to be read (``lineage.family_key``)."""
+    if len(values) == 0:
+        return (0.0, 0.0)
+    low, high = np.percentile(values, [5.0, 95.0])
+    return (float(low), float(high))
+
+
+def _stretch(values: np.ndarray, bounds: tuple[float, float]) -> np.ndarray:
+    """``values`` stretched over 0 to 1 by ``bounds`` (the rest clipped, so one far-off animal does
+    not squash everyone else's colours; all 0 when there is no spread)."""
+    low, high = bounds
     if len(values) == 0:
         return values.astype(np.float64)
-    low, high = (float(v) for v in np.percentile(values, [5.0, 95.0]))
     if high - low < 1e-9:
         return np.zeros(len(values))
     return np.clip((values.astype(np.float64) - low) / (high - low), 0.0, 1.0)
 
 
+def _unit(values: np.ndarray) -> np.ndarray:
+    """``values`` stretched over 0 to 1 by their own middle 90%."""
+    return _stretch(values, _bounds(values))
+
+
+@dataclass(frozen=True)
+class FamilyScale:
+    """How family numbers become colours: the range of each number in a frame. The same scale colours
+    animals that are not in the frame (the dead ones of a family tree), so they match their kin."""
+
+    a: tuple[float, float]
+    b: tuple[float, float]
+
+    @classmethod
+    def of(cls, layer: Layer) -> FamilyScale:
+        if "family_a" not in layer.columns or "family_b" not in layer.columns:
+            return cls((0.0, 0.0), (0.0, 0.0))
+        return cls(_bounds(layer.col("family_a")), _bounds(layer.col("family_b")))
+
+    def colours(self, family_a: np.ndarray, family_b: np.ndarray) -> Colours:
+        """Relatives get alike colours: the first number sets the hue, the second the lightness (so
+        two lineages of the same hue still differ, also without colour vision)."""
+        hue = 0.8 * _stretch(family_a, self.a)  # stops short of a full turn, so the ends differ
+        value = 0.6 + 0.4 * _stretch(family_b, self.b)
+        rgb = [
+            colorsys.hsv_to_rgb(float(h), 0.7, float(v)) for h, v in zip(hue, value, strict=True)
+        ]
+        return np.rint(np.asarray(rgb, dtype=np.float64).reshape(-1, 3) * 255).astype(np.uint8)
+
+
 def _family(layer: Layer) -> Colours:
-    """Relatives get alike colours: the first family number sets the hue, the second the lightness
-    (so two lineages of the same hue still differ, also without colour vision)."""
-    hue = 0.8 * _unit(layer.col("family_a"))  # stops short of a full turn, so the ends differ
-    value = 0.6 + 0.4 * _unit(layer.col("family_b"))
-    rgb = [colorsys.hsv_to_rgb(float(h), 0.7, float(v)) for h, v in zip(hue, value, strict=True)]
-    return np.rint(np.asarray(rgb, dtype=np.float64).reshape(-1, 3) * 255).astype(np.uint8)
+    return FamilyScale.of(layer).colours(layer.col("family_a"), layer.col("family_b"))
 
 
 @dataclass(frozen=True)
