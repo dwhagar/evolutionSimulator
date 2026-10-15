@@ -372,6 +372,21 @@ it and the measurements are in [storage.md](storage.md); what was built, and whe
   checkpoints, 100 simulated years of daily history cost 1.0 ms per day appended and 2.4 MB, the whole
   history reads in 47 ms and one series in under a millisecond, and ten writers killed mid-checkpoint
   each left a file that passed `integrity_check` with every checkpoint whole.
+- **Compact (`STORE.3`).** `RunStore.compact(run_id)` (`runs/compact.py`) rewrites a run's file without
+  its free space and returns the size before and after (`Compacted`, the file and its WAL). It
+  takes the writer's claim first (refused with `RunError` if a program that is running holds it, this one
+  included), writes a copy with `VACUUM INTO run.sqlite.compact`, checks the copy (`integrity_check`, the
+  same rows in every table, the same bytes in the checkpoint blobs), folds its WAL in, closes the
+  original and replaces it with one `os.replace`. The run folder therefore holds the old file or the new
+  one, never a mixture: a failure or a kill before the rename leaves the original as it was (a stray
+  `run.sqlite.compact` is deleted by the next attempt, and a claim left by a dead program is ignored). The
+  blobs are copied as bytes, so nothing here depends on the world or recorder format. The Saved runs dock
+  has a **Compact** button (`RunsPanel.compact`) that reports "from X to Y"; the run on screen is
+  refused by the manager with the reason, and any run a simulation is writing by the store. Retention
+  and `incremental_vacuum` already keep a file near what it holds, so compacting mostly pays after a lot
+  was deleted or an old run was imported. Tests: `tests/test_runcompact.py` (the refusals, a failure at the
+  rename, an interruption after the copy, a copy that does not match, a stray copy, and a program killed
+  while compacting at five moments) and the dock tests in `tests/test_viewer_runs.py`.
 - **Restart.** `Controller.restart` now closes the old backend before it starts the new one: a
   simulation that is still alive is the run's writer, and the one that resumes the run would be refused.
 - **Other changes.** `CheckpointInfo.path` is the run file; `RunStore.delete` closes the runs it opened
@@ -1270,7 +1285,7 @@ Filed as issues, each with a default so nothing waits. The earlier four are
 [#126](https://github.com/dwhagar/evolutionSimulator/issues/126).
 
 1. [#129](https://github.com/dwhagar/evolutionSimulator/issues/129) **Look of the creatures** (`UX.23`, feeds `UX.12`): colour by what by default, and the shape. Default: triangles by heading,
-   colour by diet, switchable.
+   colour by diet, switchable. **Answered 2026-10-15, replacing the default:** round creatures with eyes at the front pointing where they focus inside their field of vision, colour tied to diet (carnivore red, herbivore blue) and its own gene, spots for one sex, and darker tougher plants (`UX.43`, `UX.44`, `TRAIT.20`, `TRAIT.21`; [docs/decisions.md](../decisions.md)).
 2. [#130](https://github.com/dwhagar/evolutionSimulator/issues/130) **Slow and impossible speeds** (`UX.24`, feeds `UX.13`): the lowest presets (real time, a minute a second) move almost nothing
    with an hourly tick, and the fastest cannot be reached. Default: keep all presets, glide between ticks,
    show achieved speed, and add "as fast as possible".

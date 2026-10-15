@@ -31,6 +31,9 @@ Task IDs and the owner's answers are recorded in [../decisions.md](../decisions.
 > mid-range and different starting eyes for predators and prey, and the check of what the world must
 > provide for each sense, are in [sense-genes.md](sense-genes.md). Where the two disagree (for example
 > "a wider field shortens the range by 45%"), that note is newer.
+>
+> **Calibration, 2026-10-15 (`SENSE.13`).** The measured sense bill, what each sense is worth to a
+> forager and what was left unchanged are in [sense-calibration.md](sense-calibration.md).
 
 ## Contents
 

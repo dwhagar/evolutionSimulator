@@ -106,3 +106,15 @@ def checkpoint_forever(root: str, marker: str) -> None:
     while True:
         world.step()
         run.checkpoint(world, recorder)
+
+
+def compact_forever(root: str, run_id: str, marker: str) -> None:
+    """The target of a child process: compact a run again and again until killed."""
+    from pathlib import Path
+
+    from evolution_simulator.runs import RunStore
+
+    store = RunStore(root)
+    Path(marker).write_text("started")
+    while True:
+        store.compact(run_id)

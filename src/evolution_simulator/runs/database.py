@@ -19,7 +19,7 @@ import math
 import sqlite3
 import threading
 import weakref
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -99,6 +99,16 @@ MIGRATIONS: dict[int, Any] = {2: _add_species_table}
 """``{n: function(connection)}`` taking the file from schema ``n - 1`` to ``n``: 2 adds the
 ``species`` table."""
 
+TABLES = (
+    "meta",
+    "checkpoints",
+    "checkpoint_data",
+    "names",
+    "samples",
+    "level",
+    "stat",
+    "histogram",
+)
 _HISTORY_TABLES = ("samples", "level", "stat", "histogram")
 _NAN = math.nan
 
@@ -303,6 +313,42 @@ class RunFile:
                 self._connection.execute("PRAGMA wal_checkpoint(TRUNCATE)").fetchall()
             except sqlite3.Error:
                 log.debug("The WAL of %s could not be emptied now", self.path, exc_info=True)
+
+    def claim(self, claim: Mapping[str, Any], alive: Callable[[int], bool]) -> None:
+        """Set ``meta.writer`` to ``claim`` unless a program that is still running has set it: the
+        check and the write are one transaction, so two programs cannot both succeed."""
+        with self.transaction():
+            held = self.get_meta("writer")
+            if isinstance(held, dict) and alive(int(held.get("pid", -1))):
+                raise RunError(f"{self.path.parent.name} is being written (process {held['pid']}).")
+            self.set_meta(writer=dict(claim))
+
+    def vacuum_into(self, target: Path) -> None:
+        """Write a compacted copy of the whole file to ``target`` (which must not exist). The copy
+        is made from one snapshot and is not touched again; this file is unchanged."""
+        with self._lock:
+            try:
+                self._connection.execute("VACUUM INTO ?", (str(target),))
+            except sqlite3.Error as error:
+                raise RunError(f"{self.path.name} cannot be compacted: {error}") from error
+
+    def integrity(self) -> str:
+        """``"ok"`` or what SQLite found wrong with the file."""
+        rows = self._query("PRAGMA integrity_check")
+        return "; ".join(str(row[0]) for row in rows)
+
+    def table_counts(self) -> dict[str, int]:
+        """Rows in every table and the bytes in the checkpoint blobs: what a copy must agree on."""
+        counts = {
+            table: int(self._query(f"SELECT COUNT(*) FROM {table}")[0][0]) for table in TABLES
+        }
+        counts["blob bytes"] = int(
+            self._query(
+                "SELECT COALESCE(SUM(LENGTH(world) + COALESCE(LENGTH(recorder), 0) "
+                "+ COALESCE(LENGTH(species), 0)), 0) FROM checkpoint_data"
+            )[0][0]
+        )
+        return counts
 
     # ---- the manifest -------------------------------------------------------------------------
 

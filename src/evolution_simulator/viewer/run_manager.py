@@ -33,6 +33,7 @@ from evolution_simulator.history import HistorySamples, Recorder
 from evolution_simulator.runs import (
     Autosaver,
     CheckpointInfo,
+    Compacted,
     Run,
     RunError,
     RunStore,
@@ -372,6 +373,17 @@ class RunManager(QObject):
         if not animals or not plants:
             return None
         return round(animals[0]), round(plants[0])
+
+    def compact(self, run_id: str) -> Compacted:
+        """Rewrite a saved run's file without its free space (``STORE.3``). The run on screen is
+        refused, as is any run a simulation is writing; the store says which."""
+        if self.current_run is not None and self.current_run.id == run_id:
+            raise RunError(
+                "It is the run on screen. Open another run (or start a new one) and compact it then."
+            )
+        result = self.store.compact(run_id)
+        self.changed.emit()
+        return result
 
     def delete(self, run_id: str) -> None:
         """Remove a run for good. If it is the current run, the world on screen goes on but is no
