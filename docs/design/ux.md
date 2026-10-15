@@ -958,6 +958,42 @@ selected animal, its ancestors above it and its descendants below, alive and dea
 - **Not built.** Zooming the tree (it scrolls); a partner line between the two parents; a wider tree than
   4 up and 3 down (the numbers are `ancestry.DEFAULT_UP` and `DEFAULT_DOWN`).
 
+### As built: the Windows launcher (`INFRA.10`)
+
+`run.ps1` in the repository root (the owner asked for it there; the one exception to "scripts only in
+`scripts/`", see `tests/test_repo_layout.py`) and `run.bat` beside it, for running from source on a
+machine that has only Python installed. How a person uses it is in the README ("Run from source").
+
+- **Steps.** (1) If `.venv` has a Python that runs and is 3.12 or newer, keep it; otherwise find one
+  (`py -3.12`, `py -3`, `python`, `python3`, first one that reports 3.12 or newer), delete `.venv` if it
+  is there and create it again. With no suitable Python it prints how to install one and exits 1.
+  (2) Fingerprint `pyproject.toml` and `version.toml` (SHA-256) and compare with
+  `.venv\install-stamp.txt`; if they differ, `pip install -e ".[gui]"` and write the stamp, but only when
+  pip succeeded. (3) Run `python -m evolution_simulator.viewer` with the arguments passed on and exit
+  with its exit code. A second start does one tiny Python call and goes straight to the window.
+- **Paths.** The script finds its own files through `$PSScriptRoot` and never changes the current
+  folder (only the install step moves into the repository, then back), so `--settings notes.ini`
+  means the folder the person started it from. Every path goes through `-LiteralPath` or a quoted
+  variable, for spaces and brackets.
+- **`run.bat`.** One line that runs `powershell -NoProfile -ExecutionPolicy Bypass -File run.ps1 %*`
+  and exits with its code, so a double-click works whatever the execution policy; if it failed and was
+  started by a double-click (the command line has `/c`), it waits for a key so the message can be read.
+  The script itself cannot explain a blocked policy, because PowerShell refuses to read it: that is in the
+  header comment and the README.
+- **Console.** The program runs under `python.exe`, so a console window stays open while the viewer is
+  open and shows its messages (the Windows package, UX.19, has no console).
+- **Windows PowerShell 5.1.** Plain ASCII, no `&&`, `??`, ternary or `$IsWindows`; failures are read from
+  `$LASTEXITCODE`, not from `$ErrorActionPreference`, which 5.1 turns into errors for native commands
+  that write to stderr.
+- **Tested** (`tests/test_launcher.py`): a text check of each step above and of the 5.1 limits, and,
+  when a PowerShell is on the machine, PowerShell's own parser over the script and a real run of the
+  "no suitable Python" path. By hand with PowerShell 7.4 on Linux (not part of the tests): a first start
+  (venv, install, window, exit 0), a second start (2.2 s with a 1 s `--quit-after`), the program's exit
+  code (2 for a bad argument) passed through, a changed `version.toml` reinstalling and an unchanged one
+  not, a `.venv` whose Python said 3.11 rebuilt, and no Python or only 3.11 on the path. **Not run:**
+  Windows PowerShell 5.1, `run.bat` under `cmd`, the `py` launcher, the Microsoft Store `python.exe`
+  shortcut and a real Windows machine: the owner tries these in `UX.34`.
+
 ## Speed and what the window shows
 
 At the hourly default tick a tick is one simulated hour (`WORLD.7`), so the speed presets need these

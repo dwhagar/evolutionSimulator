@@ -40,6 +40,29 @@ founders and the New run panel to change them. `--new` (or `--seed`, `--animals`
 new world even when runs are saved, and `--in-process` keeps the simulation in the window's own
 process, for debugging. Closing the window on a world that was never saved asks "Save this run?".
 
+## Run from source
+
+On Windows, `run.bat` (double-click it) or `run.ps1` sets everything up and opens the window; the
+only thing you need first is Python 3.12 or newer
+([python.org](https://www.python.org/downloads/windows/), or `winget install Python.Python.3.12`).
+
+```powershell
+.\run.bat                      # or double-click it
+.\run.ps1 --new --seed 7       # every argument goes on to the program (--fake, --new, --seed, --world, ...)
+```
+
+The first start finds Python, builds a virtual environment in `.venv`, installs the program with the
+`gui` extra and opens the viewer, which takes a minute or two. Later starts only open the window: the
+install is repeated only when `pyproject.toml` or `version.toml` changed, and `.venv` is built again if
+its Python is missing or older than 3.12. It works from any folder, with spaces in the path, in Windows
+PowerShell 5.1 and PowerShell 7, and exits with the program's exit code. A console window stays open
+while the program runs and shows anything it prints.
+
+If PowerShell says "running scripts is disabled on this system", use `run.bat`, or run
+`powershell -ExecutionPolicy Bypass -File .\run.ps1`: that lifts the block for that one run and
+changes no setting. If it says the script "is not digitally signed" (it came from a downloaded zip),
+`Unblock-File .\run.ps1` clears it. To remove everything the launcher made, delete the `.venv` folder.
+
 ## Windows download
 
 A build for Windows is made on request (the "Package Windows" workflow in the Actions tab), as a zip
@@ -61,6 +84,7 @@ benchmarks/                pytest-benchmark measurements (not part of the plain 
 docs/                      roadmap, design, research, archive
 src/evolution_tools/version.py         prints the current MAJOR.minor.build version
 src/evolution_tools/package.py         builds the Windows zip (UX.19)
+run.ps1, run.bat           Windows launcher for running from source (INFRA.10)
 packaging/                 PyInstaller spec, entry point and notices
 ```
 
