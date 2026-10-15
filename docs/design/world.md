@@ -258,6 +258,86 @@ reached the 5,000 cap. The starter reserve (15%) and the night upkeep are unchan
 high (about 9% of a cohort lives 240 ticks, from crowding by the parent's neighbourhood), which is the soil
 limit working; it only stopped being a daily pulse.
 
+## Founders and the energy economy (WORLD.15, first reading)
+
+The default founder run (100 seeded animals, 800 plants, 1,000 by 1,000, hourly ticks) still ends in
+extinction with no births. This is the first reading of why and of what a change of constants can
+and cannot do. Every number below is from `scripts/founder_economy.py` (seeds 1 to 3 unless said, a
+run of 3,000 ticks is about 80 seconds); nothing in the rules has changed yet.
+
+**Where the energy goes.** Per animal and tick, seed 1, default constants:
+
+| Ticks | Alive | Gained by eating | Lost (all) | of it basal | of it healing | Bites per animal tick |
+|---|---|---|---|---|---|---|
+| 0 to 100 | 99 | 0.063 | 0.78 | 0.67 | 0.04 | 0.039 |
+| 100 to 200 | 96 | 0.042 | 0.76 | 0.67 | 0.03 | 0.028 |
+| 200 to 300 | 71 | 0.040 | 0.73 | 0.68 | 0.00 | 0.025 |
+
+A bite is 5 biomass at about 0.4 digestion, so about 2 energy; the store is 100 to 300. The basal
+bill alone is 10 to 15 times what the founders eat, so they live about 150 to 300 ticks on the store
+and all are dead by tick 1,000. (`TraitRules.sleep.energy_regain`, 0.002 of the store per sleeping
+hour, is a free income once the bill is lowered: lowering the burn without lowering it as well makes
+sleepers gain energy, so every test below scales the two together.)
+
+**Why they eat so little** (88% of awake animal ticks have a plant within sight, 38% of ticks are
+spent asleep):
+
+- A plant is touched once every 15 to 30 awake ticks (0.03 to 0.07 per animal tick; the seeded brain
+  asks to eat on about a third of the ticks). A trace of single animals shows why: they walk to
+  within 3 to 5 units of a plant, the plant leaves the 100 degree field of view, the pull on the
+  animal drops to zero and they wander off or circle, and the average step over all ticks is only 0.67
+  units. This is the seeded brain and the eye, not a world constant (see the follow-ups).
+- About 30% of the touches are refused by taste (the plant's toxin), and the mean toxicity of founder
+  plants is 0.45; an animal that stays by a poisonous plant keeps tasting it and sooner or later eats
+  it (poison damage of 0.06 to 0.16 health per animal tick, healing it costs 0.03 energy).
+- The founder plants are all seedlings of the same age. 800 plants fall to about 200 to 260 by tick
+  500 to 800, as the first cohort dies in one wave (a month-long life, 18 to 52 days) while the
+  seedlings that replace it are small (mean radius 2.5 against 6 for the founders). Plants are back
+  above 1,500 by tick 3,000, when most animals are gone. Starting the founders grown (70% of full size)
+  and at random ages up to half their life does not remove the dip, because 800 grown plants are
+  over the soil capacity (0.015 biomass per unit of ground, about 15,000 biomass in all) and thin out
+  to about 250 as well.
+- A smaller world is worse: 100 animals eat a 500 by 500 world down to 62 plants by tick 1,000 and a
+  300 by 300 world to none.
+
+**Levers tried** (animals alive at tick 1,000 and 3,000, births in 3,000 ticks, three seeds; "levels"
+is `FOUNDER_LEVELS` fertility 0.3 and parenting 0.1 against 0.75 and 0; bite is `world.graze_amount`,
+5 by default; `tox` scales the founder plants' toxicity gene):
+
+| Change | Alive at 1,000 | Alive at 3,000 | Births |
+|---|---|---|---|
+| default | 0 | 0 | 0 |
+| burn x0.25 (sleep regain scaled), with or without levels | about 30 | 0 | 0 |
+| bite 20 at full burn | 0 | 0 | 0 |
+| burn x0.25 and bite 20, with or without levels or a diet filter | 14 to 20 | 0 to 5 | 0 |
+| burn x0.1 and bite 10 to 40, levels | 74 to 81 | 16 to 28 | 0 to 3 |
+| burn x0.05 and bite 20, levels | 75 to 80 | 22 to 32 | 0 |
+| burn x0.1, bite 20, tox 0.3 | 76 to 81 | 28 to 35 | 0 to 3 |
+| burn x0.1, bite 20, tox 0.3, wide eye, touch or smell at 1 | 75 to 82 | 20 to 39 | 0 to 6 |
+| burn x0.1, bite 20, tox 0.3, founder plants grown and aged | 80 to 91 | 34 to 38 | 6 in each run |
+| the same at burn x0.05, 6,000 ticks | 88 to 91 | 20 to 27 at 6,000 | 9 to 25 |
+
+"Burn" scales the animal's whole upkeep bill (`basal_metabolism`, the sum of the body, gut, organ, brain
+and temperament terms; sleeping saves against the same bill). A x0.05 to x0.1 bill is what it takes
+for the store to outlast the long wait for a plant. Below x0.25 the moving cost (about 0.08 per animal
+tick, 60% of what is left) is the larger part, so the kinetic burn would have to come down with it.
+The burn rows were run with a knob in `BodyRules` that the script replaces by scaling the bill when
+an animal is made; the two agree to within a few animals (seed 1, burn x0.1, bite 20, tox 0.3,
+levels: 81 and 78 alive at tick 1,000). Even at these settings the animals keep eating less
+over time (touches per animal tick fall from 0.03 to 0.01 by tick 1,000) and the first litters, which
+appear around tick 1,000 to 1,500, mostly starve as newborns (10 of 25 under 300 ticks in the best
+runs; parenting 0.3 gave 0 to 12 births in 8,000 ticks).
+
+**So constants alone do not make the founders breed.** The smallest set that gets any litters
+(burn x0.05, bite 20, plants 0.3 as poisonous, founder plants grown) is a world where life costs a
+twentieth of what the body tables say and still shrinks from 100 to about 20 animals in 6,000 ticks,
+with a few births a run. What blocks it is how little the founders eat per hour awake (one plant
+touched in 15 to 30 ticks while a plant is in sight 88% of the time), how long the first breeding
+takes (the maturity cooldown is about 890 ticks and the population is at its lowest by then), and
+that newborns starve; the follow-ups for these went to the TODO thread with the `WORLD.15` row. The script takes these options:
+`python scripts/founder_economy.py burn=0.1 sleep.energy_regain=0.0002 world.graze_amount=20 tox=0.3
+grown=0.7 agespread=0.5 lvl.fertility=0.3 lvl.parenting=0.1` (add `account=1` for the energy table).
+
 ## Speed (WORLD.14, WORLD.17)
 
 A tick at 300 animals and 3,000 plants costs about 35 ms (about 140 ms at 1,000 animals). `WORLD.14`
