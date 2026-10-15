@@ -41,9 +41,20 @@ Built so far: world save and load in the core (`UX.9`, [#142](https://github.com
 
 ## Next: storage, species and the order of work
 
-Decided by the owner on 2026-10-14: data storage is SQLite (one `run.sqlite` per run, standard library only; `STORE.1`, `STORE.2`), and the viewer gets population graphs by species (`SPECIES.1`, `SPECIES.2`, `UX.41`) and a family tree view (`UX.39`). The first release of the interface is built apart from polish (`UX.21`): world view, controls, inspector with the brain and senses view, charts, run setup, saved runs and the Windows package, with the real world as the default launch. What blocks what, and what is ready now, is the "Order of work" tree in [TODO.md](../TODO.md).
+Decided by the owner on 2026-10-14: data storage is SQLite (one `run.sqlite` per run, standard library only), and the viewer gets population graphs by species and a family tree view. All of it is built: `STORE.1` to `STORE.3`, `SPECIES.1`, `SPECIES.2`, `UX.39` and the Species tab `UX.41`. The first release of the interface is built apart from polish and the owner's check on Windows (`UX.34`): world view, controls, inspector with the brain and senses view, charts, run setup, saved runs, the Windows package and the `run.ps1` launcher, with the real world as the default launch.
+
+## Next: a world where the first generation breeds, then richer genes
+
+Built on 2026-10-15: the founders breed (`WORLD.15`: upkeep a tenth, bite 20, founder plants 30% as poisonous and started grown, founder fertility 0.3 and parenting 0.1; a default run breeds for 6,000 ticks), the creatures are drawn as round bodies with eyes, colour by diet and spots on females (`UX.43`), the gene balance standard and audit (`TRAIT.17`) and a sturdier seed brain (`BRAIN.25`). Ready next: foraging, newborn survival, plant lifespan and the balance audit's retune (`BRAIN.26`, `REPRO.10`, `TRAIT.12`, `TRAIT.22`), then the gene chain in one animal layout 10 and plant layout 4: poison as a dose and toxin types, plant trade-offs, effort to eat, animal resistance, hearing and smell acuity, and the colour gene with hiding in foliage (`TRAIT.18`, `TRAIT.13`, `TRAIT.14`, `TRAIT.15`, `SENSE.22`, `TRAIT.21`).
+
+## Next: speed
+
+The owner chose to rewrite the core with numpy (issue 222): `WORLD.19` is the design note and benchmark (a tick takes 170 ms at 1,000 animals and 5,000 plants against a target of 42 ms), `WORLD.20` the build in nine stages (`WORLD.30` to `WORLD.38`). It starts after the gene chain above, because while it is open every gene change has to be made twice. Positions stay two-dimensional.
+
+## Paused
+
+The owner paused the project on 2026-10-15. [resume.md](resume.md) says what is ready, what each thread was doing and how to restart.
 
 ## Later
 
-A first runnable simulation: organisms in the world with a step loop that feeds, ages, senses, thinks and
-reproduces them, with seeded runs that repeat. Needs the world, senses and the founders breeding (`WORLD.15`).
+Intervention tools in the viewer (`UX.20`, parked by the owner), compare two runs, watch a headless run, video export and several runs at once (`UX.40`), a varied world with patchy soil and seasons (`WORLD.21`), poisoned animals and poisoned meat (`TRAIT.16`) and diploid organisms in the world (`WORLD.10`).
