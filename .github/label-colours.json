@@ -1,5 +1,5 @@
 {
- "next": 171,
+ "next": 176,
  "colours": {
   "DOCS.1": "1d76db",
   "DOCS.2": "0e8a16",
@@ -59,6 +59,8 @@
   "TRAIT.15": "006b75",
   "TRAIT.16": "e99695",
   "TRAIT.17": "bfd4f2",
+  "TRAIT.18": "5319e7",
+  "TRAIT.19": "ff7619",
   "WORLD.1": "c2e0c6",
   "WORLD.2": "d4c5f9",
   "WORLD.3": "f9d0c4",
@@ -79,6 +81,7 @@
   "WORLD.18": "0e8a16",
   "WORLD.19": "fbca04",
   "WORLD.20": "5319e7",
+  "WORLD.21": "006b75",
   "BRAIN.1": "ff7619",
   "BRAIN.2": "006b75",
   "BRAIN.3": "e99695",
@@ -166,10 +169,12 @@
   "UX.39": "5319e7",
   "UX.40": "ff7619",
   "UX.41": "006b75",
+  "UX.42": "e99695",
   "SPECIES.1": "e99695",
   "SPECIES.2": "bfd4f2",
   "SPECIES.3": "c2e0c6",
   "SPECIES.4": "d4c5f9",
+  "SPECIES.5": "bfd4f2",
   "STORE.1": "f9d0c4",
   "STORE.2": "8b6f47"
  }
