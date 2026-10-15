@@ -7,6 +7,8 @@ carries the task ID(s) from [TODO.md](TODO.md) and links the PR. See [docs/versi
 ## 0.1 — Data models for DNA and traits
 
 ### Added
+- `SPECIES.2`: Every run records its species: daily size, divergence and parent series for the top 5 species of each kind (by divergence and by size), the rest summed, in history format 3 and a `species` table in the run file (schema 2). [#254](https://github.com/dwhagar/evolutionSimulator/pull/254)
+- `STORE.3`: A Compact button in the Saved runs dock rewrites a run file into a checked copy and swaps it in (refused while a program writes the run; an interruption leaves the original whole). [#253](https://github.com/dwhagar/evolutionSimulator/pull/253)
 - `TRAIT.20`: Design note for body colour and hiding in foliage (`docs/design/colour.md`): a `colour` gene on a red, purple, blue, teal, green line, a background of ground and plant cover, a contrast term in the visibility rule, a pigment upkeep, and the balance audit entry; built as TRAIT.21 in animal layout 10. [#251](https://github.com/dwhagar/evolutionSimulator/pull/251)
 - `SENSE.13`: Sense calibration (`docs/design/sense-calibration.md`, tools `sense_calibration` and `sense_probe`): a typical founder pays 12.4% of upkeep on senses (aim 10 to 15%), any long-range sense is about ten times a blind forager, and no constant changed. [#248](https://github.com/dwhagar/evolutionSimulator/pull/248)
 - `INFRA.10`: `run.ps1` and `run.bat` in the root start the viewer from source on Windows: they find Python 3.12 or newer, build `.venv`, install only when the version changed and pass the exit code through. [#244](https://github.com/dwhagar/evolutionSimulator/pull/244)
