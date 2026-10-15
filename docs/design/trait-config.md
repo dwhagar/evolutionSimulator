@@ -345,3 +345,4 @@ The small settings of how the world applies its rules to organisms (`TRAIT.11`);
 | `mating_reach` | `3.0` | Two animals mate only if their centres are this close or closer. |
 | `birth_scatter` | `1.0` | A litter appears within this distance of its mother. |
 | `calls_enabled` | `True` | Whether animals can call (their brains' call outputs, paid for with `call_energy_cost`). A call is made only by an animal with a call radius (the encoder gene) that can afford it, so a brain that calls on every tick starves itself; seeded founders do not call at all and calling has to be evolved. Turn it off to study a silent world. |
+| `scent` | `ScentRules(enabled=False, cell_size=20.0, deposit=0.25, carrion_deposit=0.5, half_life_hours=24.0, min_strength=0.05, deposit_interval=4, purge_interval=24)` | Smell trails that fade (`SENSE.20`). |

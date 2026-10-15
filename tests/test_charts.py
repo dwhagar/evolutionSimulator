@@ -6,7 +6,7 @@ pytest.importorskip("PySide6.QtCore", exc_type=ImportError)
 pytest.importorskip("pyqtgraph", exc_type=ImportError)
 
 import numpy as np
-from PySide6.QtCore import QDeadlineTimer
+from PySide6.QtCore import QDeadlineTimer, Qt
 from world_support import hourly_world
 
 from evolution_simulator.history import HistorySamples, Recorder, RecorderRules, Sample, Stat, Tier
@@ -17,11 +17,14 @@ from evolution_simulator.viewer.panels import charts
 from evolution_simulator.viewer.panels.charts import (
     ChartsPanel,
     death_causes,
+    describe_stat,
     histogram_days,
     histogram_names,
     histogram_shares,
+    percentile_band,
     pretty_stat,
     spread_band,
+    stat_label,
     stats_of_kind,
     time_axis,
 )
@@ -282,7 +285,7 @@ def test_the_trait_tab_lists_the_statistics_and_draws_mean_and_range(panel, real
     assert curves(tab) == ["Mean"]
     tab.stat.setCurrentIndex(tab.stat.count() - 1)
     label = tab.plot.getPlotItem().getAxis("left").labelText
-    assert label == pretty_stat(tab.stat.currentData())
+    assert label == stat_label(tab.stat.currentData())
     tab.kind.setCurrentIndex(1)
     assert tab.stat.currentData().startswith("plant.")
 
@@ -400,3 +403,91 @@ def test_the_panel_follows_a_running_window(qapp, controller):
     charts_panel.refresh()
     assert charts_panel.status.text() == "1 sample, up to day 3"  # the fake has no step hook
     window.close()
+
+
+# --- UX.32: percentile bands, lineages, catalogue names ------------------------------------------
+
+
+def test_genes_and_traits_use_the_catalogue_names_and_units():
+    assert pretty_stat("animal.gene.sight_fov") == "Field of vision (gene)"
+    assert pretty_stat("animal.trait.mass") == "Body mass (trait)"
+    assert pretty_stat("plant.trait.canopy_radius") == "Canopy radius (trait)"
+    assert stat_label("animal.trait.mass") == "Body mass (trait), mass units"
+    assert stat_label("animal.gene.speed") == "Speed (gene), level 0 to 1"
+    # what the catalogue does not know keeps the readable fallback, and age at death has no unit
+    assert pretty_stat("animal.gene.not_a_gene") == "not a gene (gene)"
+    assert stat_label("animal.gene.not_a_gene") == "not a gene (gene)"
+    assert stat_label("animal.age_at_death") == "age at death"
+
+
+def test_every_recorded_gene_and_trait_has_a_catalogue_name(real_history):
+    for name in real_history.stat_names():
+        if ".gene." in name or ".trait." in name:
+            assert describe_stat(name) is not None, name
+
+
+def test_the_percentile_band_falls_back_to_the_deviation_where_there_are_none():
+    nan = float("nan")
+    low, high = percentile_band(
+        np.array([0.5, 0.5]),
+        np.array([0.1, 0.1]),
+        np.array([0.0, 0.0]),
+        np.array([1.0, 1.0]),
+        np.array([0.3, nan]),
+        np.array([0.8, nan]),
+    )
+    assert list(low) == [0.3, pytest.approx(0.4)]
+    assert list(high) == [0.8, pytest.approx(0.6)]
+
+
+def test_the_trait_tab_draws_the_percentile_band_and_it_can_be_hidden(panel, real_history):
+    panel.set_history(real_history)
+    tab = show_tab(panel, "Traits and genes")
+    panel.refresh()
+    fills = lambda: [
+        i for i in tab.plot.getPlotItem().items if type(i).__name__ == "FillBetweenItem"
+    ]
+    assert len(fills()) == 1
+    tab.show_band.setChecked(False)
+    assert fills() == []
+    tab.show_band.setChecked(True)
+    tip = tab.stat.itemData(0, Qt.ItemDataRole.ToolTipRole)
+    assert tip is None or isinstance(tip, str)
+
+
+def test_the_trait_tab_still_draws_history_without_percentiles(panel, real_history):
+    old = HistorySamples(
+        real_history.period_seconds,
+        tuple(
+            Tier(
+                tier.name,
+                tier.periods,
+                tuple(
+                    Sample(
+                        s.day,
+                        s.span,
+                        s.tick,
+                        s.values,
+                        {k: Stat(v.n, v.mean, v.std, v.lo, v.hi) for k, v in s.stats.items()},
+                        s.histograms,
+                    )
+                    for s in tier.samples
+                ),
+            )
+            for tier in real_history.tiers
+        ),
+    )
+    panel.set_history(old)
+    tab = show_tab(panel, "Traits and genes")
+    panel.refresh()
+    assert curves(tab) == ["Highest", "Lowest", "Mean"]
+    assert any(type(i).__name__ == "FillBetweenItem" for i in tab.plot.getPlotItem().items)
+
+
+def test_the_lineages_tab_draws_the_founder_lines_still_alive(panel, real_history):
+    panel.set_history(real_history)
+    tab = show_tab(panel, "Lineages")
+    panel.refresh()
+    assert curves(tab) == ["Animals", "Plants"]
+    tab.checks["lineages.plant"].setChecked(False)
+    assert curves(tab) == ["Animals"]

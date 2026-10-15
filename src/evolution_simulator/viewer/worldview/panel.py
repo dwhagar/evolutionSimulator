@@ -117,6 +117,7 @@ class WorldPanel(QWidget):
         action = QAction("&Follow selected creature", self)
         action.setCheckable(True)
         action.setToolTip("Keep the selected creature in the middle of the view")
+        action.setStatusTip("Keep the selected creature in the middle of the view")
         action.setShortcuts([QKeySequence(key) for key in KEY_MAP[FOLLOW]])
         action.toggled.connect(self.canvas.set_follow)
         self.canvas.follow_changed.connect(action.setChecked)

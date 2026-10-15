@@ -520,6 +520,7 @@ def world_to_dict(world: World) -> dict[str, Any]:
             "animals": [_animal_to_data(a, animal_ids) for a in animals],
             "plants": [_plant_to_data(p) for p in world.plants],
             "corpses": [_corpse_to_data(c) for c in world.corpses],
+            "scent": None if world.scent is None else world.scent.records(),
         },
     }
 
@@ -622,6 +623,9 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
         )
         world._corpses[corpse.id] = corpse
         world._corpse_index.insert(corpse.id, corpse.position, corpse.radius)
+
+    if world.scent is not None:  # saves from before SENSE.20 have no trails
+        world.scent.restore(data.get("scent") or [])
 
     fathers: list[tuple[AnimalTraits, int]] = []
     for animal_data in data["animals"]:

@@ -422,7 +422,9 @@ def test_a_format_4_save_has_its_bite_corpse_and_world_settings_moved_into_the_t
     traits = config["traits"]
     config["attack"] = traits.pop("attack")  # where format 4 kept them
     config["corpses"] = traits.pop("corpses")
-    config.update(traits.pop("world"))
+    moved = traits["world"]
+    for name in ("graze_amount", "mating_reach", "birth_scatter", "calls_enabled"):
+        config[name] = moved.pop(name)
     old["format_version"] = 4
     restored = world_from_dict(old)
     assert_same_world(restored, world)

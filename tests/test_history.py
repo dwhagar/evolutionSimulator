@@ -229,7 +229,7 @@ def test_births_and_deaths_are_counted_by_cause_between_samples(hourly):
     assert first.values["deaths.animal.predation"] == 1.0
     assert first.values["deaths.animal.old_age"] == 0.0
     assert first.values["deaths.plant.eaten"] == 1.0
-    assert first.stats["animal.age_at_death"] == Stat(2, 2.0, 1.0, 1.0, 3.0)  # in days
+    assert first.stats["animal.age_at_death"] == Stat(2, 2.0, 1.0, 1.0, 3.0, 1.2, 2.8)  # in days
     assert "plant.age_at_death" in first.stats
     assert second.values["births.animal"] == 0.0  # counters start again after a sample
     assert second.values["deaths.animal.old_age"] == 1.0
@@ -261,7 +261,7 @@ def test_stats_and_gene_histograms_come_from_the_trait_columns():
         source.advance(24)
     samples = recorder.history().samples()
     assert samples[0].stats["animal.gene.size"] == Stat.of(values)
-    assert samples[0].stats["animal.trait.mass"] == Stat(2, 3.0, 1.0, 2.0, 4.0)
+    assert samples[0].stats["animal.trait.mass"] == Stat(2, 3.0, 1.0, 2.0, 4.0, 2.2, 3.8)
     with_histograms = [i for i, s in enumerate(samples) if s.histograms]
     assert with_histograms == [0, 2, 4]  # the first sample and every second after
     assert samples[0].histograms == {"animal.gene.size": (2, 0, 1, 2)}  # 1.0 goes in the top bin

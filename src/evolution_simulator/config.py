@@ -622,6 +622,44 @@ class CorpseRules:
 
 
 @dataclass(frozen=True)
+class ScentRules:
+    """Smell trails (``SENSE.20``): animals and corpses leave scent on a coarse grid that fades, and
+    animals smell it like any other source, classed by who left it. Off by default."""
+
+    enabled: bool = False
+    cell_size: float = 20.0
+    """Side of a grid cell in world units: a trail is smelled as coming from the cell's centre."""
+    deposit: float = 0.25
+    """Scent an animal adds to its cell each reference tick (an hour), up to 1."""
+    carrion_deposit: float = 0.5
+    """Scent a corpse adds to its cell each reference tick; it lingers after the corpse has rotted."""
+    half_life_hours: float = 24.0
+    """Reference ticks (hours) for a trail to fade to half."""
+    min_strength: float = 0.05
+    """A trail weaker than this is forgotten."""
+    deposit_interval: int = 4
+    """An animal adds its scent every this many ticks (staggered by id) and four times as much, so a
+    trail costs a quarter as much to lay; it has to be short against how long a cell takes to cross."""
+    purge_interval: int = 24
+    """Ticks between sweeps that drop forgotten trails (they have no effect before, only memory)."""
+
+    def __post_init__(self) -> None:
+        for name in ("cell_size", "half_life_hours"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value > 0.0):
+                raise ValueError(f"{name} must be above zero, got {value}.")
+        for name in ("deposit", "carrion_deposit"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(f"{name} must be zero or more, got {value}.")
+        if not 0.0 <= self.min_strength < 1.0:
+            raise ValueError(f"min_strength must be from 0 up to 1, got {self.min_strength}.")
+        for name in ("deposit_interval", "purge_interval"):
+            if getattr(self, name) < 1:
+                raise ValueError(f"{name} must be at least 1.")
+
+
+@dataclass(frozen=True)
 class WorldRules:
     """The small settings of how the world applies its rules to organisms (``TRAIT.11``);
     ``TraitRules.world`` holds them for a run."""
@@ -638,6 +676,8 @@ class WorldRules:
     A call is made only by an animal with a call radius (the encoder gene) that can afford it,
     so a brain that calls on every tick starves itself; seeded founders do not call at all and
     calling has to be evolved. Turn it off to study a silent world."""
+    scent: ScentRules = field(default_factory=ScentRules)
+    """Smell trails that fade (``SENSE.20``)."""
 
     def __post_init__(self) -> None:
         for name in ("graze_amount", "mating_reach", "birth_scatter"):
