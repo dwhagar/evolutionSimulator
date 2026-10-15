@@ -571,7 +571,7 @@ are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
 ### As built: the charts (`UX.16`)
 
 `viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with six
-pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
+pyqtgraph tabs (seven since UX.41) over `HistorySamples`, and nothing in it reads the world.
 
 - **History reaches the screen through the backend.** `Batch.history` carries the recorder's
   `HistorySamples` in the batch that follows each new sample (once per simulated day, not every
@@ -584,7 +584,7 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 - **Tabs.** Population (animals, plants, corpses); Births and deaths (animals or plants, with the
   deaths split by cause, only the causes that happened); Condition (average energy, health, age and
   diet, and the shares asleep, pregnant and ready to mate); Lineages (UX.32: founders that still have
-  a line of descent alive, animals and plants); Traits and genes (any recorded statistic
+  a line of descent alive, animals and plants); Species (UX.41, below); Traits and genes (any recorded statistic
   of the animals or the plants: its mean, the middle 80 percent from the 10th to the 90th percentile
   (UX.32), and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
   a gene as shares of the population, with a slider over the days that have one, which follows the
@@ -1014,6 +1014,55 @@ that tell the sexes apart. The drawing rules are in `viewer/worldview/bodies.py`
 - **Found on the way.** The design note writes the diet colour as `0.5 * (1 - tilt)`, which puts plant
   eaters on green; its own table and prose want 0.25, and `diet_colour` uses 0.25.
 
+### As built: the Species tab (`UX.41`)
+
+A tab of the charts panel (`SpeciesTab` in `viewer/panels/charts.py`, after Lineages) that shows the
+species the tracker found (SPECIES.1) through time, for a live run and a saved one alike. It reads only
+the `species.*` series of the history (names from `species.series_name`, read back with
+`parse_series_name`); the data helpers are in `history/species_view.py` and need no window.
+
+- **What is drawn.** A kind switch (animals or plants, as in the other tabs) and then: a grey **Total**
+  (every living species), a dotted **Others** (the members outside the five species that have lines, from
+  the series of the chosen ranking, `rest_by_divergence` or `rest_by_size`), and one line for each of
+  the chosen species in a stable colour. Total and Others can be switched off.
+- **Which species get a line.** "Top species by distance from the founders" (the default, the owner's
+  choice in [#207](https://github.com/dwhagar/evolutionSimulator/issues/207)) or "by size". In each
+  sample the top five are the five highest `.divergence` values or the five largest sizes (ties to the
+  lower id, as the tracker orders them). The lines are the top five of the newest sample, first, and then,
+  up to ten lines in all (`MAX_LINES`), the species that were in the top five of the most earlier samples,
+  so a line that was big once does not vanish the moment it falls out of the top five, and a long run
+  cannot fill the chart with lines.
+- **Members or distance.** "Show members" draws sizes (a size missing from a sample counts as zero, from
+  the species' first sample on); "Show distance from the founders" draws each species' divergence as a
+  percentage of the genome's digits, only where the species has it, and hides Total and Others.
+- **Legend.** Each line is `#12 · age 340 days · parent #7 · 3.2% from founders` (`species_label`):
+  the id, the age since the species' first sample (in years once the axis is), its parent (`none` for a
+  founder line) and the distance of its last sample from the founding genome. A species that is not in
+  the newest sample has "gone" added and a dashed line.
+- **Colours.** `ColourBook` gives each species id a colour from `SPECIES_COLOURS` (Okabe and Ito, then
+  Paul Tol's) the first time it is drawn and keeps it for the life of the tab, avoiding the colours of
+  species drawn with it while the palette has one free (past twelve it cycles). Ids are unique across
+  kinds, so a species keeps its colour when the kind is switched back.
+- **Highlight.** Click a line (the curve is clickable ten pixels wide) to make it thick and fade the
+  others; click it again, or press "Clear highlight", to show them alike. Switching kind clears it; new
+  samples and a ranking change keep it when the species still has a line. The curves are restyled in
+  place, never redrawn from the click, because redrawing from inside the curve's own signal would delete
+  the curve being clicked.
+- **Empty states.** A history from before species were tracked (format 1 or 2, or recorded with
+  `track_species=False`) shows "No species in this history ..." in place of the chart; one that has
+  species but none of the chosen kind yet says "No plant species recorded yet ...". Both turn into the
+  chart by themselves when species arrive.
+- **Cost.** `species_view` reads the history once per redraw (63 ms for 3000 samples with 12 species
+  each, 104 ms for the whole redraw, on the offscreen platform), and only the tab in view is drawn.
+- **Not built.** Reading `Run.species()` (the rows of every species ever, extinct ones included, from
+  the run file): the series carry what the legend needs. "Others" is the tracker's sum for the five of the
+  chosen ranking in each sample, so when earlier top species are drawn too (up to ten lines), their members
+  at that time are in Others as well as on their own line.
+- **Tests.** `tests/test_species_chart.py`: the view and the choice of lines on a made-up history built
+  with the tracker's own `series_values`, samples merged into a week, then the tab offscreen (lines,
+  legend text, dashed gone species, both switches, colours kept, highlight by click and button, the empty
+  states and a real recorder's history, with and without species).
+
 ### As built: the Windows launcher (`INFRA.10`)
 
 `run.ps1` in the repository root (the owner asked for it there; the one exception to "scripts only in
@@ -1148,6 +1197,8 @@ pyqtgraph line charts that update live and can be zoomed, with a time axis in si
 - Mean and spread (a band from the 10th to the 90th percentile) of any chosen gene or trait, with a
   picker; and a **gene distribution** as a histogram that can be scrubbed through time.
 - Average energy, age at death, and the number of lineages.
+- The **species** of the animals or the plants: the total, the top five species as lines and what the
+  rest add up to (`UX.41`).
 
 **What is recorded.** The statistics recorder takes one sample per simulated day (not per tick, so a
 run of a thousand years stays small) and stores, for each sample, the counts and, for each gene and each
