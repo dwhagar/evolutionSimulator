@@ -101,6 +101,8 @@ What a body is, costs to keep and does as it wears down (animals).
 | `speed_reference` | `3.5` | Distance per reference tick of an average animal (speed gene 0.5, size 0.5) at full speed. |
 | `agility_cost` | `0.06` | Upkeep of quick reflexes: `agility_cost * agility ** 2` per reference tick (`TRAIT.9`). |
 | `temperament_cost` | `0.04` | Upkeep of a strong temperament: `temperament_cost * (aggression ** 2 + fear ** 2)`. A placeholder until fighting and fleeing cost something of their own (`BRAIN.10`) (`TRAIT.9`). |
+| `camouflage_cost` | `0.03` | Upkeep of camouflage: `camouflage_cost * camouflage ** 2` per reference tick, about 7% of a basal 0.43 at the top (`SENSE.21`). |
+| `camouflage_slowing` | `0.25` | Top speed is multiplied by `1 - camouflage_slowing * camouflage`: a creature that keeps itself hidden moves with care (`SENSE.21`). |
 | `speed_floor` | `0.3` | Top speed at no vitality is this share of the base speed (the rest scales with vitality). |
 | `sense_floor` | `0.4` | Sight and hearing at no vitality are this share of their ranges. |
 | `health_floor` | `0.35` | Physical condition at no health is this share of vitality (the rest scales with health). |
@@ -138,6 +140,8 @@ What thinking costs and how often it happens.
 | `interrupt_pain` | `0.05` | Pain at or above this cuts the decision interval short (`BRAIN.22`). |
 | `learning_cost` | `0.004` | Upkeep of plasticity: `learning_cost * learning_rate` per reference tick, paid by every animal whatever the world's learning switch says (`TRAIT.9`). |
 | `pain_full_fraction` | `0.2` | Losing this fraction of maximum health since the last decision reads as full pain. |
+| `interval_scale` | `1.0` | Speed option (`WORLD.17`): every animal's decision interval, as its genes give it, is multiplied by this when it is made (rounded to whole ticks, at least 1), so the brain runs less often and the run costs less. 1 is the genes' own interval. The brain upkeep follows the interval, as it does between animals: a slower thinker is cheaper. |
+| `idle_interval_factor` | `1.0` | Speed option (`WORLD.17`): an animal whose last look sensed nothing at all (no creature, plant, contact, call, crowd or wall) waits this many times its decision interval before it looks again. Contact or pain still make it look at once. 1 is off: the interval is the same whatever it sensed. |
 
 ### `life` (`LifeRules`)
 
@@ -255,6 +259,13 @@ The constants of the sensing step: starting values from the design note, for cal
 | `weak_smell` | `0.5` | Fraction of the smell range at which prey and threats can be smelled (a presence, not a precise report). A placeholder: the design note gives no number. |
 | `crowding_reference` | `8` | This many animals in reach gives a crowding input of 1. |
 | `closeness_noise` | `0.03` | Standard deviation of the error on every closeness report (input units). |
+| `visibility_reference_radius` | `0.7` | The body radius that is seen exactly as far as the viewer's vision reaches: the radius of an average animal (`SENSE.21`). |
+| `plant_visibility_reference_radius` | `5.0` | The same for a plant's canopy radius, which runs from 2 to 12 where an animal's body is 0.5 to 0.8: a plant of average canopy is seen as far as the reach, a wide one farther. |
+| `visibility_size_exponent` | `0.5` |  |
+| `visibility_size_range` | `(0.7, 1.5)` | Seen from `(radius / reference) ** exponent` times as far, kept within this range, so a plant's wide canopy and a small animal are seen from 1.5 and 0.7 times the reach at most. |
+| `still_visibility` | `0.7` |  |
+| `moving_visibility` | `1.3` | An animal's visibility factor for movement, from a still or sleeping one to one at full speed. Plants do not move, so only their size counts. |
+| `camouflage_strength` | `0.5` | At camouflage 1 an animal is seen from `1 - strength` of the distance it would be otherwise. |
 
 ### `day_cycle` (`DayCycle`)
 
@@ -306,7 +317,7 @@ Learning during life (`BRAIN.24`): the log, the reward and the size of a night's
 
 ### `attack` (`AttackRules`)
 
-Bites (`BRAIN.10`). `TraitRules.attack` holds them for a run (`TRAIT.11`).
+Bites (`BRAIN.10`); `TraitRules.attack` holds them for a run (`TRAIT.11`).
 
 | Field | Default | Meaning |
 | --- | --- | --- |
@@ -314,23 +325,23 @@ Bites (`BRAIN.10`). `TraitRules.attack` holds them for a run (`TRAIT.11`).
 
 ### `corpses` (`CorpseRules`)
 
-What the dead leave (`WORLD.12`): meat that rots and that meat eaters smell and eat. `TraitRules.corpses` holds them for a run (`TRAIT.11`).
+What the dead leave (`WORLD.12`): meat that rots and that meat eaters smell and eat; `TraitRules.corpses` holds them for a run (`TRAIT.11`).
 
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `meat_share` | `0.5` | Share of a dead animal's maximum energy that is left as meat. |
 | `bite` | `25.0` | Meat one animal can take from a corpse in one reference tick (an hour). |
 | `rot_halflife` | `72.0` | Reference ticks (hours) for half the meat to rot away. |
-| `scent_meat` | `100.0` | A corpse with this much meat or more can be smelled as far as a meat eater's smell reaches; one with less is smelled from proportionally closer. |
+| `scent_meat` | `100.0` | A corpse with this much meat or more can be smelled as far as a meat eater's smell reaches; one with less is smelled from proportionally closer, like a plant's biomass. |
 | `gone_below` | `1.0` | A corpse with less meat than this is removed. |
 
 ### `world` (`WorldRules`)
 
-How the world applies its rules to organisms (`TRAIT.11`). `TraitRules.world` holds them for a run.
+The small settings of how the world applies its rules to organisms (`TRAIT.11`); `TraitRules.world` holds them for a run.
 
 | Field | Default | Meaning |
 | --- | --- | --- |
 | `graze_amount` | `5.0` | Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer tick takes proportionally less or more. |
 | `mating_reach` | `3.0` | Two animals mate only if their centres are this close or closer. |
 | `birth_scatter` | `1.0` | A litter appears within this distance of its mother. |
-| `calls_enabled` | `true` | Whether animals can call (their brains' call outputs, paid for with `call_energy_cost`). Turn it off to study a silent world. |
+| `calls_enabled` | `True` | Whether animals can call (their brains' call outputs, paid for with `call_energy_cost`). A call is made only by an animal with a call radius (the encoder gene) that can afford it, so a brain that calls on every tick starves itself; seeded founders do not call at all and calling has to be evolved. Turn it off to study a silent world. |

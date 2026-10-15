@@ -175,6 +175,10 @@ class Neighbour:
     no sound and is never reported by hearing whatever this says."""
     scent: float = 1.0
     """0 to 1: how well it can be smelled (a plant's grows with its biomass)."""
+    visibility: float = 1.0
+    """How far it is seen as a multiple of the viewer's vision reach (``SensingRules.visibility``):
+    above 1 for a big or fast creature, below 1 for a small, still or camouflaged one. Touching
+    always sees; hearing and smell do not read it."""
     alarm_call_radius: float = 0.0
     """How far its alarm call carries, 0 when it is not calling."""
     mating_call_radius: float = 0.0
@@ -196,6 +200,8 @@ class Neighbour:
         for name in ("loudness", "scent"):
             if not 0.0 <= getattr(self, name) <= 1.0:
                 raise ValueError(f"{name} must be between 0 and 1, got {getattr(self, name)}.")
+        if not self.visibility > 0.0:
+            raise ValueError(f"visibility must be above zero, got {self.visibility}.")
         if self.alarm_call_radius < 0.0 or self.mating_call_radius < 0.0:
             raise ValueError("A call radius cannot be negative.")
         if self.mass < 0.0:
@@ -284,7 +290,7 @@ def sense(
         distance = max(0.0, math.hypot(dx, dy) - radius - n.radius)
         nearest = min(nearest, distance)
         sees = False
-        if reach_vision > 0.0 and distance <= reach_vision:
+        if reach_vision > 0.0 and distance <= reach_vision * n.visibility:
             sees = distance == 0.0 or (
                 abs(math.atan2(dy * fx - dx * fy, dx * fx + dy * fy)) <= half_fov
             )
@@ -327,9 +333,10 @@ def sense(
             return 0.0
         return rng.gauss(0.0, deviation)
 
-    def direction(sense_kind: str, bearing: float) -> float:
+    def direction(sense_kind: str, bearing: float, clarity: float = 1.0) -> float:
         norm = half_fov if sense_kind == "vision" else math.pi
-        return _clamp(-bearing / norm + noise(sense_kind), -1.0, 1.0)
+        sd = None if clarity == 1.0 else organs.noise_of(sense_kind) / min(2.0, max(0.5, clarity))
+        return _clamp(-bearing / norm + noise(sense_kind, sd), -1.0, 1.0)
 
     closeness_noise = (
         rules.closeness_noise if organs.closeness_noise is None else organs.closeness_noise
@@ -346,7 +353,7 @@ def sense(
             (
                 weak_smell
                 if k == "smell" and target in ("prey", "threat") and not neighbour.carrion
-                else reach[k]
+                else reach[k] * (neighbour.visibility if k == "vision" else 1.0)
             )
             for k in reporters
         )
@@ -360,7 +367,9 @@ def sense(
             if callable(similarity):
                 similarity = similarity()
             reported["mate_similarity"] = _clamp(similarity, 0.0, 1.0)
-        reported[direction_row] = direction(by, bearing_of(dx, dy))
+        reported[direction_row] = direction(
+            by, bearing_of(dx, dy), neighbour.visibility if by == "vision" else 1.0
+        )
         reported[closeness_row] = _clamp(
             1.0 - distance / class_range + noise("vision", closeness_noise),
             0.0,

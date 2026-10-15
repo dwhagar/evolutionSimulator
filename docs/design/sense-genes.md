@@ -10,6 +10,10 @@
 > seeding sets haploid genomes only (`DiploidDNA` has no `with_value` yet). The world side is still
 > `WORLD.12`.
 
+> **Built (`SENSE.21`, 2026-10-15).** The owner said yes to [#92](https://github.com/dwhagar/evolutionSimulator/issues/92):
+> things are not equally visible. See [How visible a thing is](#how-visible-a-thing-is-sense21) for what was built
+> (animal layout version 9, a `camouflage` gene, `SensingRules.visibility`).
+
 Design note for `SENSE.15`, written 2026-10-14 by the Research 3 thread. It extends
 [senses.md](senses.md) (`SENSE.1`) with the owner's request of the same day, and it ends with build lists
 for `SENSE.16` (the genes) and `WORLD.12` (the world properties the senses need). The owner questions it
@@ -38,7 +42,8 @@ and `world/senses.py` (the stand-in the world uses today).
 9. [Risks](#risks)
 10. [What to build](#what-to-build)
 11. [Constants for the TRAIT.3 config](#constants-for-the-trait3-config)
-12. [Questions for the owner](#questions-for-the-owner)
+12. [How visible a thing is (`SENSE.21`)](#how-visible-a-thing-is-sense21)
+13. [Questions for the owner](#questions-for-the-owner)
 
 ## Summary
 
@@ -297,7 +302,7 @@ means no code does it yet.
 | The field as a half-angle | `sense()` takes `vision_fov_degrees` as a total and halves it | Pass the half-angle instead and read the new genes |
 | Acuity effects | Noise only comes from the range gene | Reach, closeness error and size error from `a_eff` |
 | Shade under a canopy | `Plant.shade` exists for plant competition | Optional: dim vision under a heavy canopy (not used by senses yet) |
-| How visible a thing is (size, movement, camouflage) | No | Optional: see [Questions](#questions-for-the-owner) (`SENSE.21`) |
+| How visible a thing is (size, movement, camouflage) | Yes (`SENSE.21`): `Neighbour.visibility`, built by `WorldSenses` | None: see [How visible a thing is](#how-visible-a-thing-is-sense21) |
 | Objects that block the view | No (open field) | Not planned; there are no obstacles |
 
 ### Hearing
@@ -351,7 +356,7 @@ means no code does it yet.
 | Call state and radius | hearing (calls) | Radius is a trait; "is calling" is not stored |
 | Asleep | hearing, smell, vision (sleeper is silent) | Yes |
 | Genetic similarity | mate class | Yes (`mating.py`) |
-| Visibility (size, camouflage) | vision | No; optional |
+| Visibility (size, movement, camouflage) | vision | Yes (`SENSE.21`), worked out when the neighbour is listed |
 
 ### What the world needs, in order
 
@@ -363,8 +368,7 @@ means no code does it yet.
    (`BRAIN.10`); until then hearing only has movement noise.
 4. **Attacks and pain.** The trade-off in vision pays only once there are threats. This is `BRAIN.10`
    and the predation rules.
-5. **Optional later:** a scent field for trails (`SENSE.20`), visibility properties (`SENSE.21`), canopy
-   shade for vision.
+5. **Optional later:** a scent field for trails (`SENSE.20`), canopy shade for vision. (Visibility, `SENSE.21`, is built.)
 
 ## Risks
 
@@ -463,6 +467,49 @@ Depends on `SENSE.12` (the wiring) being in place.
 | `FOUNDER_SENSE_SPREAD` | 0.07 around 0.5 | seeding |
 | `FOUNDER_DIET_TILT` | 0.3 (field `0.5 - 0.3 * tilt`) | seeding |
 
+## How visible a thing is (`SENSE.21`)
+
+The owner answered [#92](https://github.com/dwhagar/evolutionSimulator/issues/92) with yes: a creature is easier or
+harder to see depending on how big it is, whether it moves, and a new gene, `camouflage`. Hearing and smell are
+unchanged (they already have loudness and scent).
+
+**The rule.** Every neighbour carries a `visibility`, a multiple of the viewer's vision reach: it is seen when the
+distance between the two surfaces is at most `reach * visibility` (and inside the field of view, or touching, as before).
+
+```
+visibility = size * motion * (1 - camouflage_strength * camouflage)
+size       = clamp((radius / reference) ** 0.5, 0.7, 1.5)
+motion     = still + (moving - still) * speed_ratio        animals only; a plant is 1
+```
+
+| Setting (`SensingRules`) | Value | Meaning |
+| --- | --- | --- |
+| `visibility_reference_radius` | 0.7 | An animal of this radius is seen exactly as far as the reach (animal bodies are 0.5 to 0.8) |
+| `plant_visibility_reference_radius` | 5.0 | The same for a plant's canopy (2 to 12), so plants spread over the range instead of all sitting at the top |
+| `visibility_size_exponent`, `visibility_size_range` | 0.5, (0.7, 1.5) | Seen from the square root of the size ratio, never under 0.7 or over 1.5 times the reach |
+| `still_visibility`, `moving_visibility` | 0.7, 1.3 | Factor for a still or sleeping animal (0.7) up to one at full speed (1.3); in between is linear in how fast it is going as a share of its top speed |
+| `camouflage_strength` | 0.5 | At camouflage 1 it is seen from half the distance |
+
+**The gene.** `camouflage` is a new animal body gene (4 digits, 0 to 1, the last gene of the body, outside any cluster),
+so the animal layout is **version 9** (1264 digits: 100 body, 1164 brain). A plant has no gene: only its canopy size
+counts. First generations start at `FOUNDER_CAMOUFLAGE` 0, so nobody is hidden at the start and evolution has to find it.
+
+**What it costs (`TRAIT.9`).** Hiding is not free, in two ways:
+
+- upkeep: `body.camouflage_cost * camouflage ** 2` (0.03 at the top, about 7% of a basal 0.44);
+- speed: top speed times `1 - body.camouflage_slowing * camouflage` (a fully hidden animal is a quarter slower).
+
+Both are placeholders to tune (`REPRO.9` rechecks them in the real world). Camouflage changes only how others see the animal, not
+what it sees itself.
+
+**What the viewer sees.** Closeness for a vision report is the gap measured against the reach it can be seen at
+(`reach * visibility`), so something seen from beyond the plain reach still reports a closeness above zero; the
+direction error from vision grows as visibility falls (the standard deviation is divided by the visibility, kept
+between 0.5 and 2), so a faint thing is placed less well. Touch and overlap always see, whatever the visibility.
+
+**Old saves.** A layout change makes older saves unreadable (the saved genomes carry the layout version, and the digest
+covers them), so version 8 runs are refused, as with every layout change before.
+
 ## Questions for the owner
 
 Filed as GitHub issues, each with a recommended default that the build assumes until answered.
@@ -473,4 +520,4 @@ Filed as GitHub issues, each with a recommended default that the build assumes u
 | Do hearing and smell also get a separate acuity gene, or does one gene set both their range and accuracy? | [#89](https://github.com/dwhagar/evolutionSimulator/issues/89) `SENSE.18` | One gene each for now |
 | Is the predator and prey difference only the first generation's starting point, or permanently linked to diet? | [#90](https://github.com/dwhagar/evolutionSimulator/issues/90) `SENSE.19` | Starting point only; evolution is free |
 | Should smell leave trails that fade (a scent field), or only come from the things themselves? | [#91](https://github.com/dwhagar/evolutionSimulator/issues/91) `SENSE.20` | From the things themselves; trails later if wanted |
-| Should things be harder or easier to see (size, movement, camouflage), or is everything equally visible? | [#92](https://github.com/dwhagar/evolutionSimulator/issues/92) `SENSE.21` | Equally visible within range, apart from size through the surface distance |
+| Should things be harder or easier to see (size, movement, camouflage), or is everything equally visible? | [#92](https://github.com/dwhagar/evolutionSimulator/issues/92) `SENSE.21` | Owner said yes: see [How visible a thing is](#how-visible-a-thing-is-sense21). Built as `SENSE.21` |

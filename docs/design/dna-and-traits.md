@@ -9,7 +9,7 @@ Written 2026-10-14 by the Foundations 1 thread.
 | --- | --- |
 | `dna.py` | `DNA` (immutable genome), `GenomeLayout`, `GeneSpec` and `BlockSpec` (the gene table); knows gene IDs only |
 | `diploid.py` | `DiploidDNA` (two `DNA` strands read through a `DominanceModel`), `DominanceModel`, `CODOMINANT` |
-| `layouts.py` | `ANIMAL_LAYOUT` (472 digits: 76 body, 396 brain) and `PLANT_LAYOUT` (33 digits) as plain data, and `dna_from_dict` |
+| `layouts.py` | `ANIMAL_LAYOUT` (1264 digits: 100 body, 1164 brain, version 9) and `PLANT_LAYOUT` (33 digits) as plain data, and `dna_from_dict` |
 | `brain.py`, `brain_adapter.py` | The `Brain` network and the world-side inputs and outputs; see [brain.md](brain.md) |
 | `trait_defs.py` | `TraitDef` and `TraitSet`: what each trait reads from DNA, its range, scale and mutation step; `ANIMAL_TRAITS`, `PLANT_TRAITS` |
 | `traits.py` | `BaseTraits`, `AnimalTraits`, `PlantTraits`: runtime organism state and the formulas built on the traits; `AnimalTraits` also builds the animal's `Brain` |
@@ -37,7 +37,7 @@ open questions in issues #2 to #11 by example; those answers are used here and l
   value from 0 to 1), saved and compared like any other.
 - Genes belong to a named **segment** (`GeneSpec(..., segment="brain")`, default `"body"`); the genes of a
   segment must be consecutive. Segments are what mutation is set per, and they are the only place the genome
-  has structure beyond the gene table. `ANIMAL_LAYOUT` has `body` (digits 0 to 76) and `brain` (76 to 472).
+  has structure beyond the gene table. `ANIMAL_LAYOUT` has `body` (digits 0 to 100) and `brain` (100 to 1264).
 - **DNA does not know trait names.** It exposes genes by ID (`value`, `digit`, `raw`, `slice_of`) and the
   decode API (`get_slice`, `decode_int`, `decode_normalized`), nothing else. The prototype's `dna.size`
   style properties are gone; what a gene is *for* is declared in `trait_defs.py`.
@@ -188,7 +188,7 @@ into clusters, with the five reproduction genes next to each other: layout versi
   `fertility` 0.75 (six young), `parenting` 0 and the rest of the reproduction genes at 0.5 (`FOUNDER_LEVELS`).
   `add_animal` takes whatever genome it is given.
 - **Built later (`SENSE.14`).** The protective effect of `parenting` on aggression and fear and the "own young" channel
-  exist now (animal layout version 8). The pregnancy list is kept on
+  exist now (animal layout version 8; version 9 added `camouflage`, below). The pregnancy list is kept on
   the bearers (visited in id order) rather than as a separate list in the world; the behaviour is the same.
 - **Constants.** They are fields of the rules tree in `config.py` (`TRAIT.3`; `life.wear_base`, `life.drive_wear`,
   `reproduction.*`, `recovery.*` and so on, listed in [trait-config.md](trait-config.md)), named after the design note's
@@ -209,6 +209,7 @@ test keeps it so). All the numbers are in the rules tree ([trait-config.md](trai
 | `aggression`, `fear` | `body.temperament_cost` 0.04 | Upkeep `0.04 * (aggression ** 2 + fear ** 2)`. A placeholder: neither has a price of its own until fights and flights cost something (`BRAIN.10`). They already trade against each other and, for fear, against mating (an afraid animal does not look for a mate). | 0.04 each (9%) |
 | `sex_strategy` | the drive costs | The drive's upkeep and wear now use the effective drive (the gene times 1.25 for digit 2, 0.75 for digit 3), so digit 2 finds mates earlier and pays for it in life and upkeep, and digit 3 is the reverse. Digits 0 and 1 are the two sexes and cost the same. | digit 2 at drive 1: 1.25 effective, 56% more upkeep and 24% more wear |
 | `learning_rate` | `brain.learning_cost` 0.004 | Plasticity upkeep, `0.004 * learning_rate` per reference tick (0 to 2), paid by every animal whatever the world's learning switch. | 0.008 (2%) |
+| `camouflage` | `body.camouflage_cost` 0.03, `body.camouflage_slowing` 0.25 (`SENSE.21`) | Hiding costs upkeep, `0.03 * camouflage ** 2` in the basal metabolism, and speed: top speed times `1 - 0.25 * camouflage`. Others see the animal from up to half as far ([sense-genes.md](sense-genes.md#how-visible-a-thing-is-sense21)). Founders start at 0. | 0.03 (7%) and a quarter off top speed |
 | `brain_gain` | none, recorded | A scale on the weights, which evolve too: any gain can be matched by the weights, so selection has no direction to push it. | |
 | `curiosity` | none, recorded | Pays for itself: it nudges every output at random, so the animal moves, eats and mates less reliably, and a noisy speed burns more than a steady one because the burn is convex. | |
 

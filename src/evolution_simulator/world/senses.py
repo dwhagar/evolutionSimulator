@@ -98,6 +98,12 @@ def loudness(animal: Animal) -> float:
     return QUIET + (1.0 - QUIET) * decision.speed
 
 
+def speed_ratio(animal: Animal) -> float:
+    """How fast an animal is moving as a share of its top speed: 0 when asleep or still."""
+    decision = animal.last_decision
+    return 0.0 if animal.asleep or decision is None else decision.speed
+
+
 class WorldSenses:
     """The default senses: the world's neighbour search and classifier feeding ``sense()``."""
 
@@ -124,7 +130,10 @@ class WorldSenses:
             daylight=world.daylight, asleep=animal.asleep, clock=world.day_phase
         )
         reach = effective_reach(organs, conditions, rules)
-        farthest = max(reach.values())
+        seen_up_to = rules.visibility_size_range[1] * max(
+            rules.still_visibility, rules.moving_visibility
+        )
+        farthest = max(max(reach.values()), reach["vision"] * seen_up_to)
         unrelated = world.config.traits.reproduction.similarity_unrelated
         position = animal.position
 
@@ -134,7 +143,9 @@ class WorldSenses:
         # contact, so two plants are enough: the nearest detected one and the nearest one in touch
         # reach. The rest cannot change the answer.
         vision, smelling, touch = reach["vision"], reach["smell"], reach["touch"]
-        plant_reach = max(vision, smelling, touch)
+        rules_visibility = rules.visibility
+        biggest = rules.visibility_size_range[1]
+        plant_reach = max(vision * biggest, smelling, touch)
         if plant_reach > 0.0:
             half_fov = math.radians(organs.vision_fov_degrees) / 2.0
             ax, ay = position.coords
@@ -153,7 +164,7 @@ class WorldSenses:
                     1.0, plant.traits.current_biomass / PLANT_SCENT_BIOMASS
                 ):
                     detected = (*key, plant)
-                elif surface <= vision:
+                elif surface <= vision * rules_visibility(canopy):
                     px, py = plant.position.coords
                     if surface <= 0.0 or (
                         abs(wrap_angle(math.atan2(py - ay, px - ax) - heading)) <= half_fov
@@ -169,6 +180,7 @@ class WorldSenses:
                         radius=plant.traits.canopy_radius,
                         loudness=0.0,
                         scent=min(1.0, plant.traits.current_biomass / PLANT_SCENT_BIOMASS),
+                        visibility=rules_visibility(plant.traits.canopy_radius),
                     )
                 )
         if farthest > 0.0:
@@ -185,6 +197,9 @@ class WorldSenses:
                         radius=other.radius,
                         loudness=loudness(other),
                         scent=1.0,
+                        visibility=rules_visibility(
+                            other.radius, speed_ratio(other), other.traits.camouflage
+                        ),
                         alarm_call_radius=alarm,
                         mating_call_radius=mating,
                         mass=other.traits.mass,

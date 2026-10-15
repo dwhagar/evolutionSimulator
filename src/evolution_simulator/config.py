@@ -92,6 +92,12 @@ class BodyRules:
     temperament_cost: float = 0.04
     """Upkeep of a strong temperament: ``temperament_cost * (aggression ** 2 + fear ** 2)``. A
     placeholder until fighting and fleeing cost something of their own (``BRAIN.10``) (``TRAIT.9``)."""
+    camouflage_cost: float = 0.03
+    """Upkeep of camouflage: ``camouflage_cost * camouflage ** 2`` per reference tick, about 7% of a
+    basal 0.43 at the top (``SENSE.21``)."""
+    camouflage_slowing: float = 0.25
+    """Top speed is multiplied by ``1 - camouflage_slowing * camouflage``: a creature that keeps
+    itself hidden moves with care (``SENSE.21``)."""
     speed_floor: float = 0.3
     """Top speed at no vitality is this share of the base speed (the rest scales with vitality)."""
     sense_floor: float = 0.4
@@ -344,6 +350,22 @@ class SensingRules:
     """This many animals in reach gives a crowding input of 1."""
     closeness_noise: float = 0.03
     """Standard deviation of the error on every closeness report (input units)."""
+    visibility_reference_radius: float = 0.7
+    """The body radius that is seen exactly as far as the viewer's vision reaches: the radius of an
+    average animal (``SENSE.21``)."""
+    plant_visibility_reference_radius: float = 5.0
+    """The same for a plant's canopy radius, which runs from 2 to 12 where an animal's body is
+    0.5 to 0.8: a plant of average canopy is seen as far as the reach, a wide one farther."""
+    visibility_size_exponent: float = 0.5
+    visibility_size_range: tuple[float, float] = (0.7, 1.5)
+    """Seen from ``(radius / reference) ** exponent`` times as far, kept within this range, so a
+    plant's wide canopy and a small animal are seen from 1.5 and 0.7 times the reach at most."""
+    still_visibility: float = 0.7
+    moving_visibility: float = 1.3
+    """An animal's visibility factor for movement, from a still or sleeping one to one at full speed.
+    Plants do not move, so only their size counts."""
+    camouflage_strength: float = 0.5
+    """At camouflage 1 an animal is seen from ``1 - strength`` of the distance it would be otherwise."""
 
     def __post_init__(self) -> None:
         for name in (
@@ -358,8 +380,42 @@ class SensingRules:
                 raise ValueError(f"{name} must be between 0 and 1, got {getattr(self, name)}.")
         if self.crowding_reference < 1:
             raise ValueError("crowding_reference must be at least 1.")
+        for name in ("visibility_reference_radius", "plant_visibility_reference_radius"):
+            if not (math.isfinite(getattr(self, name)) and getattr(self, name) > 0.0):
+                raise ValueError(f"{name} must be above zero.")
+        low, high = self.visibility_size_range
+        if not (0.0 < low <= high and math.isfinite(high)):
+            raise ValueError(f"visibility_size_range must run from above 0 up, got {low}, {high}.")
+        for name in ("visibility_size_exponent", "still_visibility", "moving_visibility"):
+            value = getattr(self, name)
+            if not (math.isfinite(value) and value >= 0.0):
+                raise ValueError(f"{name} cannot be negative, got {value}.")
+        if not 0.0 <= self.camouflage_strength < 1.0:
+            raise ValueError("camouflage_strength must be at least 0 and below 1.")
         if not (math.isfinite(self.closeness_noise) and self.closeness_noise >= 0.0):
             raise ValueError("closeness_noise cannot be negative.")
+
+    def visibility(
+        self, radius: float, speed_ratio: float | None = None, camouflage: float = 0.0
+    ) -> float:
+        """How far a creature of this body ``radius`` is seen, as a multiple of the viewer's vision
+        reach (``SENSE.21``): its size, how fast it is moving (``speed_ratio`` 0 to 1 of its top
+        speed; ``None`` for a plant, which only has its size, judged against the plant reference) and its camouflage gene."""
+        low, high = self.visibility_size_range
+        reference = (
+            self.plant_visibility_reference_radius
+            if speed_ratio is None
+            else self.visibility_reference_radius
+        )
+        size = min(high, max(low, (radius / reference) ** self.visibility_size_exponent))
+        if speed_ratio is None:
+            motion = 1.0
+        else:
+            motion = (
+                self.still_visibility
+                + (self.moving_visibility - self.still_visibility) * speed_ratio
+            )
+        return size * motion * (1.0 - self.camouflage_strength * camouflage)
 
     def light_factor(self, daylight: float) -> float:
         return self.light_floor + (1.0 - self.light_floor) * daylight

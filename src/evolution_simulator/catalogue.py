@@ -87,6 +87,10 @@ GENES: dict[str, Description] = {
         "Curiosity", "Size of the random nudge on its actions, which learning needs."
     ),
     "learning_rate": _gene("Learning rate", "How strongly it learns from its day when it sleeps."),
+    "camouflage": _gene(
+        "Camouflage",
+        "How hard it is to see: others see it from less far, at a cost in upkeep and speed.",
+    ),
     "brain": _gene(
         "Brain",
         "The network's gates, biases and weights: up to 16 hidden neurons, switched on by their gates.",
@@ -120,6 +124,9 @@ TRAITS: dict[str, Description] = {
     "sight_range": _trait("Sight range gene", LEVEL, "The sight range gene's value."),
     "sight_fov": _trait("Field of vision gene", LEVEL, "The field of vision gene's value."),
     "sight_acuity": _trait("Acuity gene", LEVEL, "The sight acuity gene's value."),
+    "camouflage": _trait(
+        "Camouflage", LEVEL, "Share of the way to its best hiding: seen from up to half as far."
+    ),
     "hearing": _trait("Hearing gene", LEVEL, "The hearing gene's value."),
     "smell": _trait("Smell gene", LEVEL, "The smell gene's value."),
     "touch": _trait("Touch gene", LEVEL, "The touch gene's value."),
