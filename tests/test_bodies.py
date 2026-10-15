@@ -84,3 +84,21 @@ def test_plants_get_darker_the_tougher_they_are():
     tough = palette.plant_shades(4, toughness=1.0)
     assert tuple(plain[-1]) == palette.PLANT_FULL
     assert (tough < plain).all() and palette.plant_shades(4, toughness=0.5).sum() < plain.sum()
+
+
+def test_the_coat_comes_from_a_colour_column_when_the_frame_has_one_else_from_the_diet():
+    from dataclasses import replace
+
+    from evolution_simulator import colour
+
+    block = make_frame([animal(1, diet=0.0), animal(2, diet=1.0)]).animals
+    plain = Layer(block)
+    assert palette.body_positions(plain).tolist() == [0.5, 0.0]
+    count = len(block.columns)
+    values = np.frombuffer(block.values, dtype="<f4").reshape(-1, count)
+    grown = np.concatenate([values, np.array([[1.0], [0.75]], dtype="<f4")], axis=1)
+    layer = Layer(replace(block, columns=(*block.columns, "colour"), values=grown.tobytes()))
+    assert palette.body_positions(layer).tolist() == [1.0, 0.75]
+    found = palette.body_colours(layer)
+    assert tuple(found[0]) == tuple(round(c * 255) for c in colour.rgb(1.0))
+    assert tuple(found[1]) == tuple(round(c * 255) for c in colour.rgb(0.75))
