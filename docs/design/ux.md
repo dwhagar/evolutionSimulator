@@ -366,7 +366,7 @@ it and the measurements are in [storage.md](storage.md); what was built, and whe
   imported the first time it is opened: the checkpoint blobs are copied as bytes, the history is read
   from its file, and the old files go to `<run>/imported/` (kept; delete them by hand). An import cut
   short is finished on the next open.
-- **Measured as built** (`scripts/bench_storage.py`, 1000 animals, 5000 plants): a checkpoint through
+- **Measured as built** (`python -m evolution_tools.bench_storage`, 1000 animals, 5000 plants): a checkpoint through
   `RunStore` takes 0.73 s on average (0.59 s of it serialising the world and the recorder, 20 to 40 ms in
   SQLite with the `incremental_vacuum` and WAL truncate), the file holds 9.4 MB for three kept
   checkpoints, 100 simulated years of daily history cost 1.0 ms per day appended and 2.4 MB, the whole
