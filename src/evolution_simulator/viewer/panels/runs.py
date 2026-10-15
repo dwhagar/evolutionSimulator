@@ -4,7 +4,7 @@ A dock (hidden until asked for: File, Saved runs, or the View menu) holding one 
 with its name, seed, program version, simulated time, last save, population, size and a small
 population chart. The buttons open a run's history (``_run_history``), resume it (the window then
 shows that world, paused), copy its settings into a new run with a fresh seed (*Copy with new seed*,
-through the setup screen's ``start_run_from``), export its history as a table, or delete it. File gets Save run now
+through the setup screen's ``start_run_from``), export its history as a table, compact its file (STORE.3), or delete it. File gets Save run now
 (Ctrl+S) and Saved runs (Ctrl+O). The size warning (UX.25: 5 GB by default) shows above the list.
 All the work is the ``RunManager``'s; this module is the screen.
 """
@@ -119,6 +119,10 @@ class RunsPanel(QWidget):
             "Start a new run with this run's settings and a different seed."
         )
         self.export_button = QPushButton("Export history (CSV)...", self)
+        self.compact_button = QPushButton("Compact", self)
+        self.compact_button.setToolTip(
+            "Rewrite the run's file without its free space. Not while a simulation is writing it."
+        )
         self.delete_button = QPushButton("Delete", self)
         self.refresh_button = QPushButton("Refresh", self)
         self.save_button.clicked.connect(self.save_now)
@@ -126,6 +130,7 @@ class RunsPanel(QWidget):
         self.history_button.clicked.connect(lambda: self.show_history())
         self.copy_button.clicked.connect(lambda: self.copy_with_new_seed())
         self.export_button.clicked.connect(lambda: self.export_history())
+        self.compact_button.clicked.connect(lambda: self.compact())
         self.delete_button.clicked.connect(lambda: self.delete())
         self.refresh_button.clicked.connect(self.refresh)
         for button in (
@@ -134,6 +139,7 @@ class RunsPanel(QWidget):
             self.history_button,
             self.copy_button,
             self.export_button,
+            self.compact_button,
             self.delete_button,
         ):
             buttons.addWidget(button)
@@ -236,6 +242,7 @@ class RunsPanel(QWidget):
             self.history_button,
             self.copy_button,
             self.export_button,
+            self.compact_button,
             self.delete_button,
         ):
             button.setEnabled(picked)
@@ -389,6 +396,30 @@ class RunsPanel(QWidget):
             self.fail(f"Could not export: {error}")
             return False
         self.context.show_message(f"Wrote {rows:,} history rows to {path}")
+        return True
+
+    def compact(self, run_id: str | None = None) -> bool:
+        """Compact the run's file and say how big it was and is. A run a simulation is writing, or
+        the one on screen, is refused with the reason."""
+        run_id = run_id or self.selected_id()
+        summary = next((r for r in self.rows if r.id == run_id), None)
+        if summary is None:
+            return False
+        try:
+            result = self.manager.compact(summary.id)
+        except (RunError, OSError) as error:
+            self.fail(f"Could not compact '{summary.name}': {error}")
+            return False
+        self.context.show_message(
+            f"Compacted '{summary.name}': {format_bytes(result.before)} to "
+            f"{format_bytes(result.after)}"
+            + (
+                f" (saved {format_bytes(result.saved)})"
+                if result.saved > 0
+                else " (nothing to give back)"
+            )
+        )
+        self.refresh()
         return True
 
     def delete(self, run_id: str | None = None) -> bool:

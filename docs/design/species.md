@@ -1,6 +1,7 @@
 # Species tracking
 
-Task `SPECIES.1`, written 2026-10-14 by the Viewer 2 thread. The code is
+Tasks `SPECIES.1` (the tracker, written 2026-10-14) and `SPECIES.2` (recording it in the history,
+2026-10-15), by the Viewer 2 thread. The code is
 [`src/evolution_simulator/species.py`](../../src/evolution_simulator/species.py): a read-only observer in
 the core (no Qt, no numpy) that notices when one population has drifted into two. The settings and the
 ranking default follow the owner's questions
@@ -91,6 +92,56 @@ Ids are unique across both kinds and never reused.
 `history_points` samples (ten years of weekly ones); past that the older half is thinned to every second
 point. At most `extinct_kept` extinct species are kept, oldest dropped first.
 
+## Recording (`SPECIES.2`)
+
+The `Recorder` owns a tracker by default (`RecorderRules.track_species`, on; only when the source has
+animals and plants to read, so a stand-in world gets none), so every normal run records species: the
+host, the headless runner and the viewer all make their recorder as before. The recorder **drives** the
+tracker (it looks at it from its own step listener, just before it takes a sample) so a resumed run
+takes the same samples as an uninterrupted one, and a checkpoint's own `observe` does not make the
+tracker sample out of step.
+
+Every daily sample carries the tracker's latest snapshot as ordinary levels (so the history tiers, the
+`HistoryBatch` messages, the viewer's mirror and the run file's `level` rows all carry them with no
+change of their own). `species.series_name` makes the names and `species.parse_series_name` takes them
+apart. For each kind (`animal`, `plant`):
+
+| Series | Meaning |
+|---|---|
+| `species.animal.total`, `.count` | Living members (sample scaled up) and living species. |
+| `species.animal.<id>` | Size of species `<id>`. |
+| `species.animal.<id>.divergence` | Its distance from the founding genome. |
+| `species.animal.<id>.parent` | Its parent's id, or -1. |
+| `species.animal.rest_by_divergence` | Members outside the top `top_count` (5) by divergence, summed. |
+| `species.animal.rest_by_size` | Members outside the top `top_count` by size, summed. |
+
+A species has series while it is in the top five of **either** ranking, so there are at most ten per
+kind, plus the four sums. A chart picks the ranking it wants: the top five by size are the five largest
+`<id>` series of a sample, the top five by divergence the five with the highest `.divergence`, and the
+rest of either ranking is its `rest_by_*` series (the top five and the rest add up to `total`). The
+colour of a line follows the species id, which never changes or comes back.
+
+**Merging samples.** A week of daily samples becomes one weekly sample by `Sample.merge`. A size that is
+missing from a sample counts as zero there (the species was not listed, so a species that was in the top
+five for three days of a week averages three sevenths of its size), while a missing divergence or parent
+is simply not averaged in (`history.samples.fills_zero`). Everything else about merging is unchanged,
+and the viewer's mirror merges with the same function, so its history equals the recorder's (tested).
+
+**History format 3.** `HISTORY_FORMAT` goes 2 to 3: a saved recorder carries the tracker's state
+(`"species"`, `None` without one) and `track_species` in its rules, so a restored recorder goes on with the
+same species (tested against an uninterrupted run). Formats 1 and 2 still load (they have no species
+series, and a recorder restored from one starts a new tracker at its next step).
+
+**The run file.** `SCHEMA_VERSION` goes 1 to 2: a `species` table (`kind`, `id`, `parent`, `first_day`,
+`last_day`, `extinct_day`, `merged_into`, `peak`, `divergence`) written beside the history rows by the
+run (`Run` follows the recorder's tracker: the table is made to match it when a recorder is first
+followed, and updated at every tracker sample). It keeps a row for every species ever seen, including
+the extinct ones the tracker has since forgotten (it forgets all but `extinct_kept`), so a long run's
+legends still have a parent and an age for old lines; it grows only with the number of species ever
+made. `Run.species()` reads it back as `SpeciesRow`s. A version-1 file gets the table in one transaction
+when it is opened for writing, and a read-only open of one finds no rows. The sizes over time are the
+history's `species.*` levels, as `docs/design/storage.md` planned.
+
 ## Saving
 
 `to_dict` / `SpeciesTracker.restore(source, data)` carry everything, including the rules, the streak
@@ -101,10 +152,8 @@ JSON (gzipped for `.gz`, the same bytes for the same state), and `migrate(data)`
 current layout.
 
 The dict has its own **`SPECIES_FORMAT`** (now 1) and a `_MIGRATIONS` chain, so a change to its layout
-bumps the number and adds one step. Storage is moving to SQLite (`STORE.1` and `STORE.2`), so the run
-store does **not** keep a species file yet and `RUN_FORMAT` is unchanged: `STORE.2` can put
-`tracker.to_dict()` in a table, read it back with `migrate`, and nothing has to be migrated twice. The run
-host, the headless runner and the viewer do not make a tracker either; that is `SPECIES.2` (recording).
+bumps the number and adds one step. The run file stores it with the checkpoint's recorder (the recorder's
+saved state embeds it, see Recording above), and `STORE.2`'s optional separate `species` blob is not used.
 
 ## Cost
 
@@ -113,6 +162,11 @@ Measured on the build machine, one sample of 300 animals (1260 digits) and 600 p
 Only the sample is read. At the default period that is one sample per 168 hourly ticks, where a step of a
 300-animal world takes about 40 ms, so the tracker adds under 1% to a run. Over a two-year real run
 (105 samples) the plant-only samples took 3 to 11 ms each.
+
+Recording adds little: a 30-day run of 300 animals and 600 plants took 7.9 s without species and 8.2 s
+with them (four tracker samples), the recorder's saved state grew from 75 KB to 77 KB, and the history
+gained 14 series names (44 against 30) while the species are few; at most ten ids per kind have series
+at once, so a sample never holds more than about 70 species values.
 
 ## What the checks showed
 

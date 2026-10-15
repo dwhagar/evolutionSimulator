@@ -60,6 +60,9 @@ RANKINGS = ("divergence", "relative", "size")
 """How ``ranking`` orders species: by distance from the founding consensus (the default of issue
 207), by distance from the largest species of the kind, or by size."""
 
+SERIES_PREFIX = "species."
+"""Every history series the tracker adds starts with this (see ``SpeciesTracker.series_values``)."""
+
 _MASK64 = (1 << 64) - 1
 
 
@@ -143,6 +146,16 @@ def digits_of(genome: Any) -> str:
     return "".join(str(strand) for strand in strands)
 
 
+def _genomes(organisms: Sequence[Any]) -> list[tuple[int, Any]]:
+    """``(id, genome)`` of the organisms that carry one (a stand-in world may hold plain views)."""
+    found = []
+    for organism in organisms:
+        genome = getattr(getattr(organism, "traits", None), "dna", None)
+        if genome is not None:
+            found.append((organism.id, genome))
+    return found
+
+
 class _Genome:
     """One sampled genome: its id, digits and the digits read as a base-4 integer."""
 
@@ -199,6 +212,36 @@ def choose_sample(ids: Sequence[int], size: int, salt: int) -> list[int]:
     return sorted(keyed[:size])
 
 
+# --- history series names -----------------------------------------------------------
+
+
+def series_name(kind: str, species_id: int | str | None = None, field: str | None = None) -> str:
+    """The name of a species series in a history sample: ``species.animal.12`` (the size of species
+    12), ``species.animal.12.divergence``, ``species.animal.12.parent``, and the sums
+    ``species.animal.total``, ``.count``, ``.rest_by_divergence`` and ``.rest_by_size``."""
+    name = f"{SERIES_PREFIX}{kind}"
+    if species_id is not None:
+        name += f".{species_id}"
+    if field is not None:
+        name += f".{field}"
+    return name
+
+
+def parse_series_name(name: str) -> tuple[str, int | None, str | None] | None:
+    """The inverse of ``series_name``: ``(kind, species id or None, field or None)``, or ``None``
+    when the name is not a species series. A name with a number is a species; a word is a sum."""
+    if not name.startswith(SERIES_PREFIX):
+        return None
+    parts = name[len(SERIES_PREFIX) :].split(".")
+    if parts[0] not in KINDS or not 1 <= len(parts) <= 3:
+        return None
+    if len(parts) == 1:
+        return parts[0], None, None
+    if parts[1].isdigit():
+        return parts[0], int(parts[1]), parts[2] if len(parts) == 3 else None
+    return (parts[0], None, parts[1]) if len(parts) == 2 else None
+
+
 # --- the records -------------------------------------------------------------------
 
 
@@ -235,6 +278,22 @@ class SpeciesInfo:
     extinct_day: float | None
     merged_into: int | None
     points: tuple[SpeciesPoint, ...]
+
+
+@dataclass(frozen=True)
+class SpeciesRow:
+    """What a run file keeps of a species (``species`` table): who it is and when, without the series
+    (those are the history's ``species.*`` levels)."""
+
+    kind: str
+    id: int
+    parent: int | None
+    first_day: float
+    last_day: float
+    extinct_day: float | None
+    merged_into: int | None
+    peak: int
+    divergence: float
 
 
 @dataclass
@@ -359,6 +418,7 @@ class SpeciesTracker:
         """Real time the latest sample took, for measuring; not part of the saved state."""
         self._attached = False
         self._sample_listeners: list[Callable[[SpeciesTracker], None]] = []
+        self._series: tuple[int, dict[str, float]] | None = None
         if attach:
             self.attach()
 
@@ -404,8 +464,8 @@ class SpeciesTracker:
         now = self._source.simulated_seconds
         if self._next_due is not None and now < self._next_due:
             return False
-        animals = [(a.id, a.traits.dna) for a in self._source.animals]
-        plants = [(p.id, p.traits.dna) for p in self._source.plants]
+        animals = _genomes(self._source.animals)
+        plants = _genomes(self._source.plants)
         if not animals and not plants and not self._species:
             return False  # nothing yet: try again after the next step
         self.observe_genomes(now / DAY_SECONDS, animals, plants)
@@ -670,6 +730,24 @@ class SpeciesTracker:
         ]
         return found
 
+    def rows(self) -> list[SpeciesRow]:
+        """A ``SpeciesRow`` for every species held (living and extinct), by id; cheap, unlike
+        ``species`` it copies no series."""
+        return [
+            SpeciesRow(
+                s.kind,
+                s.id,
+                s.parent,
+                s.first_day,
+                s.last_day,
+                s.extinct_day,
+                s.merged_into,
+                s.peak,
+                s.divergence,
+            )
+            for s in sorted(self._species.values(), key=lambda s: s.id)
+        ]
+
     def get(self, species_id: int) -> SpeciesInfo | None:
         species = self._species.get(species_id)
         return None if species is None else species.info()
@@ -698,6 +776,43 @@ class SpeciesTracker:
         """The first ``top_count`` of ``ranking``: by default the five living species furthest from
         the founding genome."""
         return self.ranking(kind, by, self.rules.top_count)
+
+    def series_values(self) -> dict[str, float]:
+        """What the recorder adds to each history sample, from the latest tracker sample (empty
+        before the first). For each kind: ``total`` and ``count`` of the living species, the size of
+        every species in the top ``top_count`` by divergence or by size, with its divergence and
+        parent, and what the rest add up to under each ranking (``rest_by_divergence``,
+        ``rest_by_size``). A species outside both top lists has no series of its own; its members are
+        in the rest. Names are made by ``series_name``."""
+        if self._taken == 0:
+            return {}
+        if self._series is not None and self._series[0] == self._taken:
+            return dict(self._series[1])
+        top = self.rules.top_count
+        values: dict[str, float] = {}
+        for kind in KINDS:
+            if kind not in self._founders:
+                continue
+            alive = [s for s in self._species.values() if s.kind == kind and s.alive]
+            total = sum(s.size for s in alive)
+            by_divergence = sorted(alive, key=lambda s: (-s.divergence, s.id))[:top]
+            by_size = sorted(alive, key=lambda s: (-s.size, s.id))[:top]
+            values[series_name(kind, field="total")] = float(total)
+            values[series_name(kind, field="count")] = float(len(alive))
+            values[series_name(kind, field="rest_by_divergence")] = float(
+                total - sum(s.size for s in by_divergence)
+            )
+            values[series_name(kind, field="rest_by_size")] = float(
+                total - sum(s.size for s in by_size)
+            )
+            for species in {s.id: s for s in (*by_divergence, *by_size)}.values():
+                values[series_name(kind, species.id)] = float(species.size)
+                values[series_name(kind, species.id, "divergence")] = species.divergence
+                values[series_name(kind, species.id, "parent")] = float(
+                    -1 if species.parent is None else species.parent
+                )
+        self._series = (self._taken, values)
+        return dict(values)
 
     # ---- saving
 

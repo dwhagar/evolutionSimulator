@@ -56,6 +56,9 @@ class AnimalView(NamedTuple):
     """Two numbers that stay close for relatives (``lineage.family_key``), about 1 apart for
     unrelated random genomes and much less in a real population: stretch the range found in the
     frame over the colour scale."""
+    look: float = 0.0
+    """Where its eyes point, radians from straight ahead, positive to the left: toward what it looks
+    at (``World.look_of``), inside its field of vision; 0 when it looks at nothing."""
 
 
 class PlantView(NamedTuple):
@@ -167,6 +170,10 @@ class AnimalDetail:
     family: FamilyView | None = None
     """Its place in the family tree (ancestors and descendants, alive or dead); ``None`` from a
     simulation that keeps no ancestry."""
+    look: float = 0.0
+    """Where its eyes point, radians from straight ahead, positive to the left (``AnimalView.look``)."""
+    focus: int | None = None
+    """The id of the thing it looks at (a plant, a corpse or an animal), if any."""
     vision_range: float | None = None
     """How far its eye reaches now, in world units, after acuity and vitality (``None`` when the
     simulation does not say, as the stand-in simulation does not). The four ranges are what the
@@ -193,7 +200,7 @@ def age_ratio(animal: Animal, dt: float) -> float:
     return min(1.0, traits.age_ticks * dt / lifespan) if lifespan > 0.0 else 1.0
 
 
-def animal_view(animal: Animal, dt: float) -> AnimalView:
+def animal_view(animal: Animal, dt: float, look: float = 0.0) -> AnimalView:
     traits = animal.traits
     position = animal.position.coords
     decision = animal.last_decision
@@ -213,6 +220,7 @@ def animal_view(animal: Animal, dt: float) -> AnimalView:
         decision is not None and decision.wandering,
         traits.sex,
         *traits.family_key,
+        look,
     )
 
 
@@ -268,6 +276,8 @@ def animal_detail(world: World, animal: Animal) -> AnimalDetail:
         network=traits.brain.network(traits.brain_slots, DEFAULT_BLUEPRINT.max_hidden),
         children=world.children_of(animal.id),
         family=world.family_of(animal.id),
+        look=world.look_of(animal),
+        focus=animal.focus,
         traits={name: float(value) for name, value in traits.phenotype.items()},
         genome=str(traits.dna),
         death_cause=traits.death_cause,

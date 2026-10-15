@@ -216,7 +216,7 @@ dependencies (a test checks that no core module names Qt or numpy).
   `numpy.frombuffer`. About 11 KB for 300 animals; 74 KB when the 3,000 plants ride along, which
   they do only every half second and when the session settles (paused, steps done), so a paused
   world is exact. `FRAME_FORMAT` versions the layout (2 since `UX.30`, which added the animals'
-  `family_a` and `family_b` columns). The family colour key is two numbers per animal,
+  `family_a` and `family_b` columns; 3 since `UX.43`, which added `look`, the angle the eyes point). The family colour key is two numbers per animal,
   `lineage.family_key`: the genome's digits projected on two fixed random directions, about 20
   microseconds once per animal (cached) and a pure function of the genome, so it is not saved.
   Relatives get close numbers (a child sits between its parents, a mutant next to the original) and
@@ -372,6 +372,21 @@ it and the measurements are in [storage.md](storage.md); what was built, and whe
   checkpoints, 100 simulated years of daily history cost 1.0 ms per day appended and 2.4 MB, the whole
   history reads in 47 ms and one series in under a millisecond, and ten writers killed mid-checkpoint
   each left a file that passed `integrity_check` with every checkpoint whole.
+- **Compact (`STORE.3`).** `RunStore.compact(run_id)` (`runs/compact.py`) rewrites a run's file without
+  its free space and returns the size before and after (`Compacted`, the file and its WAL). It
+  takes the writer's claim first (refused with `RunError` if a program that is running holds it, this one
+  included), writes a copy with `VACUUM INTO run.sqlite.compact`, checks the copy (`integrity_check`, the
+  same rows in every table, the same bytes in the checkpoint blobs), folds its WAL in, closes the
+  original and replaces it with one `os.replace`. The run folder therefore holds the old file or the new
+  one, never a mixture: a failure or a kill before the rename leaves the original as it was (a stray
+  `run.sqlite.compact` is deleted by the next attempt, and a claim left by a dead program is ignored). The
+  blobs are copied as bytes, so nothing here depends on the world or recorder format. The Saved runs dock
+  has a **Compact** button (`RunsPanel.compact`) that reports "from X to Y"; the run on screen is
+  refused by the manager with the reason, and any run a simulation is writing by the store. Retention
+  and `incremental_vacuum` already keep a file near what it holds, so compacting mostly pays after a lot
+  was deleted or an old run was imported. Tests: `tests/test_runcompact.py` (the refusals, a failure at the
+  rename, an interruption after the copy, a copy that does not match, a stray copy, and a program killed
+  while compacting at five moments) and the dock tests in `tests/test_viewer_runs.py`.
 - **Restart.** `Controller.restart` now closes the old backend before it starts the new one: a
   simulation that is still alive is the run's writer, and the one that resumes the run would be refused.
 - **Other changes.** `CheckpointInfo.path` is the run file; `RunStore.delete` closes the runs it opened
@@ -556,7 +571,7 @@ are `viewer/panels/runs.py` plus `viewer/panels/_run_history.py`:
 ### As built: the charts (`UX.16`)
 
 `viewer/panels/charts.py` replaces the placeholder (same `PANEL` id `charts`, area `right`) with six
-pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
+pyqtgraph tabs (seven since UX.41) over `HistorySamples`, and nothing in it reads the world.
 
 - **History reaches the screen through the backend.** `Batch.history` carries the recorder's
   `HistorySamples` in the batch that follows each new sample (once per simulated day, not every
@@ -569,7 +584,7 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 - **Tabs.** Population (animals, plants, corpses); Births and deaths (animals or plants, with the
   deaths split by cause, only the causes that happened); Condition (average energy, health, age and
   diet, and the shares asleep, pregnant and ready to mate); Lineages (UX.32: founders that still have
-  a line of descent alive, animals and plants); Traits and genes (any recorded statistic
+  a line of descent alive, animals and plants); Species (UX.41, below); Traits and genes (any recorded statistic
   of the animals or the plants: its mean, the middle 80 percent from the 10th to the 90th percentile
   (UX.32), and the lowest and highest, which can be hidden); Gene distribution (the 20-bin histogram of
   a gene as shares of the population, with a slider over the days that have one, which follows the
@@ -778,16 +793,16 @@ no Qt, so they are tested without a window.
   resizes until the user moves it. World y is up (headings are counterclockwise), screen y down; the
   flip is in `Camera` only.
 - **What is drawn.** The ground tinted from night to day by the frame's `daylight`, an optional grid,
-  plants, corpses (diamonds), animals, a white wall at the edge and a scale bar. Animals are triangles
-  along the heading, never under 9 pixels, drawn in one path per colour; females have a notch at the
-  back (so sex does not rest on colour), a sleeping animal is dimmed and ringed, a pregnant one has a
-  white dot, the selected one a white ring.
+  plants, corpses (diamonds), animals, a white wall at the edge and a scale bar. Animals are round
+  bodies with eyes and spots since `UX.43` (see [the creatures](#as-built-the-creatures-ux43)): drawn one circle
+  at a time (a thousand with eyes take about 30 ms a paint; one path of a thousand circles took 300), a sleeping animal is dimmed, ringed and has its eyes shut, a pregnant one has a white
+  dot, the selected one a white ring.
 - **Plant layer.** Painted into a pixmap a quarter of the window larger on every side, reused until the
   plants, the zoom or the size change, and slid (not repainted) as the view pans or follows a creature
   until it runs out of margin (a frame without a plants block costs nothing for them). On this sandbox's software renderer: 1,000
   animals and 3,000 plants take about 20 ms a paint with the plants cached, 45 ms when they are repainted.
-- **Colour modes** (`palette.MODES`, the menu in the toolbar): diet (blue plant eaters to vermillion meat
-  eaters, the default), sex, energy, age and family. The colours are Okabe-Ito blue and reddish purple and
+- **Colour modes** (`palette.MODES`, the menu in the toolbar): diet (blue plant eaters to red meat
+  eaters, the default; the Okabe-Ito blue and vermillion with the "colour-blind safe" box), sex, energy, age and family. The colours are Okabe-Ito blue and reddish purple and
   ramps that change in lightness, so they survive the common colour blindness. Family reads UX.30's two
   family numbers (`family_a`, `family_b`), stretched over the 5th to 95th percentile of the frame: the first sets the
   hue, the second the lightness, so relatives look alike. A frame without those columns (an old one)
@@ -958,6 +973,96 @@ selected animal, its ancestors above it and its descendants below, alive and dea
 - **Not built.** Zooming the tree (it scrolls); a partner line between the two parents; a wider tree than
   4 up and 3 down (the numbers are `ancestry.DEFAULT_UP` and `DEFAULT_DOWN`).
 
+### As built: the creatures (`UX.43`)
+
+The owner's description ([#129](https://github.com/dwhagar/evolutionSimulator/issues/129)): little round
+creatures with eyes at the front that point where they are looking, a colour tied to what they eat, spots
+that tell the sexes apart. The drawing rules are in `viewer/worldview/bodies.py` and the colours in
+`palette.py` and the shared `colour.py`; the canvas only paints what they say.
+
+- **Body and eyes.** A circle the size of the body radius, never under 5 pixels across. Two eyes sit at
+  the front, one to each side; the pupils lean toward where the animal looks: the heading plus the
+  frame's `look` column. Eyes are dropped when the body radius is under 6 pixels and spots under 5, so a
+  zoomed-out world is plain dots. A sleeping animal's eyes are shut (a short line each).
+- **What it looks at (core).** The sensing step already finds the nearest of each class (plant, prey,
+  threat, mate, young); `Percepts.targets` now keeps their ids (a field that is not a brain input) and
+  `world/focus.py` chooses one: a threat first, otherwise what the animal is doing (a mate when it seeks
+  one, prey or a plant when it eats), then its young, a mate, prey, a plant. The id is `Animal.focus`
+  (saved, not in the state digest, no effect on the simulation). The angle is worked out when a frame is
+  made, from the target's position now (brain decisions are cached between runs, so the angle must not
+  be): the bearing from the heading, clamped to half the animal's field of vision (`look_angle`), and
+  straight ahead when it looks at nothing or the thing is gone. `AnimalView.look` is the new last field
+  and `AnimalDetail` carries `look` and `focus`.
+- **Frame format 3.** One more animal column, `look` (radians, positive to the left), 4 bytes an animal
+  (the 300-animal light frame is 14.7 KB, not 13.5). A viewer reads a frame without the column (format
+  2) as looking straight ahead.
+- **Colour.** The shared module `evolution_simulator/colour.py` (no world, numpy or Qt) is the colour
+  line of [colour.md](colour.md): rust red 0, purple 0.25, blue 0.5, teal 0.75, green 1, with `rgb`,
+  `chroma`, `diet_colour`, `match`, the background and foliage colours. `palette.body_colours(layer)`
+  is the one place that says what colour a body is: the frame's `colour` column if it has one (what the
+  colour gene of `TRAIT.21` will add), else the position from the diet (`colour.share_colour`: blue
+  plant eaters, red meat eaters, purple between). The diet mode of the menu is this colour. The
+  "colour-blind safe" box swaps the diet pair for the Okabe-Ito blue and vermillion. Colour is never the
+  only cue: sex is the spots, sleep the dimming and shut eyes, pregnancy the dot. The other colour modes
+  (sex, energy, age, family) are as before.
+- **Spots.** The spotted sex has three dark ladybug spots on the back half; the other sex has none. Which
+  sex is `bodies.SPOTTED_SEX` (females, the default of question 4 in
+  [#246](https://github.com/dwhagar/evolutionSimulator/issues/246)); the old notch at the back is gone.
+- **Plants.** `palette.plant_shades(levels, toughness)` is the plant colour accessor: darker by
+  `colour.FOLIAGE_DARKENING` for a tougher plant, plain green at toughness 0, which is all the canvas
+  passes until `TRAIT.13` and `UX.44` give plants a toughness in the frame.
+- **Found on the way.** The design note writes the diet colour as `0.5 * (1 - tilt)`, which puts plant
+  eaters on green; its own table and prose want 0.25, and `diet_colour` uses 0.25.
+
+### As built: the Species tab (`UX.41`)
+
+A tab of the charts panel (`SpeciesTab` in `viewer/panels/charts.py`, after Lineages) that shows the
+species the tracker found (SPECIES.1) through time, for a live run and a saved one alike. It reads only
+the `species.*` series of the history (names from `species.series_name`, read back with
+`parse_series_name`); the data helpers are in `history/species_view.py` and need no window.
+
+- **What is drawn.** A kind switch (animals or plants, as in the other tabs) and then: a grey **Total**
+  (every living species), a dotted **Others** (the members outside the five species that have lines, from
+  the series of the chosen ranking, `rest_by_divergence` or `rest_by_size`), and one line for each of
+  the chosen species in a stable colour. Total and Others can be switched off.
+- **Which species get a line.** "Top species by distance from the founders" (the default, the owner's
+  choice in [#207](https://github.com/dwhagar/evolutionSimulator/issues/207)) or "by size". In each
+  sample the top five are the five highest `.divergence` values or the five largest sizes (ties to the
+  lower id, as the tracker orders them). The lines are the top five of the newest sample, first, and then,
+  up to ten lines in all (`MAX_LINES`), the species that were in the top five of the most earlier samples,
+  so a line that was big once does not vanish the moment it falls out of the top five, and a long run
+  cannot fill the chart with lines.
+- **Members or distance.** "Show members" draws sizes (a size missing from a sample counts as zero, from
+  the species' first sample on); "Show distance from the founders" draws each species' divergence as a
+  percentage of the genome's digits, only where the species has it, and hides Total and Others.
+- **Legend.** Each line is `#12 · age 340 days · parent #7 · 3.2% from founders` (`species_label`):
+  the id, the age since the species' first sample (in years once the axis is), its parent (`none` for a
+  founder line) and the distance of its last sample from the founding genome. A species that is not in
+  the newest sample has "gone" added and a dashed line.
+- **Colours.** `ColourBook` gives each species id a colour from `SPECIES_COLOURS` (Okabe and Ito, then
+  Paul Tol's) the first time it is drawn and keeps it for the life of the tab, avoiding the colours of
+  species drawn with it while the palette has one free (past twelve it cycles). Ids are unique across
+  kinds, so a species keeps its colour when the kind is switched back.
+- **Highlight.** Click a line (the curve is clickable ten pixels wide) to make it thick and fade the
+  others; click it again, or press "Clear highlight", to show them alike. Switching kind clears it; new
+  samples and a ranking change keep it when the species still has a line. The curves are restyled in
+  place, never redrawn from the click, because redrawing from inside the curve's own signal would delete
+  the curve being clicked.
+- **Empty states.** A history from before species were tracked (format 1 or 2, or recorded with
+  `track_species=False`) shows "No species in this history ..." in place of the chart; one that has
+  species but none of the chosen kind yet says "No plant species recorded yet ...". Both turn into the
+  chart by themselves when species arrive.
+- **Cost.** `species_view` reads the history once per redraw (63 ms for 3000 samples with 12 species
+  each, 104 ms for the whole redraw, on the offscreen platform), and only the tab in view is drawn.
+- **Not built.** Reading `Run.species()` (the rows of every species ever, extinct ones included, from
+  the run file): the series carry what the legend needs. "Others" is the tracker's sum for the five of the
+  chosen ranking in each sample, so when earlier top species are drawn too (up to ten lines), their members
+  at that time are in Others as well as on their own line.
+- **Tests.** `tests/test_species_chart.py`: the view and the choice of lines on a made-up history built
+  with the tracker's own `series_values`, samples merged into a week, then the tab offscreen (lines,
+  legend text, dashed gone species, both switches, colours kept, highlight by click and button, the empty
+  states and a real recorder's history, with and without species).
+
 ### As built: the Windows launcher (`INFRA.10`)
 
 `run.ps1` in the repository root (the owner asked for it there; the one exception to "scripts only in
@@ -1054,7 +1159,7 @@ Day and night tint the ground, matching `World.daylight`. A scale bar in world u
 has no metres). Layers that can be switched: plants, corpses, animals, a grid, the selected creature's
 senses (a wedge for vision using its field of view, circles for hearing and smell, a ring for touch),
 and its trail. **Colour by:** diet (default: meat eaters warm, plant eaters cool), sex, energy,
-age, or family colour (so species and lineages show up as groups). Animals are small triangles
+age, or family colour (so species and lineages show up as groups). Animals are small round bodies
 pointing along their heading; sleeping ones are dimmed and drawn with a mark; pregnant ones have a
 dot. A small overview map appears when zoomed in. Colours come from a colour-blind-safe palette, and
 no meaning rests on colour alone (shape or marks also differ).
@@ -1092,6 +1197,8 @@ pyqtgraph line charts that update live and can be zoomed, with a time axis in si
 - Mean and spread (a band from the 10th to the 90th percentile) of any chosen gene or trait, with a
   picker; and a **gene distribution** as a histogram that can be scrubbed through time.
 - Average energy, age at death, and the number of lineages.
+- The **species** of the animals or the plants: the total, the top five species as lines and what the
+  rest add up to (`UX.41`).
 
 **What is recorded.** The statistics recorder takes one sample per simulated day (not per tick, so a
 run of a thousand years stays small) and stores, for each sample, the counts and, for each gene and each

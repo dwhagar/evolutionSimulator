@@ -84,6 +84,10 @@ class WorldPanel(QWidget):
         self.mode_box.setModel(self.mode_model)
         self.mode_box.currentIndexChanged.connect(self._on_mode)
         bar.addWidget(self.mode_box)
+        self.safe_box = QCheckBox("Colour-blind safe", self)
+        self.safe_box.setToolTip("Use the Okabe-Ito blue and vermillion pair for diet colours")
+        self.safe_box.toggled.connect(self.canvas.set_safe_colours)
+        bar.addWidget(self.safe_box)
         self.layer_boxes: dict[str, QCheckBox] = {}
         for name, label, shown in LAYERS:
             box = QCheckBox(label, self)

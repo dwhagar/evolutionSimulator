@@ -1,10 +1,11 @@
 """Charts and history (UX.16): pyqtgraph line charts of the recorded statistics.
 
-Six tabs read the ``HistorySamples`` the controller publishes (``controller.history``, one new
+Seven tabs read the ``HistorySamples`` the controller publishes (``controller.history``, one new
 sample per simulated day): population, births and deaths (by cause), condition (energy, health and
-the shares asleep, pregnant and ready), lineages (founders that still have descendants alive), a trait
-or gene over time (mean, the middle 80 percent from the 10th to the 90th percentile, and the range),
-and a gene distribution that can be scrubbed through time. Genes and traits carry the display names
+the shares asleep, pregnant and ready), lineages (founders that still have descendants alive), species
+(the biggest or most diverged species of plants or animals, UX.41), a trait or gene over time (mean,
+the middle 80 percent from the 10th to the 90th percentile, and the range), and a gene distribution
+that can be scrubbed through time. Genes and traits carry the display names
 and units of the catalogue (``evolution_simulator.catalogue``). Everything is read from
 ``evolution_simulator.history``; nothing here touches the world.
 
@@ -36,6 +37,12 @@ from PySide6.QtWidgets import (
 
 from evolution_simulator.catalogue import Description, describe_gene, describe_trait
 from evolution_simulator.history import HistorySamples
+from evolution_simulator.history.species_view import (
+    SpeciesView,
+    chosen_ids,
+    has_species,
+    species_view,
+)
 from evolution_simulator.viewer.controller import ViewerController
 from evolution_simulator.viewer.registry import PanelSpec, ViewerContext
 
@@ -58,6 +65,22 @@ BLUE, VERMILION, GREEN, ORANGE, PINK, SKY, YELLOW = (
 )
 
 GREY = "#999999"
+
+SPECIES_COLOURS = (
+    BLUE,
+    VERMILION,
+    GREEN,
+    ORANGE,
+    PINK,
+    SKY,
+    YELLOW,
+    "#882255",
+    "#44AA99",
+    "#999933",
+    "#332288",
+    "#AA4499",
+)
+"""What the lines of the species tab take their colours from (Okabe and Ito, then Paul Tol's)."""
 
 KIND_NAMES = {"animal": "Animals", "plant": "Plants"}
 KIND_COLOURS = {"animal": BLUE, "plant": GREEN}
@@ -211,6 +234,46 @@ def death_causes(history: HistorySamples, kind: str) -> list[str]:
         if any(values):
             causes.append(cause)
     return causes
+
+
+class ColourBook:
+    """A colour for each species id that stays the same for as long as the chart lives, and that no
+    two species drawn together share while the palette has a free one."""
+
+    def __init__(self) -> None:
+        self._given: dict[int, str] = {}
+
+    def colour(self, species_id: int, drawn: Sequence[int] = ()) -> str:
+        if species_id not in self._given:
+            taken = {self._given[i] for i in drawn if i in self._given}
+            free = [c for c in SPECIES_COLOURS if c not in taken]
+            self._given[species_id] = (
+                free[0] if free else SPECIES_COLOURS[species_id % len(SPECIES_COLOURS)]
+            )
+        return self._given[species_id]
+
+
+def age_text(axis: TimeAxis, periods: float) -> str:
+    """How long ago, in the axis' unit: ``340 days`` or ``1.2 years`` (``new`` for none)."""
+    value = periods * axis.per_period
+    if periods <= 0:
+        return "new"
+    return f"{value:.1f} years" if axis.unit == "years" else f"{value:.0f} days"
+
+
+def species_label(view: SpeciesView, species_id: int, axis: TimeAxis) -> str:
+    """The legend text of a species: its id, age, parent and how far it has drifted from the
+    founders of its kind (gone species say so)."""
+    age = view.days[-1] - view.days[view.first_index(species_id)]
+    parent = view.parents.get(species_id)
+    divergence = view.last_divergence(species_id)
+    text = (
+        f"#{species_id} \u00b7 age {age_text(axis, age)} \u00b7 "
+        f"parent {'none' if parent is None else f'#{parent}'}"
+    )
+    if divergence is not None:
+        text += f" \u00b7 {divergence * 100:.1f}% from founders"
+    return text if view.alive_at_end(species_id) else f"{text} \u00b7 gone"
 
 
 # --- drawing ---------------------------------------------------------------------------------------
@@ -449,6 +512,146 @@ class FlowsTab(ChartTab):
             self.plot.line(axis.x(days), np.asarray(values), colour, label, **kw)
 
 
+class SpeciesTab(ChartTab):
+    """The species of plants or animals through time (UX.41): the total, the top five by distance
+    from the founding genome or by size as lines (a stable colour for each, a legend with id, age,
+    parent and divergence), what the others add up to, and a click on a line to highlight it."""
+
+    title = "Species"
+    HIGHLIGHT_WIDTH = 4
+    DIM_ALPHA = 70
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent, "Members")
+        self.kind = self.add_combo(self._kind_changed)
+        for kind, text in KIND_NAMES.items():
+            self.kind.addItem(text, kind)
+        self.rank = self.add_combo()
+        self.rank.addItem("Top species by distance from the founders", "divergence")
+        self.rank.addItem("Top species by size", "size")
+        self.rank.setToolTip(
+            "Which species get a line: the five furthest from the genome the world started with, "
+            "or the five biggest."
+        )
+        self.show_what = self.add_combo()
+        self.show_what.addItem("Show members", "size")
+        self.show_what.addItem("Show distance from the founders", "divergence")
+        self.total = self.add_check("Total", True)
+        self.rest = self.add_check("Others", True)
+        self.rest.setToolTip("Members outside the five species with lines")
+        self.clear = QPushButton("Clear highlight", self)
+        self.clear.setToolTip("Click a line to highlight its species; click it again to clear")
+        self.clear.setEnabled(False)
+        self.clear.clicked.connect(lambda _checked=False: self.highlight(None))
+        self.controls.addWidget(self.clear)
+        self.controls.addStretch(1)
+        self.message = QLabel(self)
+        self.message.setWordWrap(True)
+        self.message.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.message.hide()
+        self.layout().insertWidget(1, self.message, 1)  # type: ignore[union-attr]
+        self.view: SpeciesView | None = None
+        self.lines: dict[int, pg.PlotDataItem] = {}
+        """The drawn species lines by species id."""
+        self.highlighted: int | None = None
+        self._colours = ColourBook()
+        self._looks: dict[int, tuple[str, Qt.PenStyle]] = {}
+
+    def _kind_changed(self) -> None:
+        self.highlighted = None
+        self.redraw()
+
+    def _say(self, text: str | None) -> None:
+        """Show a message instead of the chart, or (with ``None``) the chart."""
+        self.message.setVisible(text is not None)
+        self.message.setText(text or "")
+        self.plot.setVisible(text is None)
+
+    def draw(self, history: HistorySamples, axis: TimeAxis) -> None:
+        self.plot.reset()
+        self.lines, self._looks = {}, {}
+        kind = self.kind.currentData()
+        view = self.view = species_view(history, kind)
+        if view is None:
+            noun = KIND_NAMES[kind].lower()
+            self._say(
+                f"No {noun[:-1]} species recorded yet: the tracker takes its first sample after "
+                "some simulated days."
+                if has_species(history)
+                else "No species in this history: it was recorded before species were tracked, "
+                "or with species tracking turned off."
+            )
+            self.clear.setEnabled(False)
+            return
+        self._say(None)
+        members = self.show_what.currentData() == "size"
+        self.total.setEnabled(members)
+        self.rest.setEnabled(members)
+        item = self.plot.getPlotItem()
+        item.setLabel(
+            "left",
+            f"{KIND_NAMES[kind]} per species (estimated)"
+            if members
+            else "From the founding genome (%)",
+        )
+        days = axis.x(view.days)
+        if members and self.total.isChecked():
+            self.plot.line(days, np.asarray(view.total), GREY, "Total", width=3)
+        if members and self.rest.isChecked():
+            rest = view.rest[self.rank.currentData()]
+            self.plot.line(
+                days, np.asarray(rest), GREY, "Others", width=1, style=Qt.PenStyle.DotLine
+            )
+        ids = chosen_ids(view, self.rank.currentData())
+        for species_id in ids:
+            start = view.first_index(species_id)
+            if members:
+                column = view.sizes[species_id][start:]
+                x, y = days[start:], np.array([0.0 if v is None else v for v in column])
+            else:
+                points = [
+                    (d, v * 100) for d, v in zip(days, view.divergence[species_id]) if v is not None
+                ]
+                x, y = np.array([p[0] for p in points]), np.array([p[1] for p in points])
+            if not len(x):
+                continue
+            colour = self._colours.colour(species_id, ids)
+            style = Qt.PenStyle.SolidLine if view.alive_at_end(species_id) else Qt.PenStyle.DashLine
+            curve = self.plot.line(
+                x, y, colour, species_label(view, species_id, axis), width=2, style=style
+            )
+            curve.setCurveClickable(True, width=10)
+            curve.sigClicked.connect(lambda _item, _event, i=species_id: self.highlight(i))
+            self.lines[species_id] = curve
+            self._looks[species_id] = (colour, style)
+        if self.highlighted not in self.lines:
+            self.highlighted = None
+        self._restyle()
+
+    def highlight(self, species_id: int | None) -> None:
+        """Make this species' line stand out (the others fade), or with ``None`` (or the species
+        already highlighted) show all lines alike. The curves are restyled where they are, not drawn
+        again, so this is safe to call from the click on a curve."""
+        if species_id == self.highlighted or species_id not in self.lines:
+            species_id = None
+        self.highlighted = species_id
+        self._restyle()
+
+    def _restyle(self) -> None:
+        self.clear.setEnabled(self.highlighted is not None)
+        for species_id, curve in self.lines.items():
+            colour, style = self._looks[species_id]
+            pen_colour = _colour(colour)
+            width = 2
+            if self.highlighted is not None:
+                if species_id == self.highlighted:
+                    width = self.HIGHLIGHT_WIDTH
+                else:
+                    width = 1
+                    pen_colour.setAlpha(self.DIM_ALPHA)
+            curve.setPen(pg.mkPen(pen_colour, width=width, style=style))
+
+
 class TraitTab(ChartTab):
     """One trait or gene over time: its mean, the middle 80 percent, and the range seen."""
 
@@ -626,7 +829,7 @@ class DistributionTab(ChartTab):
 
 
 class ChartsPanel(QWidget):
-    """The five chart tabs over one ``ViewerController``."""
+    """The chart tabs over one ``ViewerController``."""
 
     def __init__(
         self, controller: ViewerController | None = None, parent: QWidget | None = None
@@ -645,6 +848,7 @@ class ChartsPanel(QWidget):
                 FlowsTab,
                 ConditionTab,
                 LineagesTab,
+                SpeciesTab,
                 TraitTab,
                 DistributionTab,
             )

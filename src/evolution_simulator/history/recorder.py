@@ -37,6 +37,7 @@ from evolution_simulator.history.samples import (
     Stat,
     Tier,
 )
+from evolution_simulator.species import SpeciesTracker
 from evolution_simulator.world.events import Born, Died, EventListener, WorldEvent
 from evolution_simulator.world.timescale import TimeScale
 from evolution_simulator.world.views import AnimalView, CorpseView, PlantView
@@ -80,6 +81,9 @@ class RecorderRules:
     """Bins of a gene histogram, over the gene's 0 to 1."""
     histogram_every: int = 30
     """A histogram of every gene goes in the first sample and every this-many-th after it."""
+    track_species: bool = True
+    """Keep a ``SpeciesTracker`` beside the recorder (when the source has animals and plants to read)
+    and add its series to every sample (``SPECIES.2``)."""
 
     def __post_init__(self) -> None:
         if not (math.isfinite(self.period_seconds) and self.period_seconds > 0.0):
@@ -105,6 +109,7 @@ class RecorderRules:
             "tiers": [[t.name, t.periods, t.capacity] for t in self.tiers],
             "bins": self.bins,
             "histogram_every": self.histogram_every,
+            "track_species": self.track_species,
         }
 
     @classmethod
@@ -114,6 +119,7 @@ class RecorderRules:
             tiers=tuple(TierRule(str(n), int(p), int(c)) for n, p, c in data["tiers"]),
             bins=int(data["bins"]),
             histogram_every=int(data["histogram_every"]),
+            track_species=bool(data.get("track_species", True)),
         )
 
 
@@ -159,10 +165,24 @@ CAUSES = tuple(cause.value for cause in DeathCause)
 
 class Recorder:
     def __init__(
-        self, source: Observable, rules: RecorderRules | None = None, attach: bool = True
+        self,
+        source: Observable,
+        rules: RecorderRules | None = None,
+        attach: bool = True,
+        species: SpeciesTracker | None = None,
     ) -> None:
         self.rules = rules if rules is not None else RecorderRules()
         self._source = source
+        self.species: SpeciesTracker | None = species
+        """The species tracker whose series go in every sample, or ``None``. The recorder makes one
+        when the rules ask and the source has animals and plants, and it drives it: the tracker
+        is looked at just before each sample, so a resumed run takes the same samples as an
+        uninterrupted one (a checkpoint's own ``observe`` does not sample it out of step). A tracker
+        handed in stops listening to the source by itself."""
+        if species is not None:
+            species.close()
+        elif self.rules.track_species and hasattr(source, "animals") and hasattr(source, "plants"):
+            self.species = SpeciesTracker(source, attach=False)  # type: ignore[arg-type]
         self._tiers: list[list[Sample]] = [[] for _ in self.rules.tiers]
         self._last_period = self._period_now()
         """The period the last sample ended at (or the period the recorder started in)."""
@@ -236,6 +256,8 @@ class Recorder:
             self._ages[event.kind].append(event.age_ticks * seconds / self.rules.period_seconds)
 
     def _on_step(self, report: object) -> None:
+        if self.species is not None:
+            self.species.observe()
         self.observe()
 
     # ---- sampling ----------------------------------------------------------
@@ -246,6 +268,8 @@ class Recorder:
     def observe(self) -> bool:
         """Take a sample if a period has passed since the last one. Returns whether it did. The
         step listener calls this after every step; call it yourself for a source without one."""
+        if self.species is not None and not self._attached:
+            self.species.observe()  # a recorder that listens drives it from its step listener
         now = self._period_now()
         if now <= self._last_period:
             return False
@@ -283,6 +307,8 @@ class Recorder:
             values["animal.ready"] = sum(a.ready_to_mate for a in animals) / n
         if plants:
             values["plant.biomass"] = math.fsum(p.biomass_ratio for p in plants) / len(plants)
+        if self.species is not None:
+            values.update(self.species.series_values())
         values["lineages.animal"] = float(self._lineages("animal", animals))
         values["lineages.plant"] = float(self._lineages("plant", plants))
         for kind in KINDS:
@@ -373,15 +399,29 @@ class Recorder:
                 kind: sorted(map(list, roots.items())) for kind, roots in self._roots.items()
             },
             "tiers": [[s.to_dict() for s in tier] for tier in self._tiers],
+            "species": None if self.species is None else self.species.to_dict(),
         }
 
     @classmethod
-    def restore(cls, source: Observable, data: Mapping[str, Any], attach: bool = True) -> Recorder:
+    def restore(
+        cls,
+        source: Observable,
+        data: Mapping[str, Any],
+        attach: bool = True,
+        species: SpeciesTracker | None = None,
+    ) -> Recorder:
         """A recorder that carries on from ``to_dict`` output, listening to ``source`` (normally the
-        world restored from the save made at the same moment)."""
+        world restored from the save made at the same moment). The species tracker comes back from the
+        state saved with the recorder (format 3); for older data, or to use another one, give the
+        restored tracker as ``species``, else the recorder starts a new one."""
         if data.get("format") not in READABLE_FORMATS or data.get("kind") != "recorder":
             raise ValueError("This is not a saved statistics recorder of a format I can read.")
-        recorder = cls(source, RecorderRules.from_dict(data["rules"]), attach=False)
+        saved = data.get("species")
+        if species is None and saved is not None:
+            species = SpeciesTracker.restore(source, saved, attach=False)  # type: ignore[arg-type]
+        recorder = cls(
+            source, RecorderRules.from_dict(data["rules"]), attach=False, species=species
+        )
         recorder._last_period = int(data["last_period"])
         recorder._taken = int(data["taken"])
         recorder._births = {kind: int(data["births"][kind]) for kind in KINDS}

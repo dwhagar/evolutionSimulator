@@ -1,6 +1,9 @@
 """Saved runs in the viewer (UX.18), on Qt's offscreen platform: save now, the run list, resume,
 delete, the history window, the size warning and the CSV export."""
 
+import sqlite3
+from contextlib import closing
+
 import pytest
 from run_support import damage_checkpoint
 from world_support import hourly_world
@@ -606,6 +609,68 @@ def test_exporting_a_run_without_history_is_refused(manager, store, tmp_path):
     run = store.create(make_world(), name="Bare")
     with pytest.raises(RunError):
         manager.export_csv(run.id, tmp_path / "x.csv")
+
+
+# --- compacting (STORE.3) -----------------------------------------------------------------
+
+
+def run_with_spare_pages(store):
+    """A saved run (not on screen) whose file has free pages in it."""
+    world = make_world(seed=9)
+    run = store.create(world, name="Spare")
+    for _ in range(4):
+        world.run(48)
+        run.checkpoint(world)
+    run.close()
+    run = store.open(run.id)
+    with closing(sqlite3.connect(run.file_path)) as db, db:
+        db.execute("PRAGMA foreign_keys = ON")
+        db.execute("DELETE FROM checkpoints WHERE tick != (SELECT MAX(tick) FROM checkpoints)")
+    run_id = run.id
+    run.close()
+    return run_id
+
+
+def test_compact_rewrites_a_saved_run_and_says_the_sizes(window, panel, store):
+    run_id = run_with_spare_pages(store)
+    panel.refresh()
+    panel.select(run_id)
+    assert panel.compact_button.isEnabled()
+    before = panel.manager.size_of(next(r for r in panel.rows if r.id == run_id))
+    assert panel.compact()
+    message = window.statusBar().currentMessage()
+    assert "Compacted 'Spare'" in message and " to " in message and "saved" in message
+    after = panel.manager.size_of(next(r for r in panel.rows if r.id == run_id))
+    assert after < before
+    assert store.open(run_id).resume().world.tick > 0  # and the run is still whole
+
+
+def test_compact_refuses_the_run_on_screen_and_leaves_it_alone(window, panel, manager, store):
+    manager.save_now("On screen")
+    run_id = manager.current_run.id
+    panel.refresh()
+    size = (store.root / run_id / "run.sqlite").stat().st_size
+    assert not panel.compact(run_id)
+    assert "run on screen" in window.statusBar().currentMessage()
+    assert (store.root / run_id / "run.sqlite").stat().st_size == size
+
+
+def test_compact_refuses_a_run_another_program_is_writing(window, panel, store):
+    import subprocess
+    import sys
+
+    run_id = run_with_spare_pages(store)
+    other = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(120)"])
+    try:
+        run = store.open(run_id)
+        run._file.set_meta(writer={"pid": other.pid, "started": "now"})
+        run.close()
+        panel.refresh()
+        assert not panel.compact(run_id)
+        assert "being written" in window.statusBar().currentMessage()
+    finally:
+        other.kill()
+        other.wait()
 
 
 # --- finding the manager ------------------------------------------------------------------

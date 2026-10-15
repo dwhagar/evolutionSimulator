@@ -57,6 +57,7 @@ from evolution_simulator.world.ancestry import AncestryBook
 from evolution_simulator.world.bounds import Bounds
 from evolution_simulator.world.corpses import Corpse
 from evolution_simulator.world.events import Ate, Born, Died, EventListener, Mated, WorldEvent
+from evolution_simulator.world.focus import choose_focus, look_angle
 from evolution_simulator.world.mating import choose_mate
 from evolution_simulator.world.organisms import Animal, Plant
 from evolution_simulator.world.scent import ANIMAL, CARRION, ScentField
@@ -372,7 +373,20 @@ class World:
     def animal_views(self) -> list[AnimalView]:
         """A value for every living animal, in id order."""
         dt = self.dt
-        return [animal_view(a, dt) for a in self.animals]
+        return [animal_view(a, dt, self.look_of(a)) for a in self.animals]
+
+    def look_of(self, animal: Animal) -> float:
+        """Where the animal's eyes point, in radians from straight ahead (positive to the left),
+        toward what it looks at (``Animal.focus``) but inside its field of vision; 0 when it looks
+        at nothing or the thing is gone (UX.43)."""
+        focus = animal.focus
+        if focus is None:
+            return 0.0
+        target = self._animals.get(focus) or self._plants.get(focus) or self._corpses.get(focus)
+        if target is None:
+            return 0.0
+        half_fov = math.radians(animal.traits.fov_degrees) / 2.0
+        return look_angle(animal.heading, animal.position, target.position, half_fov)
 
     def plant_views(self) -> list[PlantView]:
         return [plant_view(p) for p in self.plants]
@@ -613,7 +627,9 @@ class World:
                     animal.traits.interrupt()
                 decision = animal.traits.cached_decision(self.rng)
                 if decision is None:
-                    decision = animal.traits.think(self.senses.perceive(self, animal), self.rng)
+                    percepts = self.senses.perceive(self, animal)
+                    decision = animal.traits.think(percepts, self.rng)
+                    animal.focus = choose_focus(percepts.targets, decision)
                 animal.last_decision = decision
 
         # 2. Live, move and eat (or sleep).

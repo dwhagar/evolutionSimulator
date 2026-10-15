@@ -443,6 +443,7 @@ def _animal_to_data(animal: Animal, animal_ids: Mapping[int, int]) -> dict[str, 
         "awake_time": animal.awake_time,
         "partner": animal.partner,
         "killed_by": animal.killed_by,
+        "focus": animal.focus,
         "last_decision": _encode(animal.last_decision),
         "traits": _animal_traits_to_data(animal.traits, animal_ids),
     }
@@ -662,6 +663,7 @@ def _build_world(data: Mapping[str, Any], given_senses: Senses | None) -> World:
         animal.awake_time = _decode(float, animal_data["awake_time"])
         animal.partner = _decode(int | None, animal_data["partner"])
         animal.killed_by = _decode(int | None, animal_data.get("killed_by"))
+        animal.focus = _decode(int | None, animal_data.get("focus"))
         animal.last_decision = _decode(BrainDecision | None, animal_data["last_decision"])
         world._animals[animal.id] = animal
         world._animal_index.insert(animal.id, animal.position, animal.radius)
