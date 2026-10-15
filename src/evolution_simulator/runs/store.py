@@ -30,6 +30,8 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
+import gzip
+import json
 import logging
 import math
 import os
@@ -42,7 +44,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
 from evolution_simulator import __version__
 from evolution_simulator.history import (
@@ -152,6 +154,26 @@ class Resumed:
     world: World
     recorder: Recorder | None
     checkpoint: CheckpointInfo
+    species: dict[str, Any] | None = None
+    """What the species tracker saved with the checkpoint (``SpeciesTracker.to_dict()``), as it was
+    written: the caller runs ``species.migrate`` and ``SpeciesTracker.restore`` on it. The store keeps
+    it as an opaque document and does not know its format."""
+
+
+class SupportsToDict(Protocol):
+    def to_dict(self) -> dict[str, Any]: ...
+
+
+def _dump_document(data: Mapping[str, Any]) -> bytes:
+    text = json.dumps(data, separators=(",", ":"), sort_keys=True)
+    return gzip.compress(text.encode("utf-8"), compresslevel=1, mtime=0)
+
+
+def _load_document(blob: bytes) -> dict[str, Any]:
+    data = json.loads(gzip.decompress(blob).decode("utf-8"))
+    if not isinstance(data, dict):
+        raise RunError("the species document is not an object")
+    return data
 
 
 def _utc(timestamp: float) -> str:
@@ -511,9 +533,15 @@ class Run:
             encoding=row.encoding,
         )
 
-    def checkpoint(self, world: World, recorder: Recorder | None = None) -> CheckpointInfo:
+    def checkpoint(
+        self,
+        world: World,
+        recorder: Recorder | None = None,
+        species: SupportsToDict | None = None,
+    ) -> CheckpointInfo:
         """Write a checkpoint of the world (and the recorder, if given) now, update the manifest, and
-        drop the checkpoints the retention rules no longer keep. All of it happens in one
+        drop the checkpoints the retention rules no longer keep. ``species`` is anything with a
+        ``to_dict()`` (the species tracker); its document is stored with the checkpoint. All of it happens in one
         transaction: if anything fails the run is as it was."""
         self._writable()
         if recorder is not None:
@@ -532,12 +560,13 @@ class Run:
         )
         world_blob = dump_world(world)  # the slow part, before the transaction starts
         recorder_blob = dump_history(recorder) if recorder is not None else None
+        species_blob = _dump_document(species.to_dict()) if species is not None else None
         history = recorder.history() if recorder is not None else None
         with self._file.transaction():
             if history is not None and self._history_stale:
                 self._file.history_replace(history)
                 self._history_stale = False
-            self._file.add_checkpoint(row, world_blob, recorder_blob)
+            self._file.add_checkpoint(row, world_blob, recorder_blob, species_blob)
             self._prune()
             self._update_manifest(world, history, row, now)
         self._file.settle()
@@ -637,7 +666,9 @@ class Run:
                     recorder = Recorder.restore(world, load_history_bytes(recorder_blob))
                 self._last_seconds = world.simulated_seconds
                 self._last_wall = self.store.clock()
-                return Resumed(world, recorder, info)
+                species_blob = self._file.species_blob(info.tick)
+                species = None if species_blob is None else _load_document(species_blob)
+                return Resumed(world, recorder, info, species)
             except (SaveFormatError, RunError, OSError, ValueError, KeyError, EOFError) as error:
                 errors.append(f"{info.name}: {error}")
         raise RunError(
@@ -660,18 +691,30 @@ class Run:
         waited = self.store.clock() - self._last_wall
         return days >= rules.checkpoint_every_days and waited >= rules.min_wall_seconds
 
-    def autosave(self, world: World, recorder: Recorder | None = None) -> Autosaver:
+    def autosave(
+        self,
+        world: World,
+        recorder: Recorder | None = None,
+        species: SupportsToDict | None = None,
+    ) -> Autosaver:
         """Write a checkpoint whenever one is due, after each step, until ``close()``."""
-        return Autosaver(self, world, recorder)
+        return Autosaver(self, world, recorder, species)
 
 
 class Autosaver:
     """Listens to the end of every step and checkpoints the run when one is due."""
 
-    def __init__(self, run: Run, world: World, recorder: Recorder | None = None) -> None:
+    def __init__(
+        self,
+        run: Run,
+        world: World,
+        recorder: Recorder | None = None,
+        species: SupportsToDict | None = None,
+    ) -> None:
         self.run = run
         self.world = world
         self.recorder = recorder
+        self.species = species
         self.written = 0
         """Checkpoints this autosaver has written."""
         if recorder is not None:
@@ -682,14 +725,14 @@ class Autosaver:
 
     def _on_step(self, report: StepReport) -> None:
         if self.run.due(self.world):
-            self.run.checkpoint(self.world, self.recorder)
+            self.run.checkpoint(self.world, self.recorder, self.species)
             self.written += 1
 
     def finish(self) -> CheckpointInfo:
         """Checkpoint now (when a run ends or is stopped) and stop listening."""
         self._stop_listening()
         try:
-            info = self.run.checkpoint(self.world, self.recorder)
+            info = self.run.checkpoint(self.world, self.recorder, self.species)
         finally:
             self.run.release()
         self.written += 1

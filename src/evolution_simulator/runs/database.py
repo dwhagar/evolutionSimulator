@@ -56,7 +56,8 @@ CREATE TABLE checkpoints (
 CREATE TABLE checkpoint_data (
     id INTEGER PRIMARY KEY REFERENCES checkpoints(id) ON DELETE CASCADE,
     world BLOB NOT NULL,
-    recorder BLOB);
+    recorder BLOB,
+    species BLOB);
 CREATE TABLE names (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE);
 CREATE TABLE samples (
     tier INTEGER NOT NULL, day INTEGER NOT NULL, span INTEGER NOT NULL, tick INTEGER NOT NULL,
@@ -348,7 +349,13 @@ class RunFile:
             )
         ]
 
-    def add_checkpoint(self, row: CheckpointRow, world: bytes, recorder: bytes | None) -> None:
+    def add_checkpoint(
+        self,
+        row: CheckpointRow,
+        world: bytes,
+        recorder: bytes | None,
+        species: bytes | None = None,
+    ) -> None:
         """Add (or, at the same tick, replace) a checkpoint. Inside a transaction."""
         with self.transaction():
             self._execute("DELETE FROM checkpoints WHERE tick = ?", (row.tick,))
@@ -371,8 +378,9 @@ class RunFile:
                         ),
                     )
                     self._connection.execute(
-                        "INSERT INTO checkpoint_data(id, world, recorder) VALUES (?, ?, ?)",
-                        (cursor.lastrowid, world, recorder),
+                        "INSERT INTO checkpoint_data(id, world, recorder, species) "
+                        "VALUES (?, ?, ?, ?)",
+                        (cursor.lastrowid, world, recorder, species),
                     )
                 except sqlite3.Error as error:
                     raise RunError(f"{self.path.name} cannot be written: {error}") from error
@@ -393,6 +401,15 @@ class RunFile:
             raise RunError(f"There is no checkpoint at tick {tick}.")
         world, recorder = rows[0]
         return bytes(world), None if recorder is None else bytes(recorder)
+
+    def species_blob(self, tick: int) -> bytes | None:
+        """The species data of a checkpoint (``None`` if it has none), still compressed."""
+        rows = self._query(
+            "SELECT d.species FROM checkpoint_data d JOIN checkpoints c ON c.id = d.id "
+            "WHERE c.tick = ?",
+            (tick,),
+        )
+        return None if not rows or rows[0][0] is None else bytes(rows[0][0])
 
     # ---- the history --------------------------------------------------------------------------
 

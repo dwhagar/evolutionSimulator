@@ -334,6 +334,14 @@ it and the measurements are in [storage.md](storage.md); what was built, and whe
   does not know and tries the one before. Both blobs are gzip level 1 (`mtime` 0): on a 1000-animal,
   5000-plant world level 6 took 124 ms and made 1.00 MB where level 1 takes 40 ms and makes 1.27 MB; the
   JSON text itself costs 440 ms of the checkpoint, so the gain is the 85 ms, not a multiple.
+- **The species document.** `Run.checkpoint(world, recorder, species)` and `Run.autosave(world, recorder,
+  species)` take anything with a `to_dict()` (the species tracker) and keep the document with the
+  checkpoint (`checkpoint_data.species`, gzip JSON, `NULL` without one); `Resumed.species` hands it back
+  unread, for `species.migrate` and `SpeciesTracker.restore`. The store does not know its format, so
+  `SPECIES.2` needs no schema change.
+- **The family book** is part of the world document (`persistence` calls `AncestryBook.to_data()` and
+  `from_data()` inside the world), so every checkpoint already has it. It is not a table of its own: that
+  would copy it and tie the store to the world's shape.
 - **History follows the recorder.** The recorder reports the tier changes of each sample
   (`Recorder.add_tier_listener`, `TierChange`) and the run applies them as rows (about a millisecond a
   day), so `Run.history()` is current to the last sample, not to the last checkpoint. A run starts

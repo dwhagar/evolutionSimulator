@@ -72,7 +72,8 @@ CREATE TABLE checkpoints (            -- what the Saved runs dock lists: small r
 CREATE TABLE checkpoint_data (        -- the big part, read only to resume
     id INTEGER PRIMARY KEY REFERENCES checkpoints(id) ON DELETE CASCADE,
     world BLOB NOT NULL,              -- gzip of the world_to_dict JSON: the bytes world.json.gz holds
-    recorder BLOB);                   -- gzip of Recorder.to_dict(): the bytes history.json.gz holds
+    recorder BLOB,                    -- gzip of Recorder.to_dict(): the bytes history.json.gz holds
+    species BLOB);                    -- gzip of SpeciesTracker.to_dict(), NULL without a tracker
 
 -- The history. A series name is stored once; the rows say which sample and which name.
 CREATE TABLE names   (id INTEGER PRIMARY KEY, name TEXT NOT NULL UNIQUE);

@@ -364,3 +364,26 @@ def test_a_damaged_old_checkpoint_is_carried_over_and_skipped_on_resume(tmp_path
     assert len(run.checkpoints()) == 1
     with pytest.raises(RunError, match="no checkpoint that can be restored"):
         run.resume()
+
+
+# --- the species document ---------------------------------------------------------------------------
+
+
+class FakeSpecies:
+    def __init__(self, data) -> None:
+        self.data = data
+
+    def to_dict(self):
+        return self.data
+
+
+def test_a_checkpoint_keeps_the_species_document_for_the_resume(tmp_path) -> None:
+    store = store_in(tmp_path)
+    world = rich_world()
+    run = store.create(world)
+    run.checkpoint(world)
+    assert run.resume().species is None  # no tracker, nothing stored
+    document = {"format": 1, "kind": "species", "tracks": [{"id": 1, "name": "a"}]}
+    run.checkpoint(world, species=FakeSpecies(document))
+    run.close()
+    assert store.open(run.id).resume().species == document
