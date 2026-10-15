@@ -18,7 +18,6 @@ from __future__ import annotations
 import random
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from operator import ne
 from typing import Any, Protocol, Self
 
 BASES: tuple[int, ...] = (0, 1, 2, 3)
@@ -413,6 +412,28 @@ class Genome(Protocol):
     def reproduce(self, partner: Any, rng: random.Random, *args: Any, **kwargs: Any) -> Any: ...
 
 
+_DIGIT_CHARS = bytes.maketrans(bytes(range(4)), b"0123")
+"""Turns a sequence of digits 0 to 3 (as bytes) into the characters ``int(..., 4)`` reads."""
+
+_DIGIT_MASKS: dict[int, int] = {}
+
+
+def _digit_mask(length: int) -> int:
+    """``0b0101...01`` with a one in the low bit of each of ``length`` two-bit digits."""
+    mask = _DIGIT_MASKS.get(length)
+    if mask is None:
+        mask = _DIGIT_MASKS[length] = (4**length - 1) // 3
+    return mask
+
+
+def differing_digits(a: int, b: int, length: int) -> int:
+    """How many of ``length`` base-4 digits differ between two genomes packed as integers
+    (``DNA.packed``): ``a ^ b`` is zero where digits match, ``x | x >> 1`` folds each digit's two
+    bits into one and ``bit_count`` counts them."""
+    x = a ^ b
+    return ((x | (x >> 1)) & _digit_mask(length)).bit_count()
+
+
 Crossover = Callable[["DNA", "DNA", random.Random], "DNA"]
 """A crossover strategy: (parent_a, parent_b, rng) -> child."""
 
@@ -420,7 +441,7 @@ Crossover = Callable[["DNA", "DNA", random.Random], "DNA"]
 class DNA:
     """Immutable fixed-length quaternary genome shaped by a ``GenomeLayout``."""
 
-    __slots__ = ("_layout", "_sequence")
+    __slots__ = ("_layout", "_packed", "_sequence")
 
     def __init__(self, layout: GenomeLayout, sequence: Iterable[int] | str) -> None:
         if isinstance(sequence, str):
@@ -436,6 +457,7 @@ class DNA:
                 raise ValueError(f"Invalid quaternary digit: {digit}. Must be 0, 1, 2, or 3.")
         object.__setattr__(self, "_layout", layout)
         object.__setattr__(self, "_sequence", digits)
+        object.__setattr__(self, "_packed", None)
 
     def __setattr__(self, name: str, value: object) -> None:
         raise AttributeError("DNA is immutable.")
@@ -494,11 +516,23 @@ class DNA:
     def __repr__(self) -> str:
         return f"DNA(layout={self._layout.name!r}, sequence='{self}')"
 
+    @property
+    def packed(self) -> int:
+        """The genome as one base-4 integer (the digits read left to right, the first the most
+        significant), made on first use and kept. It is a cache for comparing genomes quickly (see
+        ``differing_digits``): it is not part of the genome's value, so it is in no equality, hash,
+        saved form or digest."""
+        value = self._packed
+        if value is None:
+            value = int(bytes(self._sequence).translate(_DIGIT_CHARS), 4)
+            object.__setattr__(self, "_packed", value)
+        return value
+
     def distance(self, other: DNA) -> float:
         """Fraction of digits that differ (0.0 identical, 1.0 every digit differs)."""
         self._require_compatible(other)
-        differing = sum(map(ne, self._sequence, other._sequence))
-        return differing / self.length
+        length = len(self._sequence)
+        return differing_digits(self.packed, other.packed, length) / length
 
     # -------------------------------------------------------------------------
     # Serialisation
@@ -851,7 +885,7 @@ class DNA:
     # -------------------------------------------------------------------------
 
     def _require_compatible(self, other: DNA) -> None:
-        if self._layout != other._layout:
+        if self._layout is not other._layout and self._layout != other._layout:
             raise TypeError(
                 f"Cannot combine distinct DNA species: {self._layout.name!r} vs "
                 f"{other._layout.name!r}"
