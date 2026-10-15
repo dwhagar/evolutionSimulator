@@ -3,6 +3,7 @@ import random
 import pytest
 from genome_support import dna_from_v6
 
+from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.dna import DNA, GeneSpec, GenomeLayout
 from evolution_simulator.layouts import ANIMAL_LAYOUT, PLANT_LAYOUT
 from evolution_simulator.traits import AnimalTraits, BaseTraits, MatingResult, PlantTraits
@@ -401,7 +402,7 @@ def test_the_litter_genomes_are_fixed_at_conception_from_both_parents():
 def test_a_pregnant_bearer_is_slower_hungrier_and_does_not_look_for_a_mate():
     father, mother = male(), female(fertility="333", speed="3333", **BIG_AND_QUICK)
     free = AnimalTraits(mother.dna)
-    free_speed, free_basal = free.current_max_speed, free.basal_metabolism
+    free_speed, free_basal = free.current_max_speed, free.energy_burn
     assert AnimalTraits.mate(father, mother, Roll(0.0)) is MatingResult.CONCEIVED
     assert mother.is_pregnant and mother.mating_cooldown == 0.0  # her cooldown starts at the birth
     assert not mother.can_mate and not mother.wants_mate
@@ -595,9 +596,9 @@ def test_a_longer_tick_scales_wear_energy_cooldown_and_the_cost_of_moving():
     moving.current_energy = moving.max_energy
     moving.update_metabolism_and_aging(1.0, 4.0)
     speed = moving.current_max_speed  # full speed for four hours
-    kinetic = 0.35 * moving.mass * (speed / 3.5) ** 2 * 4.0
+    kinetic = DEFAULT_RULES.body.kinetic_burn * moving.mass * (speed / 3.5) ** 2 * 4.0
     assert moving.max_energy - moving.current_energy == pytest.approx(
-        moving.basal_metabolism * 4.0 + kinetic
+        moving.energy_burn * 4.0 + kinetic
     )
 
 
@@ -627,7 +628,7 @@ def test_healing_costs_energy_and_needs_a_half_full_store():
     traits.update_metabolism_and_aging()
     healed = traits.current_health - (traits.max_damage_capacity - 40.0)
     assert healed > 0
-    assert before - traits.current_energy == pytest.approx(traits.basal_metabolism + 0.5 * healed)
+    assert before - traits.current_energy == pytest.approx(traits.energy_burn + 0.5 * healed)
 
 
 def test_healing_does_not_undo_wear():

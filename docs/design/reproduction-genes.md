@@ -37,7 +37,7 @@ The numbers are starting values to tune, not measurements of the running simulat
   proportion to its own gene, and the newborn starts with the mean of both. A low-parenting animal that
   mates with a high-parenting one pays less and its child still gets energy, so cheating is possible,
   which is the pattern the owner wants to see.
-- **The first generation** starts with a large litter (fertility 0.75, six young) and no parenting.
+- **The first generation** starts with a large litter (fertility 0.75, six young) and no parenting. (Since `WORLD.15` it starts with fertility 0.3, about three young, and parenting 0.1: the large litters starved.)
 - **Recovery** (`recovery`, `TRAIT.7`): how fast the body heals lost health and regains energy at rest.
 - **Plant lifespan** (`longevity`, `TRAIT.8`): a plant lives one simulated month by default if nothing
   eats it, and the gene lets that evolve, traded against growth and seed output.

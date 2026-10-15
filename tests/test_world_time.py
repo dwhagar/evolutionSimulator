@@ -3,6 +3,7 @@
 import pytest
 from world_support import ANIMAL_BASE, PLANT_BASE, animal_dna, hourly_world, plant_dna, world_config
 
+from evolution_simulator.config import DEFAULT_RULES
 from evolution_simulator.world import (
     SPEED_PRESETS,
     DayCycle,
@@ -99,7 +100,9 @@ def test_the_energy_spent_moving_is_charged_for_the_time_moved():
         world.step()
         ratio = animal.last_decision.speed
         speed = ratio * traits.current_max_speed
-        expected = (traits.basal_metabolism + 0.35 * traits.mass * (speed / 3.5) ** 2) * world.dt
+        expected = (
+            traits.energy_burn + DEFAULT_RULES.body.kinetic_burn * traits.mass * (speed / 3.5) ** 2
+        ) * world.dt
         assert start - traits.current_energy == pytest.approx(expected)
 
 

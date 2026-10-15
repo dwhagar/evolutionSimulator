@@ -413,13 +413,13 @@ def test_with_value_sets_the_digits_nearest_a_value():
     assert other.with_value("fertility", other.value("fertility")) == other
 
 
-def test_founders_start_with_large_litters_and_no_parenting():
+def test_founders_start_with_small_litters_and_a_little_parenting():
     from evolution_simulator.layouts import FOUNDER_LEVELS, founder_animal_dna
 
     dna = founder_animal_dna(rng(5))
     for gene_id, level in FOUNDER_LEVELS.items():
         assert abs(dna.value(gene_id) - level) <= 0.5 / 63
-    assert dna.value("parenting") == 0.0
+    assert dna.value("parenting") == pytest.approx(0.1, abs=0.01)
     assert dna != founder_animal_dna(rng(6))  # the rest of the genome is random
 
 

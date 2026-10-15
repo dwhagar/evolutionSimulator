@@ -431,6 +431,17 @@ def test_a_format_4_save_has_its_bite_corpse_and_world_settings_moved_into_the_t
     assert restored.config == world.config
 
 
+def test_a_format_6_save_keeps_burning_all_of_its_upkeep_bill():
+    world = rich_world_at(10)
+    assert world.config.traits.body.burn_scale != 1.0  # the new default is a tenth
+    old = world_to_dict(world)
+    del old["world"]["config"]["traits"]["body"]["burn_scale"]  # format 6 had no such setting
+    old["format_version"] = 6
+    restored = world_from_dict(old)
+    assert restored.config.traits.body.burn_scale == 1.0
+    assert all(a.traits.energy_burn == a.traits.basal_metabolism for a in restored.animals)
+
+
 def test_an_older_format_with_no_migration_is_refused(monkeypatch):
     data = world_to_dict(rich_world_at(3))
     monkeypatch.setattr(saves, "FORMAT_VERSION", FORMAT_VERSION + 1)

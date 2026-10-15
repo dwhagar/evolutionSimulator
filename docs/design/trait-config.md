@@ -97,7 +97,8 @@ What a body is, costs to keep and does as it wears down (animals).
 | `basal_scale` | `0.18` |  |
 | `basal_exponent` | `0.75` | Upkeep of the body itself is `scale * mass ** exponent` (Kleiber's law). |
 | `gut_cost` | `0.06` | Upkeep of the gut: `gut_cost * (herbivore_eff ** 2 + carnivore_eff ** 2)`. |
-| `kinetic_burn` | `0.35` | Energy per reference tick per unit of mass for an animal moving at `speed_reference`; the burn goes with the square of the speed actually moved, so a fast animal pays more per hour and more than twice as much per unit of distance moved at twice the speed (`TRAIT.9`). |
+| `burn_scale` | `0.1` | Share of its whole upkeep bill (`basal_metabolism`) an animal burns per reference tick, asleep or awake; with `kinetic_burn` and `SleepRules.energy_regain` a tenth of the old values (`WORLD.15`, issue 242 question 1). Saves from before (format 6) keep 1. |
+| `kinetic_burn` | `0.035` | Energy per reference tick per unit of mass for an animal moving at `speed_reference`; the burn goes with the square of the speed actually moved, so a fast animal pays more per hour and more than twice as much per unit of distance moved at twice the speed (`TRAIT.9`). |
 | `speed_reference` | `3.5` | Distance per reference tick of an average animal (speed gene 0.5, size 0.5) at full speed. |
 | `agility_cost` | `0.06` | Upkeep of quick reflexes: `agility_cost * agility ** 2` per reference tick (`TRAIT.9`). |
 | `temperament_cost` | `0.04` | Upkeep of a strong temperament: `temperament_cost * (aggression ** 2 + fear ** 2)`. A placeholder until fighting and fleeing cost something of their own (`BRAIN.10`) (`TRAIT.9`). |
@@ -226,6 +227,9 @@ A plant's body, growth and seeding (`REPRO.3`, `TRAIT.8`).
 | `seed_ready_vitality` | `0.4` | ...and its vitality is above this. |
 | `longevity_growth` | `0.3` | Growth is multiplied by `1 - longevity_growth * longevity`. |
 | `longevity_seeds` | `0.4` | The seed budget share is multiplied by `1 - longevity_seeds * longevity`. |
+| `founder_toxicity` | `0.3` | A first generation's plants have this share of the toxicity their genes give (`WORLD.15`, issue 242 question 3). |
+| `founder_size` | `0.7` | A first generation's plants start at this share of their full size, not as seedlings. |
+| `founder_age_spread` | `0.5` | ...and at a random age up to this share of their lifespan, so they do not die in one wave. |
 | `founder_upkeep_share` | `0.3` | A first generation's plants must be able to pay their way: `World.populate` redraws a random plant whose full-size upkeep is more than this share of its growth (`WORLD.11`). Measured: of random plants, those above 0.4 all died as seedlings and those below 0.3 mostly lived (about 40% of random plants were above 0.4). |
 
 ### `organs` (`OrganRules`)
@@ -296,7 +300,7 @@ Sleep (`WORLD.5`): who stays awake, what a sleeper burns and regains, what wakes
 | --- | --- | --- |
 | `starving_below` | `0.15` | An animal with less than this fraction of its energy store stays awake to find food. |
 | `metabolism_factor` | `0.4` | Fraction of its basal metabolism an animal burns while asleep. |
-| `energy_regain` | `0.002` | Fraction of its energy store an animal regains each reference tick (hour) of sleep, at average `recovery`, on top of burning less. |
+| `energy_regain` | `0.0002` | Fraction of its energy store an animal regains each reference tick (hour) of sleep, at average `recovery`, on top of burning less. |
 | `alarm_wakes_above` | `0.2` | An alarm call heard at least this strongly (1 at the caller, 0 at the edge of its radius) wakes a sleeper, and it stays awake until the next day (SENSE.7). |
 
 ### `learning` (`LearningRules`)
@@ -341,7 +345,7 @@ The small settings of how the world applies its rules to organisms (`TRAIT.11`);
 
 | Field | Default | Meaning |
 | --- | --- | --- |
-| `graze_amount` | `5.0` | Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer tick takes proportionally less or more. |
+| `graze_amount` | `20.0` | Biomass an animal can take from a plant in one reference tick (an hour); a shorter or longer tick takes proportionally less or more. |
 | `mating_reach` | `3.0` | Two animals mate only if their centres are this close or closer. |
 | `birth_scatter` | `1.0` | A litter appears within this distance of its mother. |
 | `calls_enabled` | `True` | Whether animals can call (their brains' call outputs, paid for with `call_energy_cost`). A call is made only by an animal with a call radius (the encoder gene) that can afford it, so a brain that calls on every tick starves itself; seeded founders do not call at all and calling has to be evolved. Turn it off to study a silent world. |

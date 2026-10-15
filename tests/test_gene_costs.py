@@ -14,10 +14,10 @@ def animal(**genes: str) -> AnimalTraits:
 
 
 def burn(traits: AnimalTraits, ratio: float = 1.0) -> float:
-    """Energy lost in one reference tick of moving at ``ratio`` of top speed, less the basal part."""
+    """Energy lost in one reference tick of moving at ``ratio`` of top speed, less the burn at rest."""
     traits.current_energy = traits.max_energy
     traits.update_metabolism_and_aging(ratio, 1.0)
-    return traits.max_energy - traits.current_energy - traits.basal_metabolism
+    return traits.max_energy - traits.current_energy - traits.energy_burn
 
 
 # --- speed ----------------------------------------------------------------------

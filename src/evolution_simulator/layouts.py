@@ -108,14 +108,15 @@ LAYOUTS: tuple[GenomeLayout, ...] = (ANIMAL_LAYOUT, PLANT_LAYOUT)
 
 
 FOUNDER_LEVELS: Mapping[str, float] = {
-    "fertility": 0.75,
-    "parenting": 0.0,
+    "fertility": 0.3,
+    "parenting": 0.1,
     "repro_drive": 0.5,
     "repro_cooldown": 0.5,
     "recovery": 0.5,
 }
-"""Where the reproduction genes start in a first generation (``REPRO.7``): large litters, no
-parenting, and the middle of the range for the rest. Evolution moves them from there."""
+"""Where the reproduction genes start in a first generation (``REPRO.7``, ``WORLD.15``): litters of
+about three and a little parenting, because litters of six or seven at a tenth of their parents'
+energy starve; the middle of the range for the rest. Evolution moves them from there."""
 
 
 FOUNDER_CAMOUFLAGE: float = 0.0

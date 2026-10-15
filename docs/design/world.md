@@ -263,7 +263,7 @@ limit working; it only stopped being a daily pulse.
 The default founder run (100 seeded animals, 800 plants, 1,000 by 1,000, hourly ticks) still ends in
 extinction with no births. This is the first reading of why and of what a change of constants can
 and cannot do. Every number below is from `src/evolution_tools/founder_economy.py` (seeds 1 to 3 unless said, a
-run of 3,000 ticks is about 80 seconds); nothing in the rules has changed yet.
+run of 3,000 ticks is about 80 seconds). This is the reading before the defaults below were applied.
 
 **Where the energy goes.** Per animal and tick, seed 1, default constants:
 
@@ -338,6 +338,43 @@ that newborns starve; the follow-ups for these went to the TODO thread with the 
 `python -m evolution_tools.founder_economy burn=0.1 sleep.energy_regain=0.0002 world.graze_amount=20 tox=0.3
 grown=0.7 agespread=0.5 lvl.fertility=0.3 lvl.parenting=0.1` (add `account=1` for the energy table).
 
+### The default founder run (WORLD.15, part 2)
+
+The owner took the recommended answer on all five questions of issue 242 (2026-10-15), and they are now
+the defaults of the `TraitRules` tree. Nothing else changed.
+
+| Setting | Was | Now |
+|---|---|---|
+| `body.burn_scale` (share of the whole upkeep bill burnt per hour, sleep savings follow) | none (1) | 0.1 |
+| `body.kinetic_burn` | 0.35 | 0.035 |
+| `sleep.energy_regain` | 0.002 | 0.0002 |
+| `world.graze_amount` (bite) | 5 | 20 |
+| `plant.founder_toxicity` (share of the genes' toxicity) | 1 | 0.3 |
+| `plant.founder_size`, `plant.founder_age_spread` (founder plants) | seedlings, all new | 0.7 of full size, ages up to 0.5 of their life |
+| `FOUNDER_LEVELS` fertility, parenting | 0.75, 0 | 0.3, 0.1 |
+
+Saves from before (format 6) are read as format 7 with `burn_scale` 1, so an old world keeps its old
+upkeep. The world stays 1,000 by 1,000 with 800 plants.
+
+*Result* (`python -m evolution_tools.founder_economy seeds=1,2,3 ticks=6000 step=1000`, 100 seeded animals, 800
+plants; each entry is animals alive / total births / plants):
+
+| Seed | 1,000 | 2,000 | 3,000 | 4,000 | 5,000 | 6,000 |
+|---|---|---|---|---|---|---|
+| 1 | 107 / 9 / 343 | 106 / 24 / 966 | 96 / 30 / 1,473 | 81 / 36 / 1,808 | 57 / 36 / 2,061 | 43 / 36 / 2,196 |
+| 2 | 100 / 3 / 537 | 101 / 21 / 1,634 | 91 / 27 / 2,106 | 70 / 30 / 2,377 | 56 / 36 / 2,626 | 46 / 36 / 2,726 |
+| 3 | 105 / 7 / 390 | 98 / 22 / 1,188 | 86 / 25 / 1,778 | 72 / 31 / 1,914 | 57 / 31 / 2,229 | 37 / 31 / 2,325 |
+
+The founders now breed (31 to 36 births in 6,000 ticks) and the population holds for about 3,000 ticks, then
+shrinks as the founders die: 14 to 22 of the 100 die of old age by tick 6,000, 55 to 57 starve, and 11 to 21
+of the 31 to 36 young starve. That is the shape the open items address, not a calibration left over:
+
+- **Young starve** (11 to 21 of 31 to 36 births): `REPRO.10`, newborn starvation and the late first litter.
+- **Foraging**: an animal still touches a plant only once in 15 to 30 awake ticks (`BRAIN.26`, finding
+  plants close up). Better foraging is what lets the starving adults live on.
+- **Plant ages and the soil cap**: `TRAIT.12`, which will lengthen the plants' lives (the founder plants are
+  grown and aged, but still live about a month, and the numbers above will move).
+
 ## Speed (WORLD.14, WORLD.17)
 
 A tick at 300 animals and 3,000 plants costs about 35 ms (about 140 ms at 1,000 animals). `WORLD.14`
@@ -368,11 +405,12 @@ Measured on the code at the time (seed 1, best of one run, process time; ticks 2
 | `idle_interval_factor` 8 | 32.4 ms | 146.8 ms | 14.7 ms |
 | scale 2 with idle 4 | 25.4 ms | 98.2 ms | 9.3 ms |
 
-What the options do to a run is not yet known: the default founder run (100 seeded animals, 800 plants,
-1,000 by 1,000) still dies out in about 500 ticks with no births (`WORLD.15`) under every setting, so it
-cannot tell them apart. Animals alive at tick 250 and 500, three seeds, default against each option, are
-within the seed-to-seed spread (76 to 84 and 6 to 15). The comparison that matters (does a population
-that breeds still breed, at the same size and with the same genes) has to wait for `WORLD.15`.
+What the options do to a run was not known when they were measured: the default founder run (100 seeded
+animals, 800 plants, 1,000 by 1,000) then died out in about 500 ticks with no births under every setting, so
+it could not tell them apart. Animals alive at tick 250 and 500, three seeds, default against each option,
+were within the seed-to-seed spread (76 to 84 and 6 to 15). Since `WORLD.15` part 2 the default run breeds
+(see "The default founder run" above), so the comparison that matters (does a population that breeds still
+breed, at the same size and with the same genes) can be made: `WORLD.18`.
 
 ## Senses are swappable
 

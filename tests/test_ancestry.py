@@ -158,6 +158,8 @@ def test_deaths_are_recorded_with_the_tick_and_cause_the_event_carries():
     )
     world.populate(animals=20, plants=80)
     world.run(300)
+    world.animals[0].traits.apply_damage(1e9)  # the founders are well fed now and live on
+    world.step()
     assert deaths
     for event in deaths:
         kin = world.ancestry.get(event.id)
@@ -224,6 +226,8 @@ def test_a_saved_world_keeps_its_ancestry(tmp_path):
     world = World(WorldConfig(seed=2))
     world.populate(animals=20, plants=80)
     world.run(300)
+    world.animals[0].traits.apply_damage(1e9)  # the founders are well fed now and live on
+    world.step()
     assert world.ancestry.dead_count > 0
     path = save_world(world, tmp_path / "w.json.gz")
     loaded = load_world(path)
