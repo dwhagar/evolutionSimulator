@@ -21,7 +21,7 @@ The first merge after a line starts is `M.m.1`.
 ## Checking the version
 
 ```bash
-python scripts/version.py
+python -m evolution_tools.version
 ```
 
 On a feature branch the script counts the branch's own commits on top of its base, so it only

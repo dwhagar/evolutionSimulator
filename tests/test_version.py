@@ -4,7 +4,9 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-spec = importlib.util.spec_from_file_location("version_script", ROOT / "scripts" / "version.py")
+spec = importlib.util.spec_from_file_location(
+    "version_script", ROOT / "src" / "evolution_tools" / "version.py"
+)
 version_script = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(version_script)
 

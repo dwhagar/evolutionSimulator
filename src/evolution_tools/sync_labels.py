@@ -6,8 +6,8 @@ colour and a new tag simply continues the rotation. ``needs-owner`` is the one f
 an item or issue with an owner question that is still open, and is removed when the question is
 answered. The scheme is described in ``docs/labels.md``.
 
-    python scripts/sync_labels.py            # update label-colours.json and print what would change
-    python scripts/sync_labels.py --apply    # also create or recolour the labels with the gh CLI
+    python -m evolution_tools.sync_labels            # update label-colours.json and print what would change
+    python -m evolution_tools.sync_labels --apply    # also create or recolour the labels with the gh CLI
 
 Needs only the standard library; ``--apply`` needs ``gh`` logged in with access to the repository.
 """
@@ -21,7 +21,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 COLOURS_FILE = ROOT / ".github" / "label-colours.json"
 SOURCES = (ROOT / "TODO.md", ROOT / "CHANGELOG.md", ROOT / "docs" / "decisions.md")
 REPO = "dwhagar/evolutionSimulator"

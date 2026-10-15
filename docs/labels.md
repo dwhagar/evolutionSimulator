@@ -6,7 +6,7 @@ How the GitHub labels are used. Kept by the TODO thread.
 
 Every task ID in [TODO.md](../TODO.md) (`AREA.N`, for example `TRAIT.13`) is a label, put on the issues and
 pull requests that relate to it. Each tag has its own colour, chosen by rotating through the palette in
-[`scripts/sync_labels.py`](../scripts/sync_labels.py): twelve distinct colours, the next one for each new tag in
+[`src/evolution_tools/sync_labels.py`](../src/evolution_tools/sync_labels.py): twelve distinct colours, the next one for each new tag in
 the order the tags were first seen, so neighbouring tags never share a colour. A tag keeps its colour for good;
 the choices are stored in [`.github/label-colours.json`](../.github/label-colours.json) (`next` is the position in
 the rotation, so a new tag continues from there).
@@ -26,7 +26,7 @@ the rotation, so a new tag continues from there).
 | 11 | peach | `f9d0c4` |
 | 12 | brown | `8b6f47` |
 
-When a new task ID appears in TODO.md or the changelog, run `python scripts/sync_labels.py --apply` (it needs the
+When a new task ID appears in TODO.md or the changelog, run `python -m evolution_tools.sync_labels --apply` (it needs the
 `gh` command logged in to the repository). It adds the new tags to the file, and creates or recolours the labels.
 Without `--apply` it only updates the file. A test checks that every tag in TODO.md has a colour in the file.
 

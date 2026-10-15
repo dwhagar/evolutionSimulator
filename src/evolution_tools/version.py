@@ -2,14 +2,14 @@
 
 The build number is the number of first-parent commits reachable from HEAD but not from the
 `base` commit in version.toml. On main that is one per merge (squash, merge commit or fast-forward
-of a single commit), with no manual step. Run `python scripts/version.py` to print the current version.
+of a single commit), with no manual step. Run `python -m evolution_tools.version` to print the current version.
 """
 
 import subprocess
 import tomllib
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[2]
 
 
 def build_number(base: str) -> int:

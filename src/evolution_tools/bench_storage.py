@@ -1,6 +1,6 @@
 """Measurements behind docs/design/storage.md (STORE.1): the folder run store against a SQLite file.
 
-    python scripts/bench_storage.py [--animals 1000] [--plants 5000] [--checkpoints 8]
+    python -m evolution_tools.bench_storage [--animals 1000] [--plants 5000] [--checkpoints 8]
 
 It builds a world, then writes the same checkpoints two ways (the folder layout of ``UX.10`` through
 ``RunStore``, and the schema proposed in the note into a WAL-mode ``run.sqlite``) and prints the time

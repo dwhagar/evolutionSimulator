@@ -3,7 +3,7 @@
 Design note for `STORE.1`, the plan for the build `STORE.2`. The owner decided on 2026-10-14 that data
 storage is SQLite and not a database server ([decisions.md](../decisions.md)). This note says what goes in
 the file, how it is written and read, how old runs come across, and what was measured. The numbers come
-from `scripts/bench_storage.py`; the schema there is the draft this note describes.
+from `src/evolution_tools/bench_storage.py`; the schema there is the draft this note describes.
 
 ## The short version
 
@@ -222,7 +222,7 @@ below). The same import covers the runs the process host made with `UX.31`, whic
 
 ## Measured
 
-`python scripts/bench_storage.py` on this machine (4 cores, SQLite 3.45.1, Python 3.13), a world of
+`python -m evolution_tools.bench_storage` on this machine (4 cores, SQLite 3.45.1, Python 3.13), a world of
 1,000 animals and 5,000 plants stepped two days (990 animals and about 3,000 plants by then: the plants
 thin out quickly in the default world). The same checkpoints were stored both ways.
 
@@ -280,7 +280,7 @@ step, and a typical one (0.5 ms) is nothing against the 3 s of stepping a day ta
    is mid-transaction sees the last commit; the import of a folder run gives the same checkpoints,
    digest and history and leaves `imported/`; a newer `user_version` is refused; a second writer is
    refused while the first lives and allowed after it is gone.
-6. `scripts/bench_storage.py` stays, so the numbers can be taken again.
+6. `src/evolution_tools/bench_storage.py` stays, so the numbers can be taken again.
 
 ## Questions this note adds
 
@@ -297,6 +297,6 @@ None of these block the build; the defaults below are what `STORE.2` uses.
 The figures are from one machine and a Linux filesystem; Windows file I/O and antivirus can change the
 store times (not the serialising), and `UX.34`'s real-machine check should repeat the benchmark there.
 The lineage table's growth is a guess until `UX.39` has decided what it records. Nothing here was built
-into the run store: the schema in `scripts/bench_storage.py` is a draft, and `STORE.2` is free to improve
+into the run store: the schema in `src/evolution_tools/bench_storage.py` is a draft, and `STORE.2` is free to improve
 it while keeping what this note commits to (one file per run, WAL, the checkpoint as one transaction,
 rows appended for history, JSON for settings, the old runs imported and kept).

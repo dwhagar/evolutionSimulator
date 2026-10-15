@@ -591,7 +591,7 @@ pyqtgraph tabs over `HistorySamples`, and nothing in it reads the world.
 ### As built: the Windows package (`UX.19`)
 
 - **Files.** `packaging/entry.py` is the program PyInstaller freezes; `packaging/evolutionSimulator.spec`
-  is the one-folder, windowed spec; `scripts/package.py` builds it, adds `LICENSE`,
+  is the one-folder, windowed spec; `src/evolution_tools/package.py` builds it, adds `LICENSE`,
   `THIRD_PARTY_NOTICES.md`, a short `README.txt` and `VERSION`, and zips to
   `dist/evolutionSimulator-<version>-win64.zip` (`linux64` on Linux). `pip install -e ".[gui,package]"`
   gives it everything. The `gui` extra now names `PySide6-Essentials`.
@@ -824,7 +824,7 @@ The shell and the shared widgets, with no change to what any screen does.
   current when a panel was closed or added.
 - **About.** Help > About shows the version, the licence (CC0 1.0, linked), the source address and a
   "Third-party notices" window (`viewer/about.py`). The version is the `VERSION` file next to the downloadable
-  build, `version.toml` plus the commits since its base (as `scripts/version.py` counts them) when run from a
+  build, `version.toml` plus the commits since its base (as `src/evolution_tools/version.py` counts them) when run from a
   source checkout, and the installed package's version otherwise. The notices are the `THIRD_PARTY_NOTICES.md`
   shipped beside the build or kept in `packaging/`, or a short built-in list when neither is found.
 - **Messages and tooltips.** Every status message goes through `tidy_message` (a capital letter and a full
@@ -1078,7 +1078,7 @@ Other rules that keep it fast:
   uninstall. The owner decides ([question](#questions-this-note-adds)).
 - **Building.** A workflow that runs on a Windows runner *only when started by hand* (`workflow_dispatch`),
   so the weekly-only CI rule is kept, uploading the zip as a release asset or artifact. The version
-  comes from `scripts/version.py`, and the window's About box and title show it.
+  comes from `src/evolution_tools/version.py`, and the window's About box and title show it.
 - **Three things to get right:** `multiprocessing.freeze_support()` at the start of the program (the
   simulation process is started by `spawn`, which a frozen program needs told); the licence texts for
   PySide6 in the folder; the data files (palettes, the display-name catalogue) listed so PyInstaller

@@ -78,5 +78,5 @@ pytest benchmarks --benchmark-only --benchmark-compare=0001  # against the saved
 Run benchmarks serial (xdist turns the benchmark off, with a warning) and on a quiet machine; the
 timings are only comparable between runs on the same computer. Add a benchmark by writing a test in
 `benchmarks/` that takes the `benchmark` fixture; `benchmarks/test_world_step.py` is the model.
-`scripts/bench_storage.py` is a one-off measurement script for the run store (STORE.1), not a
+`src/evolution_tools/bench_storage.py` is a one-off measurement script for the run store (STORE.1), not a
 pytest-benchmark file.
