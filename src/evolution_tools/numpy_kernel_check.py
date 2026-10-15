@@ -1,6 +1,6 @@
 """Feasibility measurements behind docs/design/numpy-core.md (``WORLD.19``). Not engine code.
 
-    python scripts/numpy_kernel_check.py [--repeat 20] [--reach 50]
+    python -m evolution_tools.numpy_kernel_check   (or scripts/numpy-kernel-check.ps1 or .bat) [--repeat 20] [--reach 50]
 
 The design note claims that the expensive parts of a tick (finding neighbours, sensing, thinking,
 growing plants, the per-animal bookkeeping) cost a few milliseconds each when written as numpy array
