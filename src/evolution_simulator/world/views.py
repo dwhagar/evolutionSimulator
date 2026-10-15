@@ -83,6 +83,41 @@ PLANT_FIELDS: tuple[str, ...] = PlantView._fields
 CORPSE_FIELDS: tuple[str, ...] = CorpseView._fields
 
 
+class KinView(NamedTuple):
+    """One animal in a family tree: alive or dead (``World.family_of``, UX.39)."""
+
+    id: int
+    parents: tuple[int, ...]
+    """Father, then mother; empty for a founder."""
+    sex: int
+    """0 impregnates, 1 bears the young."""
+    born: int
+    """The tick it was born (or, for a founder, put in the world)."""
+    died: int | None
+    """The tick it died, ``None`` while it lives."""
+    cause: DeathCause | None
+    family_a: float
+    family_b: float
+    """Its family key (``lineage.family_key``), kept so a dead animal can still be coloured."""
+
+
+@dataclass(frozen=True, slots=True)
+class FamilyView:
+    """The neighbourhood of one animal in the family tree, as far as the world remembers it.
+
+    ``kin`` holds the animal first, then its ancestors up to ``up`` generations, then its
+    descendants down to ``down`` generations (each animal once, even when two paths reach it).
+    Dead animals are remembered up to a bound (``AncestryBook``), so an old ancestor may be gone:
+    its id then appears in a child's ``parents`` with no entry in ``kin``. ``truncated`` says there
+    were more descendants than the view carries."""
+
+    center: int
+    up: int
+    down: int
+    kin: tuple[KinView, ...]
+    truncated: bool = False
+
+
 @dataclass(frozen=True, slots=True)
 class AnimalDetail:
     """Everything the inspector shows about one animal, as of ``tick``."""
@@ -129,6 +164,9 @@ class AnimalDetail:
     genome: str
     """The genome as base-4 digits."""
     death_cause: DeathCause | None = None
+    family: FamilyView | None = None
+    """Its place in the family tree (ancestors and descendants, alive or dead); ``None`` from a
+    simulation that keeps no ancestry."""
     vision_range: float | None = None
     """How far its eye reaches now, in world units, after acuity and vitality (``None`` when the
     simulation does not say, as the stand-in simulation does not). The four ranges are what the
@@ -229,6 +267,7 @@ def animal_detail(world: World, animal: Animal) -> AnimalDetail:
         brain=traits.brain_trace,
         network=traits.brain.network(traits.brain_slots, DEFAULT_BLUEPRINT.max_hidden),
         children=world.children_of(animal.id),
+        family=world.family_of(animal.id),
         traits={name: float(value) for name, value in traits.phenotype.items()},
         genome=str(traits.dna),
         death_cause=traits.death_cause,

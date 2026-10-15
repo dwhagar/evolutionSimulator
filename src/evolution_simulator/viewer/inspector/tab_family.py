@@ -4,10 +4,11 @@ selects that creature."""
 from __future__ import annotations
 
 import numpy as np
-from PySide6.QtWidgets import QLabel, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QLabel, QPushButton, QVBoxLayout, QWidget
 
 from evolution_simulator.session import Frame, Select
 from evolution_simulator.viewer.inspector import describe
+from evolution_simulator.viewer.inspector.familytree import FamilyTreeWindow
 from evolution_simulator.viewer.inspector.tabs import TabPage, TabSpec
 from evolution_simulator.viewer.inspector.widgets import IdLinks
 from evolution_simulator.viewer.registry import ViewerContext
@@ -28,7 +29,14 @@ class FamilyTab(TabPage):
         self.frame: Frame | None = None
         self.alive_ids: np.ndarray = np.empty(0, dtype="<u4")
         self._relatives_for: tuple[int, int] | None = None
+        self.tree: FamilyTreeWindow | None = None
         layout = QVBoxLayout(self)
+        self.tree_button = QPushButton("Show the family tree", self)
+        self.tree_button.setToolTip(
+            "Open a window with its ancestors above and its descendants below, dead ones too"
+        )
+        self.tree_button.clicked.connect(self.open_tree)
+        layout.addWidget(self.tree_button)
         self.parents = self._section(layout, "Parents", PARENT_SLOTS)
         self.partner_title = QLabel("<b>Father of the young it carries</b>", self)
         layout.addWidget(self.partner_title)
@@ -42,6 +50,15 @@ class FamilyTab(TabPage):
         layout.addStretch(1)
         for links in (self.parents, self.partner, self.children, self.relatives):
             links.chosen.connect(self._select)
+
+    def open_tree(self) -> FamilyTreeWindow:
+        """Open the family tree window (made the first time), on top."""
+        if self.tree is None:
+            self.tree = FamilyTreeWindow(self.context, self)
+        self.tree.show()
+        self.tree.raise_()
+        self.tree.activateWindow()
+        return self.tree
 
     def _section(self, layout: QVBoxLayout, title: str, slots: int) -> IdLinks:
         layout.addWidget(QLabel(f"<b>{title}</b>", self))
