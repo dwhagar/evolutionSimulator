@@ -171,7 +171,8 @@ def test_clamping_rules_per_channel():
 
 def test_percepts_fields_are_the_world_rows_in_order():
     names = [f.name for f in dataclasses.fields(Percepts)]
-    assert names == [c.name for c in world_channels()]
+    # ``targets`` (UX.43) is not a brain input: it names what each sense found, for the eyes.
+    assert names == [c.name for c in world_channels()] + ["targets"]
     blank = Percepts()
     for c in world_channels():
         assert getattr(blank, c.name) == (False if c.is_flag else 0.0)

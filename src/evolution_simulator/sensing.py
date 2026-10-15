@@ -347,6 +347,9 @@ def sense(
         rules.closeness_noise if organs.closeness_noise is None else organs.closeness_noise
     )
     reported: dict[str, float] = {}
+    focus_candidates: list[
+        tuple[str, int]
+    ] = []  # (class, id) of each class's nearest, for the eyes
     sizeable: list[tuple[float, int, Neighbour, str]] = []  # prey and threats found, for size
     for target in TARGETS:
         direction_row, closeness_row, reporters = _TARGET_PLAN[target]
@@ -365,6 +368,8 @@ def sense(
         if class_range <= 0.0:
             continue
         by = next(k for k in reporters if flags[k])
+        if not neighbour.trail:
+            focus_candidates.append((target, neighbour.ident))
         if target in ("prey", "threat"):
             sizeable.append((distance, ident, neighbour, by))
         if target == "mate":
@@ -448,4 +453,5 @@ def sense(
         call_direction=call_direction,
         crowding=min(1.0, crowd / rules.crowding_reference),
         daylight=conditions.daylight,
+        targets=tuple(focus_candidates),
     )

@@ -2,10 +2,11 @@
 
 A mode turns the animals of a frame into one colour each. Every colour is picked to stay readable
 for the common kinds of colour blindness: the categorical pair (sex) uses the Okabe-Ito blue and
-reddish purple, the two ramps (energy, age) change in lightness as well as hue, and the diverging
-ramp (diet) runs from blue to vermillion through a pale middle, the Okabe-Ito pair that stays apart
-for red-green colour blindness. Nothing means anything by colour alone: sex also changes the shape
-(females have a notch at the back), sleep dims and rings the animal, pregnancy puts a dot on it.
+reddish purple and the two ramps (energy, age) change in lightness as well as hue. The diet colours
+are the owner's blue and red; the "colour-blind safe" option swaps them for the Okabe-Ito blue and
+vermillion through a pale middle, which stay apart for red-green colour blindness. Nothing means
+anything by colour alone (UX.43): the spotted sex has spots, sleep dims and rings the animal and
+shuts its eyes, pregnancy puts a dot on it.
 
 ``MODES`` is the menu. A mode that needs columns the frame does not carry (the family colour needs the
 two family numbers of UX.30) is listed but reported unavailable.
@@ -29,8 +30,11 @@ ENERGY_STOPS = ((122, 74, 164), (45, 128, 180), (30, 170, 150), (150, 210, 80), 
 """Low energy (purple) to full (yellow): lightness climbs the whole way."""
 AGE_STOPS = ((250, 240, 170), (235, 170, 40), (185, 85, 110), (110, 60, 150))
 """Newborn (pale) to worn out (deep purple)."""
-DIET_STOPS = ((0, 114, 178), (225, 228, 232), (213, 94, 0))
-"""Plant eater (blue) through a pale middle to meat eater (vermillion)."""
+DIET_STOPS = ((40, 90, 205), (150, 80, 170), (205, 45, 45))
+"""Plant eater (blue) through purple to meat eater (red), the owner's colours (issue #129)."""
+SAFE_DIET_STOPS = ((0, 114, 178), (225, 228, 232), (213, 94, 0))
+"""The colour-blind-safe pair (Okabe-Ito blue and vermillion through a pale middle), chosen with the
+view's "colour-blind safe" option."""
 MALE = (86, 180, 233)
 FEMALE = (204, 121, 167)
 
@@ -107,6 +111,23 @@ def _family(layer: Layer) -> Colours:
     return FamilyScale.of(layer).colours(layer.col("family_a"), layer.col("family_b"))
 
 
+def body_colours(layer: Layer, safe: bool = False) -> Colours:
+    """The body colour of every animal in the frame (UX.43): the one place that says it.
+
+    For now it comes from the diet (blue plant eaters, red meat eaters, purple between). The colour
+    gene of TRAIT.21 will make it an animal's own value, so this is the only function that changes
+    then; ``safe`` swaps to the colour-blind-safe pair."""
+    return ramp(SAFE_DIET_STOPS if safe else DIET_STOPS, layer.col("diet"))
+
+
+def plant_shades(levels: int, toughness: float = 0.0) -> Colours:
+    """``levels`` plant colours from sparse to full, darker the tougher the plant (UX.44 will pass
+    each plant's toughness once the trade-off traits of TRAIT.13 exist; 0 is the plain green)."""
+    shades = ramp((PLANT_DIM, PLANT_FULL), np.linspace(0.0, 1.0, levels))
+    darker = 1.0 - 0.5 * min(max(toughness, 0.0), 1.0)
+    return np.rint(shades.astype(np.float64) * darker).astype(np.uint8)
+
+
 @dataclass(frozen=True)
 class ColourMode:
     id: str
@@ -114,13 +135,21 @@ class ColourMode:
     colours: Callable[[Layer], Colours]
     needs: tuple[str, ...] = ()
     """The columns the frame must carry for this mode to work."""
+    safe_colours: Callable[[Layer], Colours] | None = None
+    """The same mode with colour-blind-safe colours, for modes whose plain colours are not."""
+
+    def paint(self, layer: Layer, safe: bool = False) -> Colours:
+        """The colours of the frame's animals, the safe ones if asked and the mode has them."""
+        if safe and self.safe_colours is not None:
+            return self.safe_colours(layer)
+        return self.colours(layer)
 
     def available(self, columns: tuple[str, ...]) -> bool:
         return all(name in columns for name in self.needs)
 
 
 MODES: tuple[ColourMode, ...] = (
-    ColourMode("diet", "Diet", _column("diet", DIET_STOPS)),
+    ColourMode("diet", "Diet", body_colours, safe_colours=lambda layer: body_colours(layer, True)),
     ColourMode("sex", "Sex", _sex),
     ColourMode("energy", "Energy", _column("energy_ratio", ENERGY_STOPS)),
     ColourMode("age", "Age", _column("age_ratio", AGE_STOPS)),

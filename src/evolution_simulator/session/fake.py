@@ -197,6 +197,7 @@ class FakeSimulation:
             parents=(),
             partner=None,
             decision=BrainDecision(turn, animal.speed, 0.0, 0.0, 0.0, 0.0),
+            look=view.look,
             brain=brain,
             network=self._network(animal),
             children=(),
@@ -292,6 +293,10 @@ class FakeSimulation:
         if len(self._corpses) > 20:
             del self._corpses[next(iter(self._corpses))]
 
+    def _look(self, animal: _Animal) -> float:
+        """Where a fake animal's eyes point: drifting about, within a quarter turn."""
+        return 0.8 * math.sin(animal.phase * 3.0 + self._tick * 0.03)
+
     def _view(self, animal: _Animal) -> AnimalView:
         wave = 0.5 + 0.5 * math.sin(animal.phase + self._tick * 0.05)
         age = min(1.0, animal.age_ticks / 2000.0)
@@ -312,4 +317,5 @@ class FakeSimulation:
             animal.sex,
             math.sin(animal.id * 0.37),
             math.cos(animal.id * 0.53),
+            self._look(animal),
         )

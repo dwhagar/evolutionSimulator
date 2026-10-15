@@ -29,13 +29,11 @@ from PySide6.QtWidgets import QWidget
 
 from evolution_simulator.session import Frame
 from evolution_simulator.session.snapshot import ANIMAL_FLAGS, PLANT_FLAGS, Block
-from evolution_simulator.viewer.worldview import glide, palette
+from evolution_simulator.viewer.worldview import bodies, glide, palette
 from evolution_simulator.viewer.worldview.camera import Camera, nice_step
 from evolution_simulator.viewer.worldview.layers import Layer
 from evolution_simulator.viewer.worldview.overlays import OverlayHub, SelectedPose
 
-MIN_ANIMAL_PX = 9.0
-"""Animals are never drawn smaller than this, tip to back, so a zoomed-out world stays readable."""
 DRAG_PX = 4
 """A press that moves less than this is a click, not a drag."""
 TIMER_MS = 16
@@ -70,6 +68,7 @@ class WorldCanvas(QWidget):
         self._clock = clock
         self.camera = Camera()
         self.colour_mode = palette.DEFAULT_MODE
+        self.safe_colours = False
         self.show_plants = True
         self.show_corpses = True
         self.show_animals = True
@@ -193,7 +192,14 @@ class WorldCanvas(QWidget):
         if not mode.available(self._animals.columns):  # this frame cannot colour by it
             self.colour_mode = palette.DEFAULT_MODE
             mode = palette.MODES_BY_ID[self.colour_mode]
-        return mode.colours(self._animals)
+        return mode.paint(self._animals, self.safe_colours)
+
+    def set_safe_colours(self, safe: bool) -> None:
+        """Use the colour-blind-safe colours (the Okabe-Ito pair for diet) or the plain ones."""
+        if safe != self.safe_colours:
+            self.safe_colours = safe
+            self._colours = self._compute_colours()
+            self.update()
 
     def set_drawing(self, drawing: bool) -> None:
         """Stop painting the world (and the glide timer with it), or start again."""
@@ -306,8 +312,9 @@ class WorldCanvas(QWidget):
     # -------------------------------------------------------------------------
 
     def _lengths(self) -> np.ndarray:
+        """The width of each body on screen (never under ``bodies.MIN_BODY_PX``)."""
         assert self._animals is not None
-        return np.maximum(self._animals.col("radius") * 2.2 * self.camera.scale, MIN_ANIMAL_PX)
+        return 2.0 * bodies.body_radius_px(self._animals.col("radius"), self.camera.scale)
 
     def paintEvent(self, event) -> None:
         painter = QPainter(self)
@@ -413,9 +420,7 @@ class WorldCanvas(QWidget):
             (np.clip(plants.col("biomass_ratio"), 0.0, 1.0) * (PLANT_BUCKETS - 1)).astype(int),
             PLANT_BUCKETS - 1,
         )
-        shades = palette.ramp(
-            (palette.PLANT_DIM, palette.PLANT_FULL), np.linspace(0.0, 1.0, PLANT_BUCKETS)
-        )
+        shades = palette.plant_shades(PLANT_BUCKETS)
         for level in np.unique(bucket[on_screen]):
             chosen = on_screen & (bucket == level)
             painter.setBrush(_qcolor(shades[level], 225))
@@ -460,45 +465,60 @@ class WorldCanvas(QWidget):
         length = self._lengths()
         near = (sx > -length) & (sx < size[0] + length) & (sy > -length) & (sy < size[1] + length)
         asleep = layer.flag(ANIMAL_FLAGS["asleep"])
-        female = layer.flag(ANIMAL_FLAGS["female"])
         pregnant = layer.flag(ANIMAL_FLAGS["pregnant"])
-        dx, dy = np.cos(pose.heading), -np.sin(pose.heading)  # world y is up, screen y is down
+        marked = bodies.spotted(layer)
+        look = bodies.looks(layer)
         rgb = (colours >> 3).astype(np.int32)
         key = ((rgb[:, 0] << 10) | (rgb[:, 1] << 5) | rgb[:, 2]) * 2 + asleep.astype(np.int32)
-        rings, dots = _path(), _path()
+        rings, dots, spots, whites, pupils, lids = (
+            _path(),
+            _path(),
+            _path(),
+            _path(),
+            _path(),
+            _path(),
+        )
         groups: dict[int, QPainterPath] = {}
         sample: dict[int, np.ndarray] = {}
         for i in np.flatnonzero(near).tolist():
-            x, y, long = float(sx[i]), float(sy[i]), float(length[i])
-            ux, uy = float(dx[i]), float(dy[i])
-            vx, vy = -uy, ux
-            tip = QPointF(x + ux * long * 0.6, y + uy * long * 0.6)
-            left = QPointF(
-                x - ux * long * 0.4 + vx * long * 0.35, y - uy * long * 0.4 + vy * long * 0.35
-            )
-            right = QPointF(
-                x - ux * long * 0.4 - vx * long * 0.35, y - uy * long * 0.4 - vy * long * 0.35
-            )
-            if female[i]:  # a notch at the back tells the sexes apart without colour
-                notch = QPointF(x - ux * long * 0.12, y - uy * long * 0.12)
-                shape = QPolygonF([tip, left, notch, right])
-            else:
-                shape = QPolygonF([tip, left, right])
+            x, y, r = float(sx[i]), float(sy[i]), float(length[i]) / 2.0
             group = int(key[i])
             if group not in groups:
                 groups[group] = _path()
                 sample[group] = colours[i]
-            groups[group].addPolygon(shape)
-            groups[group].closeSubpath()
+            groups[group].addEllipse(QPointF(x, y), r, r)
+            heading = float(pose.heading[i])
+            if marked[i] and bodies.has_spots(r):
+                for spot_x, spot_y, spot_r in bodies.spot_places(x, y, r, heading):
+                    spots.addEllipse(QPointF(spot_x, spot_y), spot_r, spot_r)
+            if bodies.has_eyes(r):
+                for eye in bodies.eyes(x, y, r, heading, float(look[i])):
+                    if asleep[i]:  # eyes shut: a short line across each
+                        (_, _), (lx, ly) = bodies.screen_axes(heading)
+                        lid = eye.white
+                        lids.moveTo(eye.x - lx * lid, eye.y - ly * lid)
+                        lids.lineTo(eye.x + lx * lid, eye.y + ly * lid)
+                        continue
+                    whites.addEllipse(QPointF(eye.x, eye.y), eye.white, eye.white)
+                    pupils.addEllipse(QPointF(eye.pupil_x, eye.pupil_y), eye.pupil, eye.pupil)
             if asleep[i]:
-                rings.addEllipse(QPointF(x, y), long * 0.7, long * 0.7)
+                rings.addEllipse(QPointF(x, y), r * 1.4, r * 1.4)
             if pregnant[i]:
-                dots.addEllipse(QPointF(x, y), max(1.5, long * 0.14), max(1.5, long * 0.14))
+                dots.addEllipse(QPointF(x, y), max(1.5, r * 0.17), max(1.5, r * 0.17))
         painter.setPen(QPen(QColor(0, 0, 0, 110), 1))
         for group, path in groups.items():
             painter.setBrush(_qcolor(sample[group], 105 if group & 1 else 240))
             painter.drawPath(path)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QColor(15, 15, 15, 190))
+        painter.drawPath(spots)
+        painter.setBrush(QColor(250, 250, 250, 245))
+        painter.drawPath(whites)
+        painter.setBrush(QColor(10, 10, 10, 255))
+        painter.drawPath(pupils)
         painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.setPen(QPen(QColor(10, 10, 10, 220), 1))
+        painter.drawPath(lids)
         painter.setPen(QPen(QColor(255, 255, 255, 150), 1))
         painter.drawPath(rings)
         painter.setPen(Qt.PenStyle.NoPen)
@@ -531,7 +551,7 @@ class WorldCanvas(QWidget):
         if len(found) == 0:
             return
         i = int(found[0])
-        centre, reach = QPointF(float(sx[i]), float(sy[i])), float(length[i]) * 0.85
+        centre, reach = QPointF(float(sx[i]), float(sy[i])), float(length[i]) * 0.75
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.setPen(QPen(QColor(0, 0, 0, 200), 4))
         painter.drawEllipse(centre, reach, reach)
